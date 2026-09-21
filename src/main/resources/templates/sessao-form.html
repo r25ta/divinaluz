@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Nova Sessão</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+    <div class="card shadow">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0">Registrar Nova Sessão — <span th:text="${assistido.nome}"></span></h4>
+        </div>
+        <div class="card-body">
+
+            <div class="alert alert-danger" th:if="${erro}">
+                <p class="mb-2" th:text="${erro}"></p>
+                <a th:if="${avaliacaoPendente}" th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}"
+                   class="btn btn-warning btn-sm">Registrar Avaliação</a>
+            </div>
+
+            <form th:action="@{/prontuario/{id}/sessao(id=${assistido.id})}" th:object="${sessao}" method="post">
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Data da Consulta</label>
+                        <input type="date" class="form-control" th:field="*{dataConsulta}" required>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <label class="form-label fw-bold">Recomendações</label>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{visto}">
+                        <label class="form-check-label">Visto</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{assistencia}">
+                        <label class="form-check-label">Assistência</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{evangelhoNoLar}">
+                        <label class="form-check-label">Evangelho no Lar</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{leituras}">
+                        <label class="form-check-label">Leituras</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{escola}">
+                        <label class="form-check-label">Escola</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{trabalhoEspiritual}">
+                        <label class="form-check-label">Trabalho Espiritual</label>
+                    </div>
+                    <div class="col-md-3 form-check">
+                        <input class="form-check-input" type="checkbox" th:field="*{medico}">
+                        <label class="form-check-label">Médico</label>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-control" th:field="*{observacoes}" rows="3"></textarea>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-success">Salvar Sessão</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

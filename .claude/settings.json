@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:*)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(.\\scripts\\dev-run.ps1)",
+      "PowerShell(.\\scripts\\dev-stop.ps1)",
+      "PowerShell(.\\scripts\\smoke-test.ps1)",
+      "PowerShell(.\\scripts\\dev-test.ps1)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\twent\\OneDrive\\Apps\\divinaluz\\scripts\\hook-compile-on-java-edit.ps1\"",
+            "timeout": 60,
+            "statusMessage": "Compilando (mvnw compile)..."
+          }
+        ]
+      }
+    ]
+  }
+}

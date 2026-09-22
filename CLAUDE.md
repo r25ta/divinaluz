@@ -110,5 +110,42 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 2. Cobrir as regras de negócio com testes unitários JUnit em `TratamentoService` (hoje a cobertura é só end-to-end via `smoke-test.ps1`).
 3. Avaliar se vale a pena um `DROP COLUMN` das colunas legadas órfãs (`assistido.idade`, `avaliacao.entrevistador`, `avaliacao.tratamento_indicado_id`) depois que não houver mais dúvida sobre a migração dos dados antigos.
 4. Criar módulo de Entrevista.
-5. Criar módulo de Avaliação.
-6. Criar módulo de Assistido.
+5. Modulo Cadastro de Preleção:
+O cadastro de preleção deverá ser construído uma escala conforme os dias de assistência espiritual da casa, neste caso Domingo ou Terça, portanto o sistema deverá permitir o cadastramento de preletores (Trabalhador) somente nestes dias da semana.
+O preletor deve escolher a data da apresentação, selecionar o nome do preletor e o titulo da preleção. Essas informações são importantes porque o modulo Sessão deverá recuperar a informação da preleção automaticamente na respectiva data.
+Ex: Data: 31/08/2026 - Preletor: Paulo de Tarso - Tema: Evangelho no Lar
+    Data: 01/09/2026 - Preletor: Chico Xavier   - Tema: Amar e Perdoar
+6- Modulo Sessão:
+Durante a semana ocorre duas sessões de atendimento aos domingos as 08:00 e as terças as 19:00, as sessões são compostas de trabalhadores e assistidos.
+Para cada sessão é realizado um cadastro dos trabalhadores e sua respectiva função: 
+DIRIGENTE: Responsável pela gestão da sessão, toda sessão precisa de um dirigente.
+ENTREVISTADOR: Responsável por entrevistar novos assistidos, além de entrevistar assistidos que passaram por avaliação espiritual, nesse caso o entrevistador divulga as orientações e o tipo de tratamento descrito na avaliação.
+EXPOSITOR_PRELETOR: Responsável por fazer a palestra na sessão, o sistema deverá consultar a escala de preletores e adicionar automaticamente no dia da sessão, ou seja, o sistema deverá disponibilizar um modulo chamado cadastro de preletor que informa o dia (Domingo ou terça), Nome do Preletor, Titulo da Palestra, o modulo de sessão deverá ter uma opção para editar preletor, no caso de algum imprevisto do preletor faltar ou acontecer uma troca emergencial.
+PASSISTA: Responsável por aplicar os tratamentos nos assistidos, para o funcionamento da sessão é necessário no mínimo um passista de limpeza, 5 (mínimo) passistas para o tratamento (P1, CH e P2) e 3 (mínimo) passistas para o tratamento P3B. 
+FACILITADOR: 2 (mínimo) recepcionista e encaminhamento dos assistidos para entrevista.
+Assistido: São as pessoas que estão em tratamento, o assistido se apresenta na recepção e neste momento o recepcionista deverá consultar o cadastro do assistido o sistema retorna o tratamento atual, neste momento o recepcionista deverá marcar a presença do assistido respectiva sessão. Caso seja a primeira vez do assistido na casa, o recepcionista faz o cadastro dos dados básicos automaticamente cadastra com o tratamento P2 e presença marcada na respectiva sessão, na sequencia o assistido é encaminhado para uma entrevista (não obrigatório); Caso o assistido esteja fazendo o tratamento as terça e compareça na assistência de domingo, o recepcionista deverá ter uma opção para marcar o assistido como ouvinte dessa sessão, ou seja, não é contabilizado no prontuário desse assistido. Existem casos que o assistido que mudar o dia da assistência, nesse caso o recepcionista deverá ter acesso ao prontuário e efetuar a alteração do dia de tratamento (armazenar no log de alterações para futuras auditorias), quando houver essa solicitação de mudança por parte do assistido, o sistema deverá permitir a presença na sessão e marcação de presença no prontuário. Ponto de Atenção: O assistido pode ter apenas presença em apenas uma Sessão por semana. Ex.: Assistido cadastrado aos domingos, ele participou da assistência de domingo (30/08/2026), e na próxima terça (01/09/2026), ele comparece na sessão e solicita a modificação DE: Domingo PARA: Terça, o recepcionista efetua a mudança, mas o sistema não deverá permitir que seja marcado a presença na sessão de 01/09, porque durante essa semana já participou na sessão de 30/09, nesse caso excepcionalmente para essa sessão esse usuário é contabilizado como ouvinte.
+O sistema modulo Sessão deverá ter indicadores exibindo a contagem em tempo real dos assistidos presentes na sessão, agrupados por tipo de tratamento (ex.: Total de Assistidos = 105 (CH=30, P2=60, P1=10, Ouvintes=5) - Câmara de Passe = 5 - PB3 = 3 ), conforme as pessoas vão chegando o recepciona vai adicionando as pessoas na sessão (Ponto de Atenção: O trabalhador da casa também é contabilizado como assistido em tratamento).
+Protótipo:
+Assistência Espiritual 
+Sessão: Domingo 31/08/2026 (Semana 36)
+Dirigente: Jose
+Recepcionista: Jose, Ronaldo
+Secretária: Rosangela, Everson
+Entrevistadores: Tiana, Marcio
+Passe Limpeza: Sueli, Cecilia 
+Camara de Passe: Joseli, Alaide, Wando, Sydnei, Douglas, Ronaldo (Mínimo 5)
+Dirigente Camara de Passe: Joseli (Mínimo 3)
+P3B: Sueli, Cecilia, Rubens
+Peletor: Kalvin
+Tema: Evangelho no Lar
+Entrevistas:
+Novos Assistidos: 2
+Retorno Assistidos: 3
+Tratamentos:
+P1: 2
+CH: 20
+P2: 30
+OUVINTES: 5
+
+6. Criar módulo de Avaliação.
+7. Criar módulo de Assistido.

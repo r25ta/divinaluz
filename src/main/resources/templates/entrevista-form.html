@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Nova Entrevista')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
+                    <h1>Registrar Entrevista</h1>
+                </div>
+                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                </a>
+            </div>
+
+            <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
+
+            <div class="alert alert-warning">
+                <i class="bi bi-info-circle-fill"></i>
+                Referente à <strong th:text="${avaliacao.numeroVez} + 'ª VEZ'"></strong> —
+                avaliação de <strong th:text="${#temporals.format(avaliacao.data, 'dd/MM/yyyy')}"></strong>.
+                <span th:if="${assistido.diaFrequencia != null}">
+                    A data da entrevista precisa cair em uma <strong th:text="${assistido.diaFrequencia.label}"></strong>.
+                </span>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body">
+
+                    <form th:action="@{/prontuario/{id}/entrevista(id=${assistido.id}, avaliacaoId=${avaliacao.id})}"
+                          th:object="${entrevista}" method="post">
+
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Entrevista</div>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Data da Entrevista</label>
+                                    <input type="date" class="form-control" th:field="*{data}" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Entrevistador</label>
+                                    <input type="text" class="form-control" th:field="*{entrevistador}" placeholder="Nome do entrevistador">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Tratamento Indicado</div>
+                            <select class="form-select" th:field="*{tratamentoIndicado}" required>
+                                <option value="">Selecione...</option>
+                                <option th:each="t : ${tratamentos}" th:value="${t.id}"
+                                        th:text="${t.codigo + ' - ' + t.nome}"></option>
+                            </select>
+                            <div class="form-text">Pode repetir o tratamento anterior, se for o caso.</div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 pt-2">
+                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <button type="submit" class="btn btn-teal text-white">
+                                <i class="bi bi-check-lg"></i> Salvar Entrevista
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

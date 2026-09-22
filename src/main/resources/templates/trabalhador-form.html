@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Perfil de Trabalhador')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
+                    <h1>Perfil de Trabalhador</h1>
+                </div>
+                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                </a>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body">
+
+                    <form th:action="@{/prontuario/{id}/trabalhador(id=${assistido.id})}" method="post">
+
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Função(ões) na Casa Espírita</div>
+                            <p class="dl-muted" style="margin-top:-0.4rem; margin-bottom:1rem;">
+                                Selecione uma ou mais funções exercidas por este trabalhador.
+                            </p>
+                            <div class="dl-role-list">
+                                <th:block th:each="f : ${funcoes}">
+                                    <input class="dl-role-check" type="checkbox" th:id="${'func-' + f.name()}"
+                                           name="funcoes" th:value="${f.name()}"
+                                           th:checked="${trabalhador.funcoes.contains(f)}">
+                                    <label class="dl-role-option" th:for="${'func-' + f.name()}">
+                                        <span class="dl-role-mark"><i class="bi bi-check-lg"></i></span>
+                                        <span>
+                                            <span class="dl-role-title d-block" th:text="${f.label}"></span>
+                                            <span class="dl-role-desc d-block" th:text="${f.descricao}"></span>
+                                        </span>
+                                    </label>
+                                </th:block>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 pt-2">
+                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <button type="submit" class="btn btn-teal text-white">
+                                <i class="bi bi-check-lg"></i> Salvar Perfil de Trabalhador
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

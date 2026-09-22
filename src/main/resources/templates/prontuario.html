@@ -1,138 +1,402 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <title>Detalhes do Prontuário</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
+<head th:replace="~{fragments/layout :: pageHead(${assistido.nome})}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
 
-<div class="container mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Prontuário de Assistência Espiritual</h2>
-        <a th:href="@{/}" class="btn btn-secondary">Voltar para Lista</a>
-    </div>
+    <main class="dl-main">
+        <div class="dl-container">
 
-    <div class="alert alert-warning" th:if="${aviso}" th:text="${aviso}"></div>
-
-    <!-- Cabeçalho (Frente do Cartão) -->
-    <div class="card shadow mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">Dados do Assistido</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6"><p><strong>Nome:</strong> <span th:text="${assistido.nome}"></span></p></div>
-                <div class="col-md-6"><p><strong>Residência:</strong> <span th:text="${assistido.residencia}"></span></p></div>
-                <div class="col-md-3"><p><strong>Idade:</strong> <span th:text="${assistido.idade}"></span></p></div>
-                <div class="col-md-3"><p><strong>Estado Civil:</strong> <span th:text="${assistido.estadoCivil}"></span></p></div>
-                <div class="col-md-3"><p><strong>Vínculo:</strong> <span th:text="${assistido.vinculo}"></span></p></div>
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Prontuário</span>
+                    <h1 th:text="${assistido.nome}">Nome do Assistido</h1>
+                </div>
+                <a th:href="@{/}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar para Lista
+                </a>
             </div>
-        </div>
-    </div>
 
-    <!-- Tratamento Espiritual Atual -->
-    <div class="card shadow mb-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0">Tratamento Espiritual Atual</h5>
-        </div>
-        <div class="card-body">
-            <div th:if="${assistido.tratamentoAtual != null}">
-                <p class="mb-1">
-                    <strong th:text="${assistido.tratamentoAtual.codigo + ' - ' + assistido.tratamentoAtual.nome}"></strong>
-                </p>
-                <p class="mb-1 text-muted" th:text="${assistido.tratamentoAtual.comoFunciona}"></p>
-                <p class="mb-0 text-muted"><em th:text="${assistido.tratamentoAtual.triagemObservacoes}"></em></p>
+            <div class="alert alert-warning" th:if="${aviso}">
+                <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
             </div>
-            <p th:if="${assistido.tratamentoAtual == null}" class="text-muted mb-0">Ainda não definido — aguardando triagem.</p>
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+            <div class="alert alert-warning" th:unless="${assistido.ativo}">
+                <i class="bi bi-slash-circle"></i> Este prontuário está <strong>desativado</strong>. O histórico continua disponível, mas ele não aparece na listagem principal.
+            </div>
 
-            <form th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post" class="d-flex gap-2 mt-3">
-                <select name="tratamentoAtualId" class="form-select">
-                    <option value="">A definir na triagem</option>
-                    <option th:each="t : ${tratamentos}" th:value="${t.id}"
-                            th:selected="${assistido.tratamentoAtual != null and assistido.tratamentoAtual.id == t.id}"
-                            th:text="${t.codigo + ' - ' + t.nome}"></option>
-                </select>
-                <button type="submit" class="btn btn-info text-white text-nowrap">Alterar Tratamento</button>
-            </form>
-        </div>
-    </div>
+            <!-- Resumo Rápido -->
+            <div class="dl-card dl-summary-card">
+                <div class="dl-card-body">
+                    <div class="dl-summary-grid">
+                        <div class="dl-summary-item">
+                            <span class="label">Vínculo</span>
+                            <span class="dl-badge dl-badge-neutral" th:text="${assistido.vinculo}"></span>
+                        </div>
+                        <div class="dl-summary-item">
+                            <span class="label">Status</span>
+                            <span class="dl-badge dl-badge-success" th:if="${assistido.ativo}">Ativo</span>
+                            <span class="dl-badge dl-badge-neutral" th:unless="${assistido.ativo}">Inativo</span>
+                        </div>
+                        <div class="dl-summary-item">
+                            <span class="label">Tratamento Atual</span>
+                            <span th:if="${assistido.tratamentoAtual != null}" class="dl-badge dl-badge-teal" th:text="${assistido.tratamentoAtual.codigo}"></span>
+                            <span th:if="${assistido.tratamentoAtual == null}" class="dl-badge dl-badge-neutral">A definir</span>
+                        </div>
+                        <div class="dl-summary-item">
+                            <span class="label">Dia de Assistência</span>
+                            <span th:if="${assistido.diaFrequencia != null}" class="dl-badge dl-badge-info" th:text="${assistido.diaFrequencia.label}"></span>
+                            <span th:if="${assistido.diaFrequencia == null}" class="value dl-muted">—</span>
+                        </div>
+                        <div class="dl-summary-item">
+                            <span class="label">Idade</span>
+                            <span class="value" th:text="${assistido.idade != null ? assistido.idade + ' anos' : '—'}"></span>
+                        </div>
+                        <div class="dl-summary-item" th:if="${proximaEntrevistaPrevista != null}">
+                            <span class="label">Próxima Entrevista</span>
+                            <span class="value" th:text="${#temporals.format(proximaEntrevistaPrevista, 'dd/MM/yyyy')}"></span>
+                        </div>
+                    </div>
 
-    <!-- Tabela de Avaliações (Frente do Cartão) -->
-    <div class="card shadow mb-4">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Histórico de Avaliações</h5>
-            <a th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-light btn-sm">Registrar Avaliação</a>
-        </div>
-        <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0">
-                <thead class="table-dark text-center">
-                    <tr>
-                        <th>Vez</th>
-                        <th>Data</th>
-                        <th>Entrevistador</th>
-                        <th>Evolução</th>
-                        <th>Tratamento Indicado</th>
-                    </tr>
-                </thead>
-                <tbody class="text-center">
-                    <tr th:each="av : ${avaliacoes}">
-                        <td th:text="${av.numeroVez} + 'ª VEZ'"></td>
-                        <td th:text="${#temporals.format(av.data, 'dd/MM/yyyy')}"></td>
-                        <td th:text="${av.entrevistador}"></td>
-                        <td th:text="${av.evolucao}"></td>
-                        <td th:text="${av.tratamentoIndicado != null ? av.tratamentoIndicado.codigo : '-'}"></td>
-                    </tr>
-                    <tr th:if="${#lists.isEmpty(avaliacoes)}">
-                        <td colspan="5" class="text-muted py-3">Nenhuma avaliação registrada para este assistido ainda.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+                    <div class="d-flex flex-wrap gap-2 dl-summary-actions">
+                        <a th:href="@{/prontuario/{id}/nova-sessao(id=${assistido.id})}" class="btn btn-teal btn-sm text-white">
+                            <i class="bi bi-plus-lg"></i> Registrar Sessão
+                        </a>
+                        <a th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-teal btn-sm text-white">
+                            <i class="bi bi-plus-lg"></i> Registrar Avaliação
+                        </a>
+                        <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-pencil"></i> Editar Dados
+                        </a>
+                        <form th:if="${assistido.ativo}" th:action="@{/prontuario/{id}/desativar(id=${assistido.id})}" method="post" class="d-inline"
+                              onsubmit="return confirm('Desativar o prontuário deste assistido? O histórico é mantido e ele pode ser reativado depois.');">
+                            <button type="submit" class="btn btn-outline-teal btn-sm">
+                                <i class="bi bi-slash-circle"></i> Desativar Prontuário
+                            </button>
+                        </form>
+                        <form th:unless="${assistido.ativo}" th:action="@{/prontuario/{id}/reativar(id=${assistido.id})}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-teal btn-sm text-white">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reativar Prontuário
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
 
-    <!-- Tabela de Sessões (Verso do Cartão) -->
-    <div class="card shadow">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Histórico de Tratamento (Sessões)</h5>
-            <a th:href="@{/prontuario/{id}/nova-sessao(id=${assistido.id})}" class="btn btn-light btn-sm">Registrar Nova Sessão</a>
+            <div class="row g-3">
+
+                <!-- Dados do Assistido -->
+                <div class="col-md-6">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-person-vcard"></i></span>
+                                <h2>Dados do Assistido</h2>
+                            </div>
+                        </div>
+                        <div class="dl-card-body">
+                            <div class="dl-info-strip">
+                                <div class="dl-info-strip-item">
+                                    <span class="label">Residência</span>
+                                    <span class="value" th:text="${assistido.residencia ?: '—'}"></span>
+                                </div>
+                                <div class="dl-info-strip-item">
+                                    <span class="label">Data de Nascimento</span>
+                                    <span class="value" th:text="${assistido.dataNascimento != null ? #temporals.format(assistido.dataNascimento, 'dd/MM/yyyy') : '—'}"></span>
+                                </div>
+                                <div class="dl-info-strip-item">
+                                    <span class="label">Estado Civil</span>
+                                    <span class="value" th:text="${assistido.estadoCivil ?: '—'}"></span>
+                                </div>
+                                <div class="dl-info-strip-item">
+                                    <span class="label">Sexo</span>
+                                    <span class="value"
+                                          th:text="${assistido.sexo == 'M' ? 'Masculino' : (assistido.sexo == 'F' ? 'Feminino' : (assistido.sexo == 'I' ? 'Indefinido' : '—'))}"></span>
+                                </div>
+                                <div class="dl-info-strip-item">
+                                    <span class="label">E-mail</span>
+                                    <span class="value" th:text="${assistido.email ?: '—'}"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tratamento Espiritual Atual -->
+                <div class="col-md-6">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-heart-pulse"></i></span>
+                                <h2>Tratamento Espiritual Atual</h2>
+                            </div>
+                        </div>
+                        <div class="dl-card-body">
+                            <div th:if="${assistido.tratamentoAtual != null}" class="d-flex align-items-start gap-3 flex-wrap mb-3">
+                                <span class="dl-badge dl-badge-teal" style="font-size:0.95rem; padding:0.5rem 1rem;"
+                                      th:text="${assistido.tratamentoAtual.codigo}"></span>
+                                <div>
+                                    <div class="fw-semibold" th:text="${assistido.tratamentoAtual.nome}"></div>
+                                    <p class="dl-muted mb-0 mt-1 small" th:text="${assistido.tratamentoAtual.comoFunciona}"></p>
+                                </div>
+                            </div>
+                            <p th:if="${assistido.tratamentoAtual == null}" class="dl-muted mb-3">
+                                <i class="bi bi-hourglass-split"></i> Ainda não definido — aguardando triagem.
+                            </p>
+
+                            <form th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
+                                  class="pt-2" style="border-top: 1px dashed var(--dl-border);">
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <select name="tratamentoAtualId" id="tratamentoAtualId" class="form-select" style="max-width: 320px;"
+                                            th:attr="data-inicial=${assistido.tratamentoAtual != null ? assistido.tratamentoAtual.id : ''}">
+                                        <option value="">A definir na triagem</option>
+                                        <option th:each="t : ${tratamentos}" th:value="${t.id}"
+                                                th:selected="${assistido.tratamentoAtual != null and assistido.tratamentoAtual.id == t.id}"
+                                                th:text="${t.codigo + ' - ' + t.nome}"></option>
+                                    </select>
+                                    <button type="submit" class="btn btn-outline-teal">
+                                        <i class="bi bi-arrow-repeat"></i> Alterar Tratamento
+                                    </button>
+                                </div>
+                                <div id="campoDataPrimeiraSessaoTratamento" class="mt-2" style="display:none;">
+                                    <label class="form-label">Data da 1ª Sessão do Novo Tratamento</label>
+                                    <input type="date" class="form-control" name="dataPrimeiraSessao" style="max-width: 260px;">
+                                    <div class="form-text">Obrigatória ao mudar de tratamento — a 1ª sessão do novo ciclo já é registrada com essa data.</div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dia de Assistência Espiritual -->
+                <div class="col-md-6">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-calendar2-check"></i></span>
+                                <h2>Dia de Assistência Espiritual</h2>
+                            </div>
+                        </div>
+                        <div class="dl-card-body">
+                            <form th:action="@{/prontuario/{id}/dia-frequencia(id=${assistido.id})}" method="post"
+                                  class="d-flex gap-2 flex-wrap align-items-start mb-3">
+                                <select name="diaFrequencia" class="form-select" style="max-width: 220px;">
+                                    <option value="">Não definido</option>
+                                    <option th:each="d : ${diasFrequencia}" th:value="${d.name()}"
+                                            th:selected="${assistido.diaFrequencia == d}"
+                                            th:text="${d.label}"></option>
+                                </select>
+                                <input type="text" name="motivo" class="form-control" style="max-width: 220px;" placeholder="Motivo (opcional)">
+                                <button type="submit" class="btn btn-outline-teal">
+                                    <i class="bi bi-arrow-repeat"></i> Salvar
+                                </button>
+                            </form>
+
+                            <details th:if="${not #lists.isEmpty(historicoDiaFrequencia)}">
+                                <summary class="dl-muted small">Ver histórico de alterações (<span th:text="${#lists.size(historicoDiaFrequencia)}"></span>)</summary>
+                                <div class="table-responsive mt-2">
+                                    <table class="dl-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Quando</th>
+                                                <th>De</th>
+                                                <th>Para</th>
+                                                <th>Motivo</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr th:each="h : ${historicoDiaFrequencia}">
+                                                <td th:text="${#temporals.format(h.dataHora, 'dd/MM/yyyy HH:mm')}"></td>
+                                                <td th:text="${h.diaAnterior != null ? h.diaAnterior.label : '—'}"></td>
+                                                <td th:text="${h.diaNovo != null ? h.diaNovo.label : '—'}"></td>
+                                                <td th:text="${h.motivo ?: '—'}"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Perfil de Trabalhador -->
+                <div class="col-md-6" th:if="${assistido.vinculo == 'TRABALHADOR'}">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-person-badge"></i></span>
+                                <h2>Perfil de Trabalhador</h2>
+                            </div>
+                            <a th:href="@{/prontuario/{id}/trabalhador(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                                <i class="bi bi-pencil"></i>
+                                <span th:text="${trabalhador != null and not #sets.isEmpty(trabalhador.funcoes)} ? 'Editar Funções' : 'Definir Funções'"></span>
+                            </a>
+                        </div>
+                        <div class="dl-card-body">
+                            <div th:if="${trabalhador != null and not #sets.isEmpty(trabalhador.funcoes)}" class="d-flex flex-wrap gap-2">
+                                <span class="dl-badge dl-badge-teal" th:each="f : ${trabalhador.funcoes}" th:text="${f.label}"></span>
+                            </div>
+                            <p th:if="${trabalhador == null or #sets.isEmpty(trabalhador.funcoes)}" class="dl-muted mb-0">
+                                <i class="bi bi-hourglass-split"></i> Nenhuma função registrada ainda para este trabalhador.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Histórico (abas) -->
+            <div class="dl-card mt-3">
+                <ul class="nav nav-tabs dl-tabs" id="historicoTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-sessoes-btn" data-bs-toggle="tab" data-bs-target="#tab-sessoes" type="button" role="tab">
+                            <i class="bi bi-calendar2-week"></i> Sessões <span class="dl-tab-count" th:text="${#lists.size(sessoes)}"></span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-avaliacoes-btn" data-bs-toggle="tab" data-bs-target="#tab-avaliacoes" type="button" role="tab">
+                            <i class="bi bi-clipboard2-pulse"></i> Avaliações <span class="dl-tab-count" th:text="${#lists.size(avaliacoes)}"></span>
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="historicoTabsContent">
+
+                    <!-- Sessões -->
+                    <div class="tab-pane fade show active" id="tab-sessoes" role="tabpanel">
+                        <div class="dl-tab-panel-header">
+                            <span class="dl-muted small" th:if="${assistido.diaFrequencia != null}">
+                                Sessões precisam cair em uma <strong th:text="${assistido.diaFrequencia.label}"></strong>.
+                            </span>
+                            <span class="dl-muted small" th:if="${assistido.diaFrequencia == null}">Registros de sessões de tratamento do assistido.</span>
+                            <a th:href="@{/prontuario/{id}/nova-sessao(id=${assistido.id})}" class="btn btn-teal btn-sm text-white">
+                                <i class="bi bi-plus-lg"></i> Registrar Nova Sessão
+                            </a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="dl-table text-center" th:if="${not #lists.isEmpty(sessoes)}">
+                                <thead>
+                                    <tr>
+                                        <th>Série</th>
+                                        <th>Data</th>
+                                        <th>Visto</th>
+                                        <th>Assistência</th>
+                                        <th>Evangelho no Lar</th>
+                                        <th>Leituras</th>
+                                        <th>Escola</th>
+                                        <th>Trabalho Espirit.</th>
+                                        <th>Médico</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="sessao : ${sessoes}">
+                                        <td th:text="${sessao.numeroSerie} + 'ª SÉRIE'"></td>
+                                        <td th:text="${#temporals.format(sessao.dataConsulta, 'dd/MM/yyyy')}"></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.visto} ? 'on' : 'off')"><i th:class="${sessao.visto} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.assistencia} ? 'on' : 'off')"><i th:class="${sessao.assistencia} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.evangelhoNoLar} ? 'on' : 'off')"><i th:class="${sessao.evangelhoNoLar} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.leituras} ? 'on' : 'off')"><i th:class="${sessao.leituras} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.escola} ? 'on' : 'off')"><i th:class="${sessao.escola} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.trabalhoEspiritual} ? 'on' : 'off')"><i th:class="${sessao.trabalhoEspiritual} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                        <td><span th:class="'dl-check-dot ' + (${sessao.medico} ? 'on' : 'off')"><i th:class="${sessao.medico} ? 'bi bi-check-lg' : 'bi bi-dash'"></i></span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="dl-table-empty" th:if="${#lists.isEmpty(sessoes)}">
+                            <i class="bi bi-calendar2-week"></i>
+                            <p class="mb-0">Nenhuma sessão registrada para este assistido ainda.</p>
+                        </div>
+                    </div>
+
+                    <!-- Avaliações -->
+                    <div class="tab-pane fade" id="tab-avaliacoes" role="tabpanel">
+                        <div class="dl-tab-panel-header">
+                            <span class="dl-muted small" th:if="${ultimaEntrevista != null}">
+                                Última entrevista: <strong th:text="${#temporals.format(ultimaEntrevista, 'dd/MM/yyyy')}"></strong>
+                                · Próxima prevista: <strong th:text="${#temporals.format(proximaEntrevistaPrevista, 'dd/MM/yyyy')}"></strong>
+                            </span>
+                            <span class="dl-muted small" th:if="${ultimaEntrevista == null}">Nenhuma entrevista registrada ainda.</span>
+                            <a th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-teal btn-sm text-white">
+                                <i class="bi bi-plus-lg"></i> Registrar Avaliação
+                            </a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="dl-table" th:if="${not #lists.isEmpty(avaliacoes)}">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">Vez</th>
+                                        <th class="text-center">Data</th>
+                                        <th class="text-center">Evolução</th>
+                                        <th>Observações</th>
+                                        <th>Entrevista</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="av : ${avaliacoes}">
+                                        <td class="text-center" th:text="${av.numeroVez} + 'ª VEZ'"></td>
+                                        <td class="text-center" th:text="${#temporals.format(av.data, 'dd/MM/yyyy')}"></td>
+                                        <td class="text-center">
+                                            <span th:if="${av.evolucao != null}"
+                                                  th:class="${'dl-badge ' +
+                                                    (av.evolucao.name() == 'BOM' ? 'dl-badge-success' :
+                                                    (av.evolucao.name() == 'MELHOR' ? 'dl-badge-info' :
+                                                    (av.evolucao.name() == 'PIOR' ? 'dl-badge-danger' : 'dl-badge-neutral')))}"
+                                                  th:text="${av.evolucao.name()}"></span>
+                                            <span th:if="${av.evolucao == null}" class="dl-muted">—</span>
+                                        </td>
+                                        <td>
+                                            <span th:if="${av.observacoes}" class="dl-truncate" th:text="${av.observacoes}" th:title="${av.observacoes}"></span>
+                                            <span th:unless="${av.observacoes}" class="dl-muted">—</span>
+                                        </td>
+                                        <td>
+                                            <div th:if="${av.entrevista != null}">
+                                                <span class="dl-badge dl-badge-teal" th:if="${av.entrevista.tratamentoIndicado != null}" th:text="${av.entrevista.tratamentoIndicado.codigo}"></span>
+                                                <span class="dl-muted small d-block" th:text="${#temporals.format(av.entrevista.data, 'dd/MM/yyyy')} + (${av.entrevista.entrevistador} ? ' · ' + ${av.entrevista.entrevistador} : '')"></span>
+                                            </div>
+                                            <a th:if="${av.entrevista == null}" th:href="@{/prontuario/{id}/nova-entrevista(id=${assistido.id}, avaliacaoId=${av.id})}"
+                                               class="btn btn-outline-teal btn-sm">
+                                                <i class="bi bi-plus-lg"></i> Registrar Entrevista
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="dl-table-empty" th:if="${#lists.isEmpty(avaliacoes)}">
+                            <i class="bi bi-clipboard2-pulse"></i>
+                            <p class="mb-0">Nenhuma avaliação registrada para este assistido ainda.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
         </div>
-        <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0">
-                <thead class="table-dark text-center">
-                    <tr>
-                        <th>Série</th>
-                        <th>Data da Consulta</th>
-                        <th>Visto</th>
-                        <th>Assistência</th>
-                        <th>Evangelho no Lar</th>
-                        <th>Leituras</th>
-                        <th>Escola</th>
-                        <th>Trabalho Espirit.</th>
-                        <th>Médico</th>
-                    </tr>
-                </thead>
-                <tbody class="text-center">
-                    <tr th:each="sessao : ${sessoes}">
-                        <td th:text="${sessao.numeroSerie} + 'ª SÉRIE'"></td>
-                        <td th:text="${#temporals.format(sessao.dataConsulta, 'dd/MM/yyyy')}"></td>
-                        <td><input type="checkbox" th:checked="${sessao.visto}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.assistencia}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.evangelhoNoLar}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.leituras}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.escola}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.trabalhoEspiritual}" disabled></td>
-                        <td><input type="checkbox" th:checked="${sessao.medico}" disabled></td>
-                    </tr>
-                    <!-- Mensagem caso não tenha sessões -->
-                    <tr th:if="${#lists.isEmpty(sessoes)}">
-                        <td colspan="9" class="text-muted py-3">Nenhuma sessão registrada para este assistido ainda.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    </main>
 </div>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function () {
+        var select = document.getElementById('tratamentoAtualId');
+        var campo = document.getElementById('campoDataPrimeiraSessaoTratamento');
+        var input = campo ? campo.querySelector('input[name="dataPrimeiraSessao"]') : null;
+        var valorInicial = select ? select.getAttribute('data-inicial') : '';
+        function atualizar() {
+            if (!select || !campo) return;
+            var mudou = select.value !== '' && select.value !== valorInicial;
+            campo.style.display = mudou ? '' : 'none';
+            if (input) { input.required = mudou; }
+        }
+        if (select) {
+            select.addEventListener('change', atualizar);
+            atualizar();
+        }
+    })();
+</script>
 </body>
 </html>

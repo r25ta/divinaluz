@@ -23,21 +23,23 @@ public class Avaliacao {
 
     private Integer numeroVez; // 1ª vez, 2ª vez, ... (1 a 8)
 
+    // Data da avaliação em si (livre — não precisa cair no dia de assistência do assistido).
+    // A entrevista que comunica o tratamento decidido é um registro separado (ver Entrevista),
+    // essa sim amarrada ao dia de assistência.
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate data;
-
-    private String entrevistador;
 
     @Column(columnDefinition = "TEXT")
     private String historico;
 
+    // Recomendações em texto livre do médium para o assistido.
+    @Column(columnDefinition = "TEXT")
+    private String observacoes;
+
     @Enumerated(EnumType.STRING)
     private Evolucao evolucao;
 
-    // Resultado da entrevista: tratamento decidido para o assistido a partir desta avaliação
-    // (pode repetir o tratamento anterior). Atualiza Assistido.tratamentoAtual ao ser salva.
-    @ManyToOne
-    @JoinColumn(name = "tratamento_indicado_id")
+    @OneToOne(mappedBy = "avaliacao")
     @ToString.Exclude
-    private TipoTratamento tratamentoIndicado;
+    private Entrevista entrevista;
 }

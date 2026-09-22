@@ -1,34 +1,105 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <title>Divina Luz - Prontuários</title>
-</head>
-<body class="container mt-5">
-    <h2>Assistidos (Prontuários)</h2>
-    <a th:href="@{/novo}" class="btn btn-primary mb-3">Novo Cadastro</a>
-    
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>ID</th>
-                <th>Nome</th>
-                <th>Vínculo</th>
-                <th>Tratamento Atual</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr th:each="a : ${assistidos}">
-                <td th:text="${a.id}"></td>
-                <td th:text="${a.nome}"></td>
-                <td th:text="${a.vinculo}"></td>
-                <td th:text="${a.tratamentoAtual != null ? a.tratamentoAtual.codigo : 'A definir'}"></td>
-                <td>
-                    <a th:href="@{/prontuario/{id}(id=${a.id})}" class="btn btn-sm btn-info text-white">Ver Prontuário Completo</a>
-                </td>
-            </tr>
-        </tbody>
-    </table>
+<head th:replace="~{fragments/layout :: pageHead('Assistidos')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Prontuários</span>
+                    <h1>Assistidos Cadastrados</h1>
+                </div>
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <a th:if="${not mostrarInativos}" th:href="@{/(mostrarInativos=true)}" class="dl-muted small">
+                        <i class="bi bi-eye"></i> Mostrar inativos
+                    </a>
+                    <a th:if="${mostrarInativos}" th:href="@{/}" class="dl-muted small">
+                        <i class="bi bi-eye-slash"></i> Mostrar somente ativos
+                    </a>
+                    <div class="dl-search">
+                        <i class="bi bi-search"></i>
+                        <input type="search" id="buscaAssistido" class="form-control" placeholder="Buscar por nome...">
+                    </div>
+                </div>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body-flush">
+                    <table class="dl-table" id="tabelaAssistidos" th:if="${not #lists.isEmpty(assistidos)}">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Vínculo</th>
+                                <th>Dia</th>
+                                <th>Tratamento Atual</th>
+                                <th>Frequência (Mês)</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="a : ${assistidos}" class="linha-assistido">
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="fw-semibold nome-assistido" th:text="${a.nome}"></span>
+                                        <span th:unless="${a.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
+                                    </div>
+                                    <div class="dl-muted small" th:if="${a.residencia}" th:text="${a.residencia}"></div>
+                                </td>
+                                <td>
+                                    <span class="dl-badge dl-badge-neutral" th:text="${a.vinculo}"></span>
+                                </td>
+                                <td>
+                                    <span th:if="${a.diaFrequencia != null}" class="dl-badge dl-badge-info" th:text="${a.diaFrequencia.label}"></span>
+                                    <span th:if="${a.diaFrequencia == null}" class="dl-muted">—</span>
+                                </td>
+                                <td>
+                                    <span th:if="${a.tratamentoAtual != null}" class="dl-badge dl-badge-teal" th:text="${a.tratamentoAtual.codigo}"></span>
+                                    <span th:if="${a.tratamentoAtual == null}" class="dl-badge dl-badge-neutral">A definir</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1" th:if="${diasEsperadosMes.containsKey(a.id)}">
+                                        <span th:each="d : ${diasEsperadosMes.get(a.id)}"
+                                              th:class="'dl-freq-mark ' + (${diasPresentesMes.get(a.id).contains(d)} ? 'on' : 'off')"
+                                              th:text="${#temporals.format(d, 'dd/MM')}"
+                                              th:title="${diasPresentesMes.get(a.id).contains(d)} ? 'Presente' : 'Faltou'"></span>
+                                    </div>
+                                    <span th:unless="${diasEsperadosMes.containsKey(a.id)}" class="dl-muted">—</span>
+                                </td>
+                                <td class="text-end">
+                                    <a th:href="@{/prontuario/{id}(id=${a.id})}" class="btn btn-outline-teal btn-sm">
+                                        Ver Prontuário <i class="bi bi-arrow-right"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(assistidos)}">
+                        <i class="bi bi-people"></i>
+                        <p class="mb-2">Nenhum assistido cadastrado ainda.</p>
+                        <a th:href="@{/novo}" class="btn btn-teal btn-sm text-white">
+                            <i class="bi bi-plus-lg"></i> Cadastrar o primeiro
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<script th:inline="javascript">
+    document.getElementById('buscaAssistido')?.addEventListener('input', function (e) {
+        var termo = e.target.value.trim().toLowerCase();
+        document.querySelectorAll('#tabelaAssistidos .linha-assistido').forEach(function (linha) {
+            var nome = linha.querySelector('.nome-assistido').textContent.toLowerCase();
+            linha.style.display = nome.includes(termo) ? '' : 'none';
+        });
+    });
+</script>
 </body>
 </html>

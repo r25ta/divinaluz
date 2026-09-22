@@ -12,9 +12,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-& (Join-Path $scriptDir "smoke-test.ps1")
-$testExitCode = $LASTEXITCODE
-
-& (Join-Path $scriptDir "dev-stop.ps1")
+$testExitCode = 1
+try {
+    & (Join-Path $scriptDir "smoke-test.ps1")
+    $testExitCode = $LASTEXITCODE
+} finally {
+    # Garante que o app e derrubado mesmo se o smoke-test lancar uma excecao nao tratada.
+    & (Join-Path $scriptDir "dev-stop.ps1")
+}
 
 exit $testExitCode

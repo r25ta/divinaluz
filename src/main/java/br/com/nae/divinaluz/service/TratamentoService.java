@@ -4,17 +4,24 @@ import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
+import br.com.nae.divinaluz.model.DiaFrequencia;
+import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
+import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -24,16 +31,20 @@ public class TratamentoService {
     private static final int DIAS_TOLERANCIA_AUSENCIA = 21; // 3 semanas sem sessão reinicia o tratamento em P2
     private static final int SESSOES_POR_AVALIACAO = 4;
     private static final String CODIGO_TRATAMENTO_INICIAL = "P2";
+    private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final SessaoRepository sessaoRepository;
     private final AvaliacaoRepository avaliacaoRepository;
+    private final EntrevistaRepository entrevistaRepository;
     private final AssistidoRepository assistidoRepository;
     private final TipoTratamentoRepository tipoTratamentoRepository;
 
     public TratamentoService(SessaoRepository sessaoRepository, AvaliacaoRepository avaliacaoRepository,
-            AssistidoRepository assistidoRepository, TipoTratamentoRepository tipoTratamentoRepository) {
+            EntrevistaRepository entrevistaRepository, AssistidoRepository assistidoRepository,
+            TipoTratamentoRepository tipoTratamentoRepository) {
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
+        this.entrevistaRepository = entrevistaRepository;
         this.assistidoRepository = assistidoRepository;
         this.tipoTratamentoRepository = tipoTratamentoRepository;
     }
@@ -44,6 +55,8 @@ public class TratamentoService {
     public ResultadoSessao registrarSessao(SessaoTratamento novaSessao) {
         Assistido assistido = novaSessao.getAssistido();
         Long assistidoId = assistido.getId();
+
+        validarDiaDaSemana(assistido, novaSessao.getDataConsulta());
 
         Optional<SessaoTratamento> ultimaSessao =
                 sessaoRepository.findFirstByAssistidoIdOrderByDataConsultaDesc(assistidoId);
@@ -76,17 +89,17 @@ public class TratamentoService {
 
         LocalDate cicloIniciadoEm = assistido.getCicloIniciadoEm();
         long totalSessoesCiclo = contarSessoesDoCiclo(assistidoId, cicloIniciadoEm);
-        long totalAvaliacoesCiclo = contarAvaliacoesDoCiclo(assistidoId, cicloIniciadoEm);
+        long totalEntrevistasCiclo = contarEntrevistasDoCiclo(assistidoId, cicloIniciadoEm);
 
-        // Regra das 4 sessões: a cada bloco de 4 sessões do ciclo atual é exigida uma nova avaliação.
-        // Ex.: ao completar a 4ª sessão são necessárias >= 1 avaliação para liberar a 5ª;
-        // ao completar a 8ª, >= 2 avaliações para liberar a 9ª; e assim por diante.
+        // Regra das 4 sessões: a cada bloco de 4 sessões do ciclo atual, o assistido precisa
+        // passar por Avaliação + Entrevista (é a Entrevista que efetivamente decide/comunica o
+        // tratamento das próximas 4 sessões, por isso é ela que libera a continuação).
         long blocosConcluidos = totalSessoesCiclo / SESSOES_POR_AVALIACAO;
         if (totalSessoesCiclo > 0 && totalSessoesCiclo % SESSOES_POR_AVALIACAO == 0
-                && totalAvaliacoesCiclo < blocosConcluidos) {
+                && totalEntrevistasCiclo < blocosConcluidos) {
             throw new AvaliacaoPendenteException(
                     "O assistido completou " + totalSessoesCiclo
-                            + " sessões neste ciclo e precisa passar por uma Nova Avaliação antes de continuar.");
+                            + " sessões neste ciclo e precisa passar por Avaliação e Entrevista antes de continuar.");
         }
 
         novaSessao.setNumeroSerie((int) totalSessoesCiclo + 1);
@@ -94,6 +107,9 @@ public class TratamentoService {
         return new ResultadoSessao(sessaoSalva, tratamentoReiniciado);
     }
 
+    // Avaliação: dados da avaliação espiritual em si. Data livre (não precisa cair no dia de
+    // assistência) — quem fica presa a esse dia é a Entrevista que a segue (ver
+    // registrarEntrevista). Não mexe em Assistido.tratamentoAtual.
     @Transactional
     public Avaliacao registrarAvaliacao(Avaliacao novaAvaliacao) {
         Assistido assistido = novaAvaliacao.getAssistido();
@@ -101,14 +117,76 @@ public class TratamentoService {
         long totalAvaliacoesCiclo = contarAvaliacoesDoCiclo(assistido.getId(), assistido.getCicloIniciadoEm());
         novaAvaliacao.setNumeroVez((int) totalAvaliacoesCiclo + 1);
 
-        Avaliacao avaliacaoSalva = avaliacaoRepository.save(novaAvaliacao);
+        return avaliacaoRepository.save(novaAvaliacao);
+    }
 
-        if (novaAvaliacao.getTratamentoIndicado() != null) {
-            assistido.setTratamentoAtual(novaAvaliacao.getTratamentoIndicado());
+    // Entrevista: passo seguinte à Avaliação, em que o entrevistador comunica o tratamento
+    // decidido ao assistido. A data precisa cair no dia de assistência do assistido (item 3) e é
+    // ela quem atualiza Assistido.tratamentoAtual e libera a continuação das sessões.
+    @Transactional
+    public Entrevista registrarEntrevista(Entrevista novaEntrevista) {
+        Assistido assistido = novaEntrevista.getAssistido();
+        validarDiaDaSemana(assistido, novaEntrevista.getData());
+
+        if (entrevistaRepository.existsByAvaliacaoId(novaEntrevista.getAvaliacao().getId())) {
+            throw new RegraNegocioException("Esta avaliação já tem uma entrevista registrada.");
+        }
+
+        Entrevista entrevistaSalva = entrevistaRepository.save(novaEntrevista);
+
+        if (novaEntrevista.getTratamentoIndicado() != null) {
+            assistido.setTratamentoAtual(novaEntrevista.getTratamentoIndicado());
             assistidoRepository.save(assistido);
         }
 
-        return avaliacaoSalva;
+        return entrevistaSalva;
+    }
+
+    // Item 4: sempre que um tratamento novo é atribuído (cadastro, edição ou o card "Alterar
+    // Tratamento" do prontuário), a data da 1ª sessão do novo ciclo passa a ser obrigatória, e
+    // essa sessão já é criada automaticamente. Se o tratamento não mudou (resubmissão do mesmo
+    // valor) ou está sendo limpo (novoTratamento == null), nenhuma data é exigida.
+    @Transactional
+    public void definirTratamento(Assistido assistido, TipoTratamento novoTratamento, LocalDate dataPrimeiraSessao) {
+        TipoTratamento anterior = assistido.getTratamentoAtual();
+        Long idAnterior = anterior != null ? anterior.getId() : null;
+        Long idNovo = novoTratamento != null ? novoTratamento.getId() : null;
+        boolean mudou = !Objects.equals(idAnterior, idNovo);
+
+        assistido.setTratamentoAtual(novoTratamento);
+
+        if (mudou && novoTratamento != null) {
+            if (dataPrimeiraSessao == null) {
+                throw new RegraNegocioException(
+                        "Informe a data da 1ª sessão para iniciar o tratamento " + novoTratamento.getCodigo() + ".");
+            }
+            validarDiaDaSemana(assistido, dataPrimeiraSessao);
+
+            assistido.setCicloIniciadoEm(dataPrimeiraSessao);
+            assistidoRepository.save(assistido);
+
+            SessaoTratamento primeiraSessao = new SessaoTratamento();
+            primeiraSessao.setAssistido(assistido);
+            primeiraSessao.setNumeroSerie(1);
+            primeiraSessao.setDataConsulta(dataPrimeiraSessao);
+            sessaoRepository.save(primeiraSessao);
+        } else {
+            assistidoRepository.save(assistido);
+        }
+    }
+
+    // Item 3: sessões e entrevistas precisam cair no dia da semana do "Dia de Assistência" do
+    // assistido (terça ou domingo). Se o assistido ainda não tem esse dia definido, não há o que
+    // validar — qualquer data é aceita normalmente.
+    private void validarDiaDaSemana(Assistido assistido, LocalDate data) {
+        DiaFrequencia dia = assistido.getDiaFrequencia();
+        if (dia == null || data == null || data.getDayOfWeek() == dia.getDiaSemana()) {
+            return;
+        }
+        String nomeDia = data.getDayOfWeek().getDisplayName(TextStyle.FULL, new Locale("pt", "BR"));
+        throw new RegraNegocioException(
+                "A data " + data.format(FORMATO_DATA) + " cai em uma " + nomeDia
+                        + ", mas o assistido frequenta às " + dia.getLabel() + ".");
     }
 
     private void reiniciarTratamento(Assistido assistido, LocalDate dataReinicio) {
@@ -133,5 +211,11 @@ public class TratamentoService {
         return cicloIniciadoEm != null
                 ? avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(assistidoId, cicloIniciadoEm)
                 : avaliacaoRepository.countByAssistidoId(assistidoId);
+    }
+
+    private long contarEntrevistasDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {
+        return cicloIniciadoEm != null
+                ? entrevistaRepository.countByAssistidoIdAndDataGreaterThanEqual(assistidoId, cicloIniciadoEm)
+                : entrevistaRepository.countByAssistidoId(assistidoId);
     }
 }

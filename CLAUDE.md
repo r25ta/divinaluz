@@ -115,7 +115,7 @@ O cadastro de preleção deverá ser construído uma escala conforme os dias de 
 O preletor deve escolher a data da apresentação, selecionar o nome do preletor e o titulo da preleção. Essas informações são importantes porque o modulo Sessão deverá recuperar a informação da preleção automaticamente na respectiva data.
 Ex: Data: 31/08/2026 - Preletor: Paulo de Tarso - Tema: Evangelho no Lar
     Data: 01/09/2026 - Preletor: Chico Xavier   - Tema: Amar e Perdoar
-6- Modulo Sessão:
+6. Modulo Sessão:
 Durante a semana ocorre duas sessões de atendimento aos domingos as 08:00 e as terças as 19:00, as sessões são compostas de trabalhadores e assistidos.
 Para cada sessão é realizado um cadastro dos trabalhadores e sua respectiva função: 
 DIRIGENTE: Responsável pela gestão da sessão, toda sessão precisa de um dirigente.

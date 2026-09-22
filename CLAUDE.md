@@ -146,6 +146,10 @@ P1: 2
 CH: 20
 P2: 30
 OUVINTES: 5
-
-6. Criar módulo de Avaliação.
-7. Criar módulo de Assistido.
+7. Módulo Tratamento: Todo assistido deverá possuir um "cartão" de tratamento, o tratamento completo equivale a presença em quatro sessões, na quarta sessão o cartão e submetido a avaliação espiritual.
+regras para marcação de presença: 
+  1- O cartão com status "Em Tratamento" o assistido tem visibilidade das informações e sua presença será efetivada somente no dia em que o assistido tem tratamento, em caso de mudança de dia o assistido deverá avisar o recepcionista.
+  2- Não é permitido marcar presença no cartão em duas sessões da mesma semana, nesse caso o sistema deverá considerar o assistido como ouvinte na segunda sessão.
+  3- É permitido faltar no máximo 2 semanas consecutivas, se ultrapassar esse limite o sistema finaliza o cartão, e Inicializa um novo tratamento P2, independente do tratamento anterior, o sistema emite um aviso para o recepcionista que o expirou o tempo do tratamento ( atualiza Status Tratamento Incompleto por Tempo) e propõe um novo tratamento P2 (Status em Tratamento).
+  4- Na quarta sessão o cartão é retido e transferido para avaliação espiritual (Status: Aguardando de Avaliação), o avaliador preenche o prontuário do assistido e propõe o novo tratamento, esse cartão é encaminhado para Status: Aguardando Entrevista. O assistido não tem visibilidade nos status Aguardando Avaliação e Aguardando Entrevista.
+  5- O recepcionista tem visibilidade total dos status, ou seja, quando pesquisa um assistido com status Aguardando Entrevista, esse encaminha o asssitido para os entrevistadores. Após a entrevista o entrevistador atualiza o status do cartão para Em Tratamento, a partir desse momento o assistido passa a ter visibilidade do cartão, nesse momento o sistema marca automaticamente a presença na primeira sessão desse novo tratamento.

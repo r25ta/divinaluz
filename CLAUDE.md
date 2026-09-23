@@ -105,7 +105,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 
 ## 5. Front-end (Thymeleaf/Templates)
 - **`fragments/layout.html`**: `pageHead(title)` (⚠️ não usar o nome `head` — colide com a tag `<head>`) e `navbar`. CSS próprio em `static/css/app.css` (paleta teal/turquesa inspirada no cartão físico original).
-- **`index.html`**: listagem com busca por nome, filtro de inativos, colunas de Vínculo/Dia/Tratamento e o checklist de **Frequência (Mês)** — mostra a própria data (`dd/MM`) de cada dia esperado no mês, verde se houve sessão e cinza se faltou.
+- **`index.html`**: listagem com busca por nome (client-side) e ordenação por Nome/Vínculo/Status Atual, filtro de inativos (`?mostrarInativos=true`) e badge de status do cartão (`a.statusCartao`) por linha. Cada linha tem botões "Cartão" e "Ver Prontuário". Não mostra mais dia de assistência, tratamento nem o checklist de frequência do mês (esses ficaram só no `ProntuarioController`/banco, não chegam a esta tela).
 - **`form.html`**: cadastro/edição (mesmo template, `modoEdicao` liga/desliga textos e rotas). Mostra a seção de Funções de Trabalhador via JS quando `Vinculo = TRABALHADOR` é selecionado. O cadastro inicial não exibe tratamento; a edição permite alterar o tratamento. O endereço é dividido em CEP, Endereço, Número, Complemento, Bairro, Cidade e UF, com preenchimento via ViaCEP. O botão principal exibe `Salvar`.
 - **`prelecao-form.html` / `prelecao-lista.html`**: cadastro, edição, exclusão e listagem da escala de preleções. A validação aceita somente Domingo/Terça e uma preleção por data.
 - **`prontuario.html`**: exibe os dados do assistido, o tratamento atual, o badge "Acesso ao Cartão" (login vinculado ou botão "Criar Acesso") e o histórico de avaliações/tratamentos anteriores. O módulo não exibe dia de assistência, perfil de trabalhador, próxima entrevista, aba de sessões ou botões para registrar sessão/avaliação.
@@ -132,13 +132,13 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 
 ## 7. Scripts de Automação (`scripts/`)
 - **`dev-run.ps1`** / **`dev-stop.ps1`**: sobem/derrubam a aplicação (matam processo na porta 8081 se necessário).
-- **`smoke-test.ps1`**: bateria de ~45 verificações end-to-end via `curl`, cobrindo todas as regras da seção 2 (cria e limpa seus próprios dados, prefixo `SMOKE_TEST_`).
+- **`smoke-test.ps1`**: bateria de ~67 verificações end-to-end via `curl`, autenticada (login como `admin` + cookie jar + CSRF mantidos durante toda a execução). Cobre as regras da seção 2, o fluxo de "Criar Acesso" (inclusive login real do assistido criado e o limite de acesso do perfil) e a Autenticação (cria e limpa seus próprios dados, prefixo `SMOKE_TEST_`).
 - **`dev-test.ps1`**: orquestra os três (sobe → testa → derruba, mesmo se o teste falhar).
 - **`hook-compile-on-java-edit.ps1`**: hook do Claude Code (`PostToolUse`) que roda `mvnw compile -q` a cada edição de `.java`.
 
 ## 8. Próximos Passos
-1. Criar telas administrativas para cadastrar, editar, desativar e redefinir senha de usuários; alterar a credencial inicial `admin` antes de qualquer uso em produção.
-2. Cobrir as regras de negócio com testes unitários JUnit em `TratamentoService` (hoje a cobertura é só end-to-end via `smoke-test.ps1`).
+1. ~~Criar telas administrativas para cadastrar, editar, desativar e redefinir senha de usuários~~ — feito (`/usuarios`, seção 3.11). Falta só **trocar a credencial provisória do `admin`** (`admin`/`password`, ver 3.11) por uma senha real antes de qualquer uso em produção — precisa ser uma migration nova (ex. V25), já que V19–V21/V23 não podem ser editadas.
+2. Cobrir as regras de negócio com testes unitários JUnit em `TratamentoService` — começado em `TratamentoServiceTest` (ouvinte na mesma semana, bloqueio em Aguardando Avaliação, transição para Aguardando Avaliação na 4ª sessão, preleção automática na 1ª sessão, e a correção do `definirTratamento` que não deve reabrir o cartão). Ainda faltam: reinício por 21 dias de hiato, `registrarAvaliacao`, `registrarEntrevista` e `validarDiaDaSemana` — hoje só cobertos via `smoke-test.ps1` (end-to-end).
 3. Avaliar se vale a pena um `DROP COLUMN` das colunas legadas órfãs (`assistido.idade`, `avaliacao.entrevistador`, `avaliacao.tratamento_indicado_id`) depois que não houver mais dúvida sobre a migração dos dados antigos.
 4. Criar módulo de Entrevista.
 5. Módulo Cadastro de Preleção (base implementada; integração com Sessão pendente):
@@ -177,7 +177,7 @@ P1: 2
 CH: 20
 P2: 30
 OUVINTES: 5
-7. Módulo Tratamento (cartão e regras principais implementados): todo assistido deverá possuir um "cartão" de tratamento, o tratamento completo equivale a presença em quatro sessões, na quarta sessão o cartão é submetido a avaliação espiritual. A tela do cartão está vinculada ao assistido e exibe tratamento, status, datas de presença e diferencia ouvintes. O serviço aplica uma presença efetiva por semana de assistência, reinício em P2 após 21 dias, bloqueio por status de avaliação e transições para avaliação/entrevista. Ainda falta evoluir a visibilidade por perfil de usuário e o histórico formal de cartões encerrados.
+7. Módulo Tratamento (cartão e regras principais implementados): todo assistido deverá possuir um "cartão" de tratamento, o tratamento completo equivale a presença em quatro sessões, na quarta sessão o cartão é submetido a avaliação espiritual. A tela do cartão está vinculada ao assistido e exibe tratamento, status, datas de presença e diferencia ouvintes. O serviço aplica uma presença efetiva por semana de assistência, reinício em P2 após 21 dias, bloqueio por status de avaliação e transições para avaliação/entrevista. A visibilidade por perfil já está implementada (`ProntuarioController.verCartao` bloqueia o Assistido fora do próprio cartão; `/prontuario/{id}/acesso` cria esse login a partir de um assistido já cadastrado — ver 3.11). Ainda falta o histórico formal de cartões encerrados (hoje o cartão reiniciado em P2 não deixa um registro separado do ciclo anterior, só `cicloIniciadoEm` avança). **Gap encontrado:** `CartaoStatus.INCOMPLETO_POR_TEMPO` existe no enum mas nunca é atribuído em nenhum lugar do código — `TratamentoService.reiniciarTratamento` (regra dos 21 dias) só troca `tratamentoAtual`/`cicloIniciadoEm`, sem passar por esse status antes de voltar a `EM_TRATAMENTO`, como a regra 3 deste item pede.
 regras para marcação de presença: 
   1- O cartão com status "Em Tratamento" o assistido tem visibilidade das informações e sua presença será efetivada somente no dia em que o assistido tem tratamento, em caso de mudança de dia o assistido deverá avisar o recepcionista.
   2- Não é permitido marcar presença no cartão em duas sessões da mesma semana, nesse caso o sistema deverá considerar o assistido como ouvinte na segunda sessão.

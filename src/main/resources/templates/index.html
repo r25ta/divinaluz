@@ -11,7 +11,7 @@
             <div class="dl-page-header">
                 <div>
                     <span class="dl-eyebrow">Prontuários</span>
-                    <h1>Assistidos Cadastrados</h1>
+                    <h1>Assistidos</h1>
                 </div>
                 <div class="d-flex align-items-center gap-3 flex-wrap">
                     <a th:if="${not mostrarInativos}" th:href="@{/(mostrarInativos=true)}" class="dl-muted small">
@@ -32,11 +32,9 @@
                     <table class="dl-table" id="tabelaAssistidos" th:if="${not #lists.isEmpty(assistidos)}">
                         <thead>
                             <tr>
-                                <th>Nome</th>
-                                <th>Vínculo</th>
-                                <th>Dia</th>
-                                <th>Tratamento Atual</th>
-                                <th>Frequência (Mês)</th>
+                                <th><button type="button" class="sort-button" data-sort="nome">Nome <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th><button type="button" class="sort-button" data-sort="vinculo">Vínculo <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th><button type="button" class="sort-button" data-sort="status">Status Atual <i class="bi bi-arrow-down-up"></i></button></th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -44,32 +42,25 @@
                             <tr th:each="a : ${assistidos}" class="linha-assistido">
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-semibold nome-assistido" th:text="${a.nome}"></span>
+                                        <span class="fw-semibold nome-assistido" data-sort-value="nome" th:text="${a.nome}"></span>
                                         <span th:unless="${a.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
                                     </div>
                                     <div class="dl-muted small" th:if="${a.residencia}" th:text="${a.residencia}"></div>
                                 </td>
                                 <td>
-                                    <span class="dl-badge dl-badge-neutral" th:text="${a.vinculo}"></span>
+                                    <span class="dl-badge dl-badge-neutral" data-sort-value="vinculo" th:text="${a.vinculo}"></span>
                                 </td>
                                 <td>
-                                    <span th:if="${a.diaFrequencia != null}" class="dl-badge dl-badge-info" th:text="${a.diaFrequencia.label}"></span>
-                                    <span th:if="${a.diaFrequencia == null}" class="dl-muted">—</span>
-                                </td>
-                                <td>
-                                    <span th:if="${a.tratamentoAtual != null}" class="dl-badge dl-badge-teal" th:text="${a.tratamentoAtual.codigo}"></span>
-                                    <span th:if="${a.tratamentoAtual == null}" class="dl-badge dl-badge-neutral">A definir</span>
-                                </td>
-                                <td>
-                                    <div class="d-flex flex-wrap gap-1" th:if="${diasEsperadosMes.containsKey(a.id)}">
-                                        <span th:each="d : ${diasEsperadosMes.get(a.id)}"
-                                              th:class="'dl-freq-mark ' + (${diasPresentesMes.get(a.id).contains(d)} ? 'on' : 'off')"
-                                              th:text="${#temporals.format(d, 'dd/MM')}"
-                                              th:title="${diasPresentesMes.get(a.id).contains(d)} ? 'Presente' : 'Faltou'"></span>
-                                    </div>
-                                    <span th:unless="${diasEsperadosMes.containsKey(a.id)}" class="dl-muted">—</span>
+                                    <span class="dl-badge dl-badge-info"
+                                          data-sort-value="status"
+                                          th:text="${a.statusCartao != null ? a.statusCartao.label : 'Em Tratamento'}">
+                                        Em Tratamento
+                                    </span>
                                 </td>
                                 <td class="text-end">
+                                    <a th:href="@{/prontuario/{id}/cartao(id=${a.id})}" class="btn btn-outline-teal btn-sm">
+                                        <i class="bi bi-card-checklist"></i> Cartão
+                                    </a>
                                     <a th:href="@{/prontuario/{id}(id=${a.id})}" class="btn btn-outline-teal btn-sm">
                                         Ver Prontuário <i class="bi bi-arrow-right"></i>
                                     </a>
@@ -93,13 +84,47 @@
 </div>
 
 <script th:inline="javascript">
-    document.getElementById('buscaAssistido')?.addEventListener('input', function (e) {
-        var termo = e.target.value.trim().toLowerCase();
-        document.querySelectorAll('#tabelaAssistidos .linha-assistido').forEach(function (linha) {
-            var nome = linha.querySelector('.nome-assistido').textContent.toLowerCase();
-            linha.style.display = nome.includes(termo) ? '' : 'none';
+    (function () {
+        var tabela = document.getElementById('tabelaAssistidos');
+        var busca = document.getElementById('buscaAssistido');
+        if (!tabela) return;
+
+        var corpo = tabela.querySelector('tbody');
+        var linhas = Array.from(corpo.querySelectorAll('.linha-assistido'));
+        var ordenacao = { campo: null, ascendente: true };
+
+        function atualizarBusca() {
+            var termo = busca ? busca.value.trim().toLowerCase() : '';
+            linhas.forEach(function (linha) {
+                var nome = linha.querySelector('.nome-assistido').textContent.toLowerCase();
+                linha.style.display = nome.includes(termo) ? '' : 'none';
+            });
+        }
+
+        function ordenar(campo, botao) {
+            ordenacao.ascendente = ordenacao.campo === campo ? !ordenacao.ascendente : true;
+            ordenacao.campo = campo;
+            linhas.sort(function (a, b) {
+                var valorA = a.querySelector('[data-sort-value="' + campo + '"]').textContent.trim();
+                var valorB = b.querySelector('[data-sort-value="' + campo + '"]').textContent.trim();
+                return valorA.localeCompare(valorB, 'pt-BR', { sensitivity: 'base' })
+                    * (ordenacao.ascendente ? 1 : -1);
+            });
+            linhas.forEach(function (linha) { corpo.appendChild(linha); });
+            document.querySelectorAll('.sort-button').forEach(function (elemento) {
+                elemento.classList.remove('active');
+                elemento.querySelector('i').className = 'bi bi-arrow-down-up';
+            });
+            botao.classList.add('active');
+            botao.querySelector('i').className = ordenacao.ascendente ? 'bi bi-arrow-up' : 'bi bi-arrow-down';
+            atualizarBusca();
+        }
+
+        if (busca) busca.addEventListener('input', atualizarBusca);
+        document.querySelectorAll('.sort-button').forEach(function (botao) {
+            botao.addEventListener('click', function () { ordenar(botao.dataset.sort, botao); });
         });
-    });
+    })();
 </script>
 </body>
 </html>

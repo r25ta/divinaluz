@@ -8,13 +8,22 @@
     <main class="dl-main">
         <div class="dl-container">
             <div class="dl-page-header">
-                <div>
+                <div class="prelecao-titulo">
                     <span class="dl-eyebrow">Escala</span>
                     <h1>Preleções</h1>
                 </div>
-                <a th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
-                    <i class="bi bi-plus-lg"></i> Nova Preleção
-                </a>
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="d-flex flex-column align-items-stretch gap-2">
+                        <div class="dl-search">
+                            <i class="bi bi-search"></i>
+                            <input type="search" id="buscaPrelecao" class="form-control"
+                                   placeholder="Buscar por data, preletor ou tema...">
+                        </div>
+                        <a th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
+                            <i class="bi bi-plus-lg"></i> Nova Preleção
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <div class="alert alert-danger" th:if="${erro}">
@@ -24,7 +33,7 @@
             <div class="dl-card">
                 <div class="dl-card-body p-0">
                     <div class="table-responsive">
-                        <table class="dl-table" th:if="${not #lists.isEmpty(prelecoes)}">
+                        <table class="dl-table" id="tabelaPrelecoes" th:if="${not #lists.isEmpty(prelecoes)}">
                             <thead>
                             <tr>
                                 <th>Data</th>
@@ -34,7 +43,8 @@
                             </tr>
                             </thead>
                             <tbody>
-                            <tr th:each="prelecao : ${prelecoes}">
+                            <tr th:each="prelecao : ${prelecoes}" class="linha-prelecao"
+                                th:attr="data-busca=${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy') + ' ' + prelecao.preletor.assistido.nome + ' ' + prelecao.tema}">
                                 <td th:text="${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy')}" class="fw-semibold"></td>
                                 <td th:text="${prelecao.preletor.assistido.nome}"></td>
                                 <td th:text="${prelecao.tema}"></td>
@@ -44,6 +54,7 @@
                                             <i class="bi bi-pencil"></i>
                                         </a>
                                         <form th:action="@{/prelecao/{prelecaoId}/excluir(prelecaoId=${prelecao.id})}" method="post" onsubmit="return confirm('Deseja excluir esta preleção?');">
+                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                             <button type="submit" class="btn btn-outline-danger btn-sm">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -59,10 +70,33 @@
                         <i class="bi bi-calendar2-event"></i>
                         <p class="mb-0">Nenhuma preleção cadastrada ainda.</p>
                     </div>
+                    <div class="dl-table-empty d-none" id="nenhumaPrelecaoEncontrada">
+                        <i class="bi bi-search"></i>
+                        <p class="mb-0">Nenhuma preleção corresponde à busca.</p>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 </div>
+<script>
+    (function () {
+        var busca = document.getElementById('buscaPrelecao');
+        var linhas = document.querySelectorAll('.linha-prelecao');
+        var vazio = document.getElementById('nenhumaPrelecaoEncontrada');
+        if (!busca) return;
+
+        busca.addEventListener('input', function () {
+            var termo = busca.value.trim().toLowerCase();
+            var visiveis = 0;
+            linhas.forEach(function (linha) {
+                var corresponde = linha.getAttribute('data-busca').toLowerCase().includes(termo);
+                linha.style.display = corresponde ? '' : 'none';
+                if (corresponde) visiveis++;
+            });
+            if (vazio) vazio.classList.toggle('d-none', visiveis > 0);
+        });
+    })();
+</script>
 </body>
 </html>

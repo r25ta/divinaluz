@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Cadastro de Usuário')}"></head>
+<body>
+<main class="dl-main d-flex align-items-center">
+    <div class="dl-container-narrow" style="max-width: 430px; width: 100%;">
+        <div class="text-center mb-4">
+            <div class="dl-brand-mark mx-auto mb-3"><i class="bi bi-person-plus"></i></div>
+            <span class="dl-eyebrow">Novo acesso</span>
+            <h1 class="h3 fw-bold">Criar Usuário</h1>
+        </div>
+        <div class="dl-card">
+            <div class="dl-card-body">
+                <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
+                <div class="alert alert-info small">
+                    O acesso será criado como Assistido e vinculado automaticamente ao seu novo cadastro.
+                </div>
+                <form th:action="@{/cadastro}" method="post">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <div class="mb-3">
+                        <label class="form-label" for="nome">Nome completo</label>
+                        <input id="nome" name="nome" class="form-control" maxlength="255" autocomplete="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="login">Login</label>
+                        <input id="login" name="login" class="form-control" maxlength="80" autocomplete="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="email">E-mail</label>
+                        <input id="email" name="email" type="email" class="form-control" autocomplete="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="senha">Senha</label>
+                        <input id="senha" name="senha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label" for="confirmacaoSenha">Confirmar senha</label>
+                        <input id="confirmacaoSenha" name="confirmacaoSenha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-teal text-white w-100 mb-2">
+                        <i class="bi bi-person-check"></i> Solicitar cadastro
+                    </button>
+                    <a th:href="@{/login}" class="btn btn-outline-teal w-100">Voltar para o login</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

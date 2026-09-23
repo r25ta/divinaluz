@@ -23,8 +23,15 @@ public class SessaoTratamento {
 
     private Integer numeroSerie;
 
+    private boolean ouvinte;
+
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate dataConsulta;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "prelecao_id")
+    @ToString.Exclude
+    private Prelecao prelecao;
     
     private boolean visto;
     private boolean assistencia;

@@ -28,9 +28,18 @@
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções
                 </a>
+                <a th:href="@{/usuarios}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-people"></i> Usuários
+                </a>
                 <a th:href="@{/novo}" class="btn btn-nav btn-sm">
                     <i class="bi bi-plus-lg"></i> Novo Cadastro
                 </a>
+                <form th:action="@{/logout}" method="post" class="d-inline">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-nav btn-sm" title="Sair">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </form>
             </div>
         </div>
     </nav>

@@ -11,4 +11,7 @@ public interface SessaoRepository extends JpaRepository<SessaoTratamento, Long> 
     Optional<SessaoTratamento> findFirstByAssistidoIdOrderByDataConsultaDesc(Long assistidoId);
     long countByAssistidoId(Long assistidoId);
     long countByAssistidoIdAndDataConsultaGreaterThanEqual(Long assistidoId, LocalDate desde);
+    Optional<SessaoTratamento> findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(Long assistidoId);
+    long countByAssistidoIdAndOuvinteFalse(Long assistidoId);
+    long countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(Long assistidoId, LocalDate desde);
 }

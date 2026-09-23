@@ -595,6 +595,33 @@ a {
   border-radius: 999px;
 }
 
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.sort-button i {
+  color: var(--dl-muted);
+  font-size: 0.75rem;
+}
+
+.sort-button:hover,
+.sort-button.active {
+  color: var(--dl-teal-700);
+}
+
+.sort-button.active i {
+  color: var(--dl-teal-600);
+}
+
 /* ---------- Resumo rápido (prontuário) ---------- */
 
 .dl-summary-card {

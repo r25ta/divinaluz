@@ -25,6 +25,7 @@
 
                     <form th:action="${modoEdicao} ? @{/prontuario/{id}/editar(id=${assistido.id})} : @{/salvar}"
                           th:object="${assistido}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Dados Pessoais</div>
@@ -145,6 +146,14 @@
                                 <input type="date" class="form-control" name="dataPrimeiraSessao" style="max-width: 260px;">
                                 <div class="form-text">Obrigatória ao definir um tratamento novo — a 1ª sessão já é registrada automaticamente com essa data.</div>
                             </div>
+                        </div>
+
+                        <div class="dl-form-section" th:unless="${modoEdicao}">
+                            <div class="dl-form-section-title">Primeira Assistência</div>
+                            <label class="form-label" for="dataPrimeiraSessao">Data da Assistência</label>
+                            <input type="date" class="form-control" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
+                                   required style="max-width: 260px;">
+                            <div class="form-text">A primeira presença será criada automaticamente no tratamento P2 e buscará a preleção cadastrada para a data. Escolha uma terça-feira ou domingo.</div>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">

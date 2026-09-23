@@ -7,7 +7,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 
 ## 2. Regras de Negócio (Camada de Serviço — `TratamentoService`)
 
-- **Frequência de Sessões (regra dos 7 dias):** o assistido só pode contabilizar uma sessão a cada 7 dias. Uma nova sessão com menos de 7 dias desde a última é bloqueada (`RegraNegocioException`).
+- **Frequência de Sessões (regra da semana de assistência):** o assistido contabiliza no máximo uma presença efetiva por semana de assistência, considerada de Domingo a Sábado. Uma chegada adicional na mesma semana é registrada como ouvinte e não avança o ciclo do cartão.
 
 - **Consistência de Dia da Semana:** se o assistido já tem um `diaFrequencia` definido (terça 19h ou domingo 8h), a data de qualquer **Sessão**, **Entrevista** ou "1ª sessão de um tratamento novo" precisa cair nesse dia da semana — do contrário é bloqueada. Se o assistido ainda não tem dia definido, nenhuma data é exigida. A data da **Avaliação** é livre e nunca é validada contra esse dia (ver distinção Avaliação x Entrevista abaixo).
 
@@ -29,7 +29,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 ## 3. Modelagem de Dados (Entidades)
 
 ### 3.1. Assistido (Dados Cadastrais)
-- **Atributos:** ID (PK), Nome, CEP, Endereço, Número, Complemento, Bairro, Cidade, UF, Residência (resumo legado), Data de Nascimento (Idade é `@Transient`, calculada como `Period.between(dataNascimento, hoje)`), Estado Civil, Sexo (M/F/I — Indefinido), E-mail, Vínculo (ASSISTIDO ou TRABALHADOR), Dia de Assistência (Enum `DiaFrequencia`, opcional), Ciclo Iniciado Em (data-base para contar sessões/avaliações/entrevistas do ciclo atual), Ativo (boolean, default `true` — exclusão lógica).
+- **Atributos:** ID (PK), Nome, CEP, Endereço, Número, Complemento, Bairro, Cidade, UF, Residência (resumo legado), Data de Nascimento (Idade é `@Transient`, calculada como `Period.between(dataNascimento, hoje)`), Estado Civil, Sexo (M/F/I — Indefinido), E-mail, Vínculo (ASSISTIDO ou TRABALHADOR), Dia de Assistência (Enum `DiaFrequencia`, opcional), Ciclo Iniciado Em (data-base para contar sessões/avaliações/entrevistas do ciclo atual), Status do Cartão (`CartaoStatus`), Ativo (boolean, default `true` — exclusão lógica).
 - **Endereço:** o formulário consulta a API pública ViaCEP pelo CEP e preenche Endereço, Bairro, Cidade e UF. Número e Complemento são informados manualmente. O campo `residencia` continua sendo mantido como resumo para compatibilidade com listagens e prontuários antigos.
 - **Relacionamentos:** N:1 com `TipoTratamento` (`tratamentoAtual`), 1:N com `Avaliacao`, `SessaoTratamento` e `HistoricoDiaFrequencia`, 1:1 com `Trabalhador` (opcional).
 
@@ -45,7 +45,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 - Ao ser salva, atualiza `Assistido.tratamentoAtual` (se `tratamentoIndicado` informado) e conta para liberar a regra das 4 sessões.
 
 ### 3.5. SessaoTratamento (Verso do Cartão)
-- **Atributos:** ID (PK), Assistido (FK), Numero da Série (1 a 8, contado dentro do ciclo atual), Data da Consulta, Observações.
+- **Atributos:** ID (PK), Assistido (FK), Numero da Série (1 a 8, contado dentro do ciclo atual), Data da Consulta, Preleção opcional da data, Ouvinte, Observações.
 - **Recomendações (Booleanos):** Visto, Assistência, Evangelho no Lar, Leituras, Escola, Trabalho Espiritual, Médico. (Atenção: "Assistência" aqui é só uma dessas recomendações — não confundir com "assistência espiritual"/o evento de comparecer à casa, que é a Sessão em si.)
 
 ### 3.6. TipoTratamento (Catálogo de Tratamentos Espirituais)
@@ -64,17 +64,30 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 - **Regras:** o preletor precisa possuir a função `EXPOSITOR_PRELETOR`; a data deve cair em Domingo ou Terça-feira; existe no máximo uma preleção por data/sessão.
 - **Fluxo:** o formulário preserva tema e preletor quando a data é inválida e limpa somente a data, exibindo a mensagem de validação.
 
+### 3.10. CartaoStatus (Estado do cartão de assistência)
+- `EM_TRATAMENTO`, `AGUARDANDO_AVALIACAO`, `AGUARDANDO_ENTREVISTA` e `INCOMPLETO_POR_TEMPO`.
+- O status atual fica vinculado ao `Assistido`; uma chegada extra na mesma semana de assistência (Domingo a Sábado) é salva como `SessaoTratamento.ouvinte = true` e não avança o ciclo.
+
+### 3.11. Usuario e PerfilAcesso (Autenticação)
+- **Usuario:** login único, e-mail opcional, senha BCrypt, provedor de identidade (`LOCAL`, `FACEBOOK`, `INSTAGRAM`, `GOOGLE`), identificador externo opcional, perfil, vínculo opcional com um `Assistido` e ativo/inativo.
+- **Perfis:** `ADMINISTRADOR` e `TRABALHADOR` têm acesso total; `ASSISTIDO` pode consultar somente o próprio cartão de assistência.
+- O login usa Spring Security, com logout protegido por CSRF. A migration V19 cria o usuário inicial `admin`; o comentário da V19 registra a senha provisória como `admin123`, mas isso ficou desatualizado — V20 e V21 trocaram o hash BCrypt (provavelmente por tentativa e erro durante os testes de login) e a credencial que hoje funciona de fato é **`admin` / `password`** (confirmado por login real em 2026-09-23). V23 apenas reafirma esse mesmo hash e garante `ativo=true`/`perfil=ADMINISTRADOR`. Como V19–V21 já rodaram no banco de dev, não dá para corrigir o comentário original sem quebrar o checksum do Flyway — qualquer troca de senha real precisa vir como uma nova migration (ex.: V24). De qualquer forma, essa credencial provisória deve ser alterada antes de uso real.
+- **Administração:** o Administrador pode listar, criar, editar, alterar senha e ativar/desativar usuários em `/usuarios`. Usuários com perfil `ASSISTIDO` precisam ser vinculados a um assistido e só podem consultar o próprio cartão.
+- **Integração externa:** o cadastro já armazena e-mail, provedor e ID externo sem guardar tokens. O login OAuth de Facebook/Instagram/Google ainda depende de credenciais e configuração dos respectivos provedores.
+- **Cadastro público:** `/cadastro` permite criar um novo acesso com nome, login, e-mail e senha. O sistema cria um `Assistido`, vincula a conta ao cadastro e ativa o usuário; após o redirecionamento para login, ele pode consultar o próprio cartão.
+
 ## 4. Estrutura do Projeto
 
-- **`application.properties`**: PostgreSQL na porta 5432 (`divinaluz_db`), aplicação na porta 8081 com contexto `/divinaluz`. Spring Security removido temporariamente. Schema gerenciado por Flyway (`ddl-auto=validate`, `baseline-on-migrate=true`).
-- **Pacote `model`**: `Assistido`, `Avaliacao`, `Entrevista`, `SessaoTratamento`, `TipoTratamento`, `Trabalhador`, `Prelecao`, `DiaFrequencia` (enum), `TipoTrabalhador` (enum), `Evolucao` (enum), `HistoricoDiaFrequencia`.
-- **Pacote `repository`**: um `JpaRepository` por entidade (`AssistidoRepository`, `AvaliacaoRepository`, `EntrevistaRepository`, `SessaoRepository`, `TipoTratamentoRepository`, `TrabalhadorRepository`, `PrelecaoRepository`, `HistoricoDiaFrequenciaRepository`), cada um com os `findBy...`/`countBy...` necessários às regras de negócio (ex.: `countByAssistidoIdAndDataConsultaGreaterThanEqual` para contar sessões do ciclo atual).
+- **`application.properties`**: PostgreSQL na porta 5432 (`divinaluz_db`), aplicação na porta 8081 com contexto `/divinaluz`. Spring Security protege as rotas com autenticação por formulário. Schema gerenciado por Flyway (`ddl-auto=validate`, `baseline-on-migrate=true`).
+- **Pacote `model`**: `Assistido`, `Avaliacao`, `Entrevista`, `SessaoTratamento`, `TipoTratamento`, `Trabalhador`, `Prelecao`, `Usuario`, `PerfilAcesso` (enum), `CartaoStatus` (enum), `DiaFrequencia` (enum), `TipoTrabalhador` (enum), `Evolucao` (enum), `HistoricoDiaFrequencia`.
+- **Pacote `repository`**: um `JpaRepository` por entidade (`AssistidoRepository`, `AvaliacaoRepository`, `EntrevistaRepository`, `SessaoRepository`, `TipoTratamentoRepository`, `TrabalhadorRepository`, `PrelecaoRepository`, `UsuarioRepository`, `HistoricoDiaFrequenciaRepository`), cada um com os `findBy...`/`countBy...` necessários às regras de negócio (ex.: `countByAssistidoIdAndDataConsultaGreaterThanEqual` para contar sessões do ciclo atual).
 - **Pacote `service`**: `TratamentoService` concentra todas as regras da seção 2 (`registrarSessao`, `registrarAvaliacao`, `registrarEntrevista`, `definirTratamento`, `validarDiaDaSemana` privado).
 - **Pacote `config`**: `TipoTratamentoConverter` (Spring `Converter<String, TipoTratamento>`) para os `<select>` do Thymeleaf fazerem bind direto na entidade pelo ID. Enums (`DiaFrequencia`, `TipoTrabalhador`, `Evolucao`) não precisam de converter próprio — Spring já converte `String -> Enum` nativamente.
 - **Pacote `exception`**: `RegraNegocioException` (violação genérica) e `AvaliacaoPendenteException` (subclasse específica para o bloqueio das 4 sessões).
+- **Pacote `security/config`**: `SecurityConfig` configura login, logout, CSRF e regras por perfil; `LoginController` exibe a tela de autenticação. O perfil `ASSISTIDO` é redirecionado para o próprio cartão após o login.
 - **Pacote `controller`**: `ProntuarioController` com as rotas:
   - `GET /` → lista assistidos (só ativos por padrão; `?mostrarInativos=true` mostra todos), com checklist de frequência do mês corrente.
-  - `GET /novo` / `POST /salvar` → cadastro (inclui tratamento inicial opcional + funções de trabalhador, se `Vinculo = TRABALHADOR`).
+  - `GET /novo` / `POST /salvar` → cadastro (inclui data obrigatória da primeira assistência em Domingo/Terça; cria automaticamente a primeira presença em P2 e associa a preleção da mesma data, quando existir, além das funções de trabalhador se `Vinculo = TRABALHADOR`).
   - `GET /prontuario/{id}` → detalhes, resumo rápido, histórico de sessões/avaliações (abas).
   - `GET /prontuario/{id}/editar` / `POST /prontuario/{assistidoId}/editar` → edição dos dados cadastrais.
   - `POST /prontuario/{assistidoId}/desativar` / `POST /prontuario/{assistidoId}/reativar` → exclusão lógica.
@@ -86,7 +99,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
   - `GET /prontuario/{id}/nova-entrevista?avaliacaoId=X` / `POST /prontuario/{assistidoId}/entrevista?avaliacaoId=X` → registro da entrevista referente a uma avaliação específica.
   - O formulário de cadastro/edição possui endereço estruturado (CEP, Endereço, Número, Complemento, Bairro, Cidade e UF). A categoria `ALUNO` não é mais oferecida na interface; permanecem `ASSISTIDO` e `TRABALHADOR`. O tratamento não é exibido no cadastro inicial, somente na edição.
 - **Pacote `controller`**: `PrelecaoController` com as rotas `GET /prelecao`, `GET /prelecao/novo`, `POST /prelecao/salvar`, edição e exclusão. A listagem e o formulário estão disponíveis pela navegação principal.
-- **Migrations Flyway**: V1 (tabelas iniciais) · V2 (`avaliacao`) · V3 (`tipo_tratamento` + seed) · V4 (`assistido.tratamento_atual_id`) · V5 (`avaliacao.tratamento_indicado_id`, hoje sem uso — ver 6) · V6 (`assistido.ciclo_iniciado_em`) · V7 (`trabalhador` + `trabalhador_funcao`) · V8 (`assistido.data_nascimento`) · V9 (`assistido.dia_frequencia`) · V10 (`historico_dia_frequencia`) · V11 (`assistido.ativo`) · V12 (`avaliacao.observacoes`) · V13 (`entrevista`) · V14 (`prelecao`) · V15 (endereço estruturado: CEP, Endereço, Bairro, Cidade e UF) · V16 (Número e Complemento).
+- **Migrations Flyway**: V1 (tabelas iniciais) · V2 (`avaliacao`) · V3 (`tipo_tratamento` + seed) · V4 (`assistido.tratamento_atual_id`) · V5 (`avaliacao.tratamento_indicado_id`, hoje sem uso — ver 6) · V6 (`assistido.ciclo_iniciado_em`) · V7 (`trabalhador` + `trabalhador_funcao`) · V8 (`assistido.data_nascimento`) · V9 (`assistido.dia_frequencia`) · V10 (`historico_dia_frequencia`) · V11 (`assistido.ativo`) · V12 (`avaliacao.observacoes`) · V13 (`entrevista`) · V14 (`prelecao`) · V15 (endereço estruturado: CEP, Endereço, Bairro, Cidade e UF) · V16 (Número e Complemento) · V17 (`assistido.status_cartao` e `sessao_tratamento.ouvinte`) · V18 (`sessao_tratamento.prelecao_id`) · V19 (`usuario`, cria `admin` com um hash cujo texto plano não corresponde ao comentário `admin123`) · V20 (troca o hash — ainda não corresponde a `admin123`) · V21 (troca o hash de novo; esse sim corresponde a `password`, credencial hoje funcional) · V22 (`email`/`provedor`/`identificador_externo` do usuário) · V23 (reafirma o hash da V21 e garante `ativo=true`/`perfil=ADMINISTRADOR`) · V24 (`sessao_tratamento.numero_serie` passa a aceitar `NULL`, necessário para presenças de ouvinte — a V1 declarava `NOT NULL`, mas o código grava `null` nesse caso desde a regra semanal de presença).
 
 ## 5. Front-end (Thymeleaf/Templates)
 - **`fragments/layout.html`**: `pageHead(title)` (⚠️ não usar o nome `head` — colide com a tag `<head>`) e `navbar`. CSS próprio em `static/css/app.css` (paleta teal/turquesa inspirada no cartão físico original).
@@ -94,6 +107,10 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 - **`form.html`**: cadastro/edição (mesmo template, `modoEdicao` liga/desliga textos e rotas). Mostra a seção de Funções de Trabalhador via JS quando `Vinculo = TRABALHADOR` é selecionado. O cadastro inicial não exibe tratamento; a edição permite alterar o tratamento. O endereço é dividido em CEP, Endereço, Número, Complemento, Bairro, Cidade e UF, com preenchimento via ViaCEP. O botão principal exibe `Salvar`.
 - **`prelecao-form.html` / `prelecao-lista.html`**: cadastro, edição, exclusão e listagem da escala de preleções. A validação aceita somente Domingo/Terça e uma preleção por data.
 - **`prontuario.html`**: exibe os dados do assistido, o tratamento atual e o histórico de avaliações/tratamentos anteriores. O módulo não exibe dia de assistência, perfil de trabalhador, próxima entrevista, aba de sessões ou botões para registrar sessão/avaliação.
+- **`cartao.html`**: cartão de assistência vinculado ao assistido por ID, acessível pela grade principal. Exibe o tratamento atual, status, total de sessões, datas de presença, tipo de presença e tema da preleção associada quando houver.
+- **`login.html`**: autenticação por login e senha. O menu global oferece logout; o perfil Assistido é direcionado diretamente ao próprio cartão.
+- **`usuario-lista.html` / `usuario-form.html`**: manutenção administrativa de usuários, perfis, vínculo com assistido, status, senha, e-mail e identificação do provedor externo.
+- **`cadastro-usuario.html`**: cadastro público de Assistido com criação automática do vínculo de usuário.
 - **`sessao-form.html`**: data + 7 checkboxes de recomendações + observações.
 - **`avaliacao-form.html`**: data (livre), evolução, histórico, observações.
 - **`entrevista-form.html`**: mostra a qual avaliação se refere, data (com aviso do dia de assistência esperado), entrevistador, tratamento indicado.
@@ -105,8 +122,10 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 - **FK sem CASCADE de fato**: por causa do mesmo desalinhamento do baseline, a FK de `sessao_tratamento` para `assistido` no banco real **não** tem `ON DELETE CASCADE` (embora a migration V1 diga isso). Excluir um assistido via SQL direto exige apagar antes as linhas de `sessao_tratamento` (e `avaliacao`) manualmente. Os scripts de smoke-test já fazem essa limpeza explícita.
 - **Colunas legadas mantidas sem uso**: ao trocar de modelo (ex.: `idade` → `dataNascimento` calculado; `avaliacao.entrevistador`/`tratamento_indicado_id` → movidos para `Entrevista`), a coluna antiga é deixada no banco (não mapeada pela entidade) em vez de um `DROP COLUMN`, para não perder dados já gravados. Isso é intencional — não é preciso "arrumar" essas colunas órfãs.
 - **Fragmento Thymeleaf não pode se chamar `head`**: `th:fragment="head(title)"` colide com a tag literal `<head>` do HTML e quebra a resolução do fragmento (`TemplateProcessingException`). Por isso o fragmento se chama `pageHead`.
-- **Flash attributes + `curl` sem cookie jar**: qualquer rota que use `RedirectAttributes.addFlashAttribute(...)` cria uma `HttpSession` no servidor; como o `curl.exe` dos scripts de smoke-test não guarda cookies entre chamadas, o Tomcat anexa `;jsessionid=...` na `Location` do redirect — o que quebra checagens de regex com `$` no final da URL, e faz o conteúdo da flash message não aparecer na página seguinte (sessão não é recuperada sem o cookie/jsessionid). Nesses casos, os testes verificam o **efeito** da regra (ex.: "tratamento não mudou") em vez do texto da mensagem de erro.
+- **Flash attributes + `curl`**: `RedirectAttributes.addFlashAttribute(...)` depende de uma `HttpSession` persistente entre a resposta 302 e a página seguinte. Desde que o Spring Security exige login, `smoke-test.ps1` mantém um cookie jar (`-b`/`-c` do curl) durante toda a execução, então as mensagens de flash (erro/aviso) já podem ser conferidas de verdade na página seguinte — antes disso (quando não havia login/sessão persistida entre chamadas) só dava pra conferir o **efeito** da regra, não o texto da mensagem.
 - **`@OneToOne(mappedBy = ...)` e Thymeleaf**: `Avaliacao.entrevista` é o lado inverso do relacionamento com `Entrevista` e pode ser acessado diretamente nos templates (`${av.entrevista}`) porque o fetch padrão de `@OneToOne` é `EAGER` e o Spring Boot mantém a sessão do Hibernate aberta durante a renderização da view (`spring.jpa.open-in-view`, ligado por padrão).
+- **`numero_serie` de sessão de ouvinte**: a V1 declarava `sessao_tratamento.numero_serie` como `NOT NULL`, mas o código grava `null` nesse campo para presenças de ouvinte (regra semanal — item 2). No banco de dev isso nunca quebrou porque o schema real (baselineado via `ddl-auto=update`, ver acima) já não tinha essa constraint; a V24 relaxa a coluna para que um banco criado do zero a partir das migrations também funcione.
+- **`TratamentoService.definirTratamento` reabrindo cartão por engano (corrigido)**: até 2026-09-23, o método setava `Assistido.statusCartao = EM_TRATAMENTO` incondicionalmente, mesmo quando o tratamento resubmetido era o mesmo já atual (`mudou == false`). Isso fazia qualquer salvamento do formulário de edição, ou do card "Alterar Tratamento" sem mudar o valor, resetar por engano um cartão em `AGUARDANDO_AVALIACAO`/`AGUARDANDO_ENTREVISTA` de volta para `EM_TRATAMENTO` — o que também tornava o bloqueio por `AvaliacaoPendenteException` (regra das 4 sessões) alcançável de um jeito não intencional. O fix move o `setStatusCartao(EM_TRATAMENTO)` para dentro do bloco `mudou && novoTratamento != null` (mesmo critério do `iniciarTratamentoInicial`), preservando o status atual quando nada realmente muda. Coberto por `TratamentoServiceTest.resubmeterMesmoTratamentoNaoReabreCartaoAguardandoAvaliacao`.
 
 ## 7. Scripts de Automação (`scripts/`)
 - **`dev-run.ps1`** / **`dev-stop.ps1`**: sobem/derrubam a aplicação (matam processo na porta 8081 se necessário).
@@ -115,7 +134,7 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 - **`hook-compile-on-java-edit.ps1`**: hook do Claude Code (`PostToolUse`) que roda `mvnw compile -q` a cada edição de `.java`.
 
 ## 8. Próximos Passos
-1. Reativar o Spring Security (removido temporariamente para facilitar os testes) antes de qualquer uso em produção.
+1. Criar telas administrativas para cadastrar, editar, desativar e redefinir senha de usuários; alterar a credencial inicial `admin` antes de qualquer uso em produção.
 2. Cobrir as regras de negócio com testes unitários JUnit em `TratamentoService` (hoje a cobertura é só end-to-end via `smoke-test.ps1`).
 3. Avaliar se vale a pena um `DROP COLUMN` das colunas legadas órfãs (`assistido.idade`, `avaliacao.entrevistador`, `avaliacao.tratamento_indicado_id`) depois que não houver mais dúvida sobre a migração dos dados antigos.
 4. Criar módulo de Entrevista.
@@ -155,7 +174,7 @@ P1: 2
 CH: 20
 P2: 30
 OUVINTES: 5
-7. Módulo Tratamento: Todo assistido deverá possuir um "cartão" de tratamento, o tratamento completo equivale a presença em quatro sessões, na quarta sessão o cartão e submetido a avaliação espiritual.
+7. Módulo Tratamento (cartão e regras principais implementados): todo assistido deverá possuir um "cartão" de tratamento, o tratamento completo equivale a presença em quatro sessões, na quarta sessão o cartão é submetido a avaliação espiritual. A tela do cartão está vinculada ao assistido e exibe tratamento, status, datas de presença e diferencia ouvintes. O serviço aplica uma presença efetiva por semana de assistência, reinício em P2 após 21 dias, bloqueio por status de avaliação e transições para avaliação/entrevista. Ainda falta evoluir a visibilidade por perfil de usuário e o histórico formal de cartões encerrados.
 regras para marcação de presença: 
   1- O cartão com status "Em Tratamento" o assistido tem visibilidade das informações e sua presença será efetivada somente no dia em que o assistido tem tratamento, em caso de mudança de dia o assistido deverá avisar o recepcionista.
   2- Não é permitido marcar presença no cartão em duas sessões da mesma semana, nesse caso o sistema deverá considerar o assistido como ouvinte na segunda sessão.

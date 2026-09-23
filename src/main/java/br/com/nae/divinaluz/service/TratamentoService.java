@@ -4,6 +4,8 @@ import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
+import br.com.nae.divinaluz.model.CartaoStatus;
+import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.SessaoTratamento;
@@ -13,13 +15,16 @@ import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
+import br.com.nae.divinaluz.repository.PrelecaoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,7 +32,6 @@ import java.util.Optional;
 @Service
 public class TratamentoService {
 
-    private static final int DIAS_ENTRE_SESSOES = 7;
     private static final int DIAS_TOLERANCIA_AUSENCIA = 21; // 3 semanas sem sessão reinicia o tratamento em P2
     private static final int SESSOES_POR_AVALIACAO = 4;
     private static final String CODIGO_TRATAMENTO_INICIAL = "P2";
@@ -38,38 +42,53 @@ public class TratamentoService {
     private final EntrevistaRepository entrevistaRepository;
     private final AssistidoRepository assistidoRepository;
     private final TipoTratamentoRepository tipoTratamentoRepository;
+    private final PrelecaoRepository prelecaoRepository;
 
     public TratamentoService(SessaoRepository sessaoRepository, AvaliacaoRepository avaliacaoRepository,
             EntrevistaRepository entrevistaRepository, AssistidoRepository assistidoRepository,
-            TipoTratamentoRepository tipoTratamentoRepository) {
+            TipoTratamentoRepository tipoTratamentoRepository, PrelecaoRepository prelecaoRepository) {
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
         this.entrevistaRepository = entrevistaRepository;
         this.assistidoRepository = assistidoRepository;
         this.tipoTratamentoRepository = tipoTratamentoRepository;
+        this.prelecaoRepository = prelecaoRepository;
     }
 
-    public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado) {}
+    public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
 
     @Transactional
     public ResultadoSessao registrarSessao(SessaoTratamento novaSessao) {
         Assistido assistido = novaSessao.getAssistido();
         Long assistidoId = assistido.getId();
 
+        if (novaSessao.getDataConsulta() == null) {
+            throw new RegraNegocioException("Informe a data da sessão.");
+        }
         validarDiaDaSemana(assistido, novaSessao.getDataConsulta());
 
+        if (assistido.getStatusCartao() == null) {
+            assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
+        }
+        if (assistido.getStatusCartao() != CartaoStatus.EM_TRATAMENTO) {
+            throw new RegraNegocioException("O cartão está com status '"
+                    + assistido.getStatusCartao().getLabel()
+                    + "' e não pode receber uma presença efetiva neste momento.");
+        }
+
+        if (existeSessaoNaSemana(assistidoId, novaSessao.getDataConsulta())) {
+            novaSessao.setOuvinte(true);
+            novaSessao.setNumeroSerie(null);
+            SessaoTratamento sessaoOuvinte = sessaoRepository.save(novaSessao);
+            return new ResultadoSessao(sessaoOuvinte, false, true);
+        }
+
         Optional<SessaoTratamento> ultimaSessao =
-                sessaoRepository.findFirstByAssistidoIdOrderByDataConsultaDesc(assistidoId);
+                sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(assistidoId);
         boolean tratamentoReiniciado = false;
 
         if (ultimaSessao.isPresent()) {
             long dias = ChronoUnit.DAYS.between(ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta());
-
-            if (dias < DIAS_ENTRE_SESSOES) {
-                throw new RegraNegocioException(
-                        "O assistido já realizou uma sessão nos últimos 7 dias. Próxima sessão liberada em: "
-                                + ultimaSessao.get().getDataConsulta().plusDays(DIAS_ENTRE_SESSOES));
-            }
 
             if (dias >= DIAS_TOLERANCIA_AUSENCIA) {
                 // Passou de 2 semanas de tolerância (faltou na 3ª semana): reinicia o tratamento em P2,
@@ -103,8 +122,13 @@ public class TratamentoService {
         }
 
         novaSessao.setNumeroSerie((int) totalSessoesCiclo + 1);
+        novaSessao.setOuvinte(false);
         SessaoTratamento sessaoSalva = sessaoRepository.save(novaSessao);
-        return new ResultadoSessao(sessaoSalva, tratamentoReiniciado);
+        if (novaSessao.getNumeroSerie() >= SESSOES_POR_AVALIACAO) {
+            assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+            assistidoRepository.save(assistido);
+        }
+        return new ResultadoSessao(sessaoSalva, tratamentoReiniciado, false);
     }
 
     // Avaliação: dados da avaliação espiritual em si. Data livre (não precisa cair no dia de
@@ -117,7 +141,12 @@ public class TratamentoService {
         long totalAvaliacoesCiclo = contarAvaliacoesDoCiclo(assistido.getId(), assistido.getCicloIniciadoEm());
         novaAvaliacao.setNumeroVez((int) totalAvaliacoesCiclo + 1);
 
-        return avaliacaoRepository.save(novaAvaliacao);
+        Avaliacao avaliacaoSalva = avaliacaoRepository.save(novaAvaliacao);
+        if (assistido.getStatusCartao() == CartaoStatus.AGUARDANDO_AVALIACAO) {
+            assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+            assistidoRepository.save(assistido);
+        }
+        return avaliacaoSalva;
     }
 
     // Entrevista: passo seguinte à Avaliação, em que o entrevistador comunica o tratamento
@@ -136,8 +165,12 @@ public class TratamentoService {
 
         if (novaEntrevista.getTratamentoIndicado() != null) {
             assistido.setTratamentoAtual(novaEntrevista.getTratamentoIndicado());
-            assistidoRepository.save(assistido);
         }
+
+        assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
+        assistido.setCicloIniciadoEm(novaEntrevista.getData());
+        assistidoRepository.save(assistido);
+        registrarPrimeiraSessaoDaEntrevista(assistido, novaEntrevista.getData());
 
         return entrevistaSalva;
     }
@@ -162,17 +195,46 @@ public class TratamentoService {
             }
             validarDiaDaSemana(assistido, dataPrimeiraSessao);
 
+            // Só um tratamento realmente novo justifica reabrir o cartão: fora daqui, o status é
+            // preservado. Setar EM_TRATAMENTO incondicionalmente (como antes) resetava por engano
+            // um cartão "Aguardando Avaliação"/"Aguardando Entrevista" sempre que o formulário de
+            // edição ou o card "Alterar Tratamento" eram salvos sem mudar o tratamento de fato.
+            assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
             assistido.setCicloIniciadoEm(dataPrimeiraSessao);
             assistidoRepository.save(assistido);
 
-            SessaoTratamento primeiraSessao = new SessaoTratamento();
-            primeiraSessao.setAssistido(assistido);
-            primeiraSessao.setNumeroSerie(1);
-            primeiraSessao.setDataConsulta(dataPrimeiraSessao);
-            sessaoRepository.save(primeiraSessao);
+            criarPrimeiraSessao(assistido, dataPrimeiraSessao);
         } else {
             assistidoRepository.save(assistido);
         }
+    }
+
+    @Transactional
+    public void iniciarTratamentoInicial(Assistido assistido, TipoTratamento tratamentoInicial,
+            LocalDate dataPrimeiraSessao) {
+        if (tratamentoInicial == null) {
+            throw new RegraNegocioException("Tratamento inicial não encontrado.");
+        }
+        if (dataPrimeiraSessao == null) {
+            throw new RegraNegocioException("Informe a data da primeira assistência.");
+        }
+
+        validarDiaDaSemana(assistido, dataPrimeiraSessao);
+        assistido.setTratamentoAtual(tratamentoInicial);
+        assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
+        assistido.setCicloIniciadoEm(dataPrimeiraSessao);
+        assistidoRepository.save(assistido);
+        criarPrimeiraSessao(assistido, dataPrimeiraSessao);
+    }
+
+    private void criarPrimeiraSessao(Assistido assistido, LocalDate dataPrimeiraSessao) {
+        SessaoTratamento primeiraSessao = new SessaoTratamento();
+        primeiraSessao.setAssistido(assistido);
+        primeiraSessao.setNumeroSerie(1);
+        primeiraSessao.setDataConsulta(dataPrimeiraSessao);
+        Prelecao prelecao = prelecaoRepository.findByDataApresentacao(dataPrimeiraSessao).orElse(null);
+        primeiraSessao.setPrelecao(prelecao);
+        sessaoRepository.save(primeiraSessao);
     }
 
     // Item 3: sessões e entrevistas precisam cair no dia da semana do "Dia de Assistência" do
@@ -203,8 +265,34 @@ public class TratamentoService {
 
     private long contarSessoesDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {
         return cicloIniciadoEm != null
-                ? sessaoRepository.countByAssistidoIdAndDataConsultaGreaterThanEqual(assistidoId, cicloIniciadoEm)
-                : sessaoRepository.countByAssistidoId(assistidoId);
+                ? sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(assistidoId, cicloIniciadoEm)
+                : sessaoRepository.countByAssistidoIdAndOuvinteFalse(assistidoId);
+    }
+
+    private boolean existeSessaoNaSemana(Long assistidoId, LocalDate data) {
+        LocalDate inicioSemana = data.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        LocalDate fimSemana = data.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+        return sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistidoId).stream()
+            .map(sessao -> sessao.getDataConsulta())
+                .filter(dataSessao -> dataSessao != null)
+                .anyMatch(dataSessao -> !dataSessao.isBefore(inicioSemana) && !dataSessao.isAfter(fimSemana));
+    }
+
+    private void registrarPrimeiraSessaoDaEntrevista(Assistido assistido, LocalDate data) {
+        if (data == null || existeSessaoNaData(assistido.getId(), data)) {
+            return;
+        }
+        SessaoTratamento primeiraSessao = new SessaoTratamento();
+        primeiraSessao.setAssistido(assistido);
+        primeiraSessao.setNumeroSerie(1);
+        primeiraSessao.setDataConsulta(data);
+        primeiraSessao.setOuvinte(false);
+        sessaoRepository.save(primeiraSessao);
+    }
+
+    private boolean existeSessaoNaData(Long assistidoId, LocalDate data) {
+        return sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistidoId).stream()
+                .anyMatch(sessao -> data.equals(sessao.getDataConsulta()));
     }
 
     private long contarAvaliacoesDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {

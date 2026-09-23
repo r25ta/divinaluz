@@ -12,6 +12,7 @@ import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
+import br.com.nae.divinaluz.model.Usuario;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
@@ -19,15 +20,20 @@ import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import br.com.nae.divinaluz.repository.UsuarioRepository;
 import br.com.nae.divinaluz.service.TratamentoService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Controller;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -58,11 +64,13 @@ public class ProntuarioController {
 
     private final EntrevistaRepository entrevistaRepository;
 
+    private final UsuarioRepository usuarioRepository;
+
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
-            EntrevistaRepository entrevistaRepository) {
+            EntrevistaRepository entrevistaRepository, UsuarioRepository usuarioRepository) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -71,6 +79,7 @@ public class ProntuarioController {
         this.trabalhadorRepository = trabalhadorRepository;
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
         this.entrevistaRepository = entrevistaRepository;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @GetMapping
@@ -100,7 +109,7 @@ public class ProntuarioController {
             diasEsperadosMes.put(a.getId(), esperados);
 
             Set<LocalDate> presentes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(a.getId()).stream()
-                    .map(SessaoTratamento::getDataConsulta)
+                    .map(sessao -> sessao.getDataConsulta())
                     .filter(d -> !d.isBefore(inicioMes) && !d.isAfter(fimMes))
                     .collect(Collectors.toSet());
             diasPresentesMes.put(a.getId(), presentes);
@@ -131,8 +140,15 @@ public class ProntuarioController {
     public String salvar(@ModelAttribute Assistido assistido, @RequestParam(required = false) List<TipoTrabalhador> funcoes,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
-        TipoTratamento tratamentoEscolhido = assistido.getTratamentoAtual();
+        if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
+            redirectAttributes.addFlashAttribute("erro", "Informe uma data de assistência que seja Domingo ou Terça-feira.");
+            return "redirect:/novo";
+        }
+
+        TipoTratamento tratamentoInicial = tipoTratamentoRepository.findByCodigo("P2")
+                .orElseThrow(() -> new IllegalStateException("Tratamento padrão P2 não encontrado no catálogo."));
         assistido.setTratamentoAtual(null);
+        assistido.setDiaFrequencia(diaFrequenciaDaData(dataPrimeiraSessao));
         atualizarResidenciaLegada(assistido);
         assistidoRepository.save(assistido);
 
@@ -140,16 +156,22 @@ public class ProntuarioController {
             atualizarFuncoesTrabalhador(assistido, funcoes);
         }
 
-        if (tratamentoEscolhido != null) {
-            try {
-                tratamentoService.definirTratamento(assistido, tratamentoEscolhido, dataPrimeiraSessao);
-            } catch (RegraNegocioException e) {
-                redirectAttributes.addFlashAttribute("erro", e.getMessage());
-                return "redirect:/prontuario/" + assistido.getId() + "/editar";
-            }
+        try {
+            tratamentoService.iniciarTratamentoInicial(assistido, tratamentoInicial, dataPrimeiraSessao);
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/prontuario/" + assistido.getId() + "/editar";
         }
 
         return "redirect:/";
+    }
+
+    private boolean ehDiaDeAssistencia(LocalDate data) {
+        return data.getDayOfWeek() == DayOfWeek.TUESDAY || data.getDayOfWeek() == DayOfWeek.SUNDAY;
+    }
+
+    private DiaFrequencia diaFrequenciaDaData(LocalDate data) {
+        return data.getDayOfWeek() == DayOfWeek.TUESDAY ? DiaFrequencia.TERCA_19H : DiaFrequencia.DOMINGO_08H;
     }
 
     @GetMapping("/prontuario/{id}/editar")
@@ -161,7 +183,7 @@ public class ProntuarioController {
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("funcoes", TipoTrabalhador.values());
         model.addAttribute("funcoesSelecionadas",
-                trabalhadorRepository.findByAssistidoId(id).map(Trabalhador::getFuncoes).orElse(Set.of()));
+            trabalhadorRepository.findByAssistidoId(id).map(trabalhador -> trabalhador.getFuncoes()).orElse(Set.of()));
         model.addAttribute("modoEdicao", true);
         return "form";
     }
@@ -289,6 +311,24 @@ public class ProntuarioController {
         return "prontuario"; // Nome do novo arquivo HTML
     }
 
+    @GetMapping("/prontuario/{id}/cartao")
+    public String verCartao(@PathVariable Long id, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado) {
+        Usuario usuario = usuarioRepository.findByLoginAndAtivoTrue(usuarioLogado.getUsername())
+                .orElseThrow(() -> new AccessDeniedException("Usuário não encontrado."));
+        if (usuario.getPerfil().name().equals("ASSISTIDO")
+                && (usuario.getAssistido() == null || !id.equals(usuario.getAssistido().getId()))) {
+            throw new AccessDeniedException("O assistido só pode consultar o próprio cartão.");
+        }
+        Assistido assistido = assistidoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+
+        model.addAttribute("assistido", assistido);
+        model.addAttribute("sessoes", sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id));
+        model.addAttribute("statusCartao", assistido.getStatusCartao());
+        return "cartao";
+    }
+
     // Alteração do dia de assistência sempre passa por aqui (nunca pelo form geral de
     // cadastro/edição), para garantir que toda troca fique registrada no histórico (item 3).
     @PostMapping("/prontuario/{assistidoId}/dia-frequencia")
@@ -391,6 +431,10 @@ public class ProntuarioController {
                 redirectAttributes.addFlashAttribute("aviso",
                         "O assistido ficou 3 semanas ou mais sem sessão. O tratamento foi reiniciado em P2. "
                                 + "Uma nova entrevista é recomendada (opcional).");
+            }
+            if (resultado.ouvinte()) {
+                redirectAttributes.addFlashAttribute("aviso",
+                        "O assistido já teve presença nesta semana. Esta chegada foi registrada como ouvinte e não contou para o cartão.");
             }
         } catch (AvaliacaoPendenteException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());

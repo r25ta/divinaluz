@@ -34,6 +34,7 @@
 
                     <form th:action="@{/prontuario/{id}/entrevista(id=${assistido.id}, avaliacaoId=${avaliacao.id})}"
                           th:object="${entrevista}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Entrevista</div>

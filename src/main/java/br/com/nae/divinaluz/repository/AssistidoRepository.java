@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     List<Assistido> findByAtivo(boolean ativo);
+    List<Assistido> findAllByOrderByNomeAsc();
 }

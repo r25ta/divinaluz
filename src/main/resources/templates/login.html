@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Login')}"></head>
+<body>
+<main class="dl-main d-flex align-items-center">
+    <div class="dl-container-narrow" style="max-width: 430px; width: 100%;">
+        <div class="text-center mb-4">
+            <div class="dl-brand-mark mx-auto mb-3"><i class="bi bi-brightness-high-fill"></i></div>
+            <span class="dl-eyebrow">Acesso seguro</span>
+            <h1 class="h3 fw-bold">N.A.E. Divina Luz</h1>
+        </div>
+        <div class="dl-card">
+            <div class="dl-card-body">
+                <div class="alert alert-danger" th:if="${param.erro}">Login ou senha inválidos.</div>
+                <div class="alert alert-success" th:if="${param.logout}">Sessão encerrada.</div>
+                <div class="alert alert-success" th:if="${sucesso}" th:text="${sucesso}"></div>
+                <form th:action="@{/login}" method="post">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <div class="mb-3">
+                        <label class="form-label" for="username">Login</label>
+                        <input id="username" name="username" class="form-control" autocomplete="username" required autofocus>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label" for="password">Senha</label>
+                        <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-teal text-white w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Entrar
+                    </button>
+                    <a th:href="@{/cadastro}" class="btn btn-outline-teal w-100 mt-2">
+                        <i class="bi bi-person-plus"></i> Criar novo usuário
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

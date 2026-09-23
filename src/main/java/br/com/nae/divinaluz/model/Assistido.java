@@ -26,6 +26,9 @@ public class Assistido {
     private String cidade;
     private String uf;
 
+    @Enumerated(EnumType.STRING)
+    private CartaoStatus statusCartao = CartaoStatus.EM_TRATAMENTO;
+
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate dataNascimento;
 

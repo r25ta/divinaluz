@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Cartão de Assistência')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container">
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Cartão de Assistência</span>
+                    <h1 th:text="${assistido.nome}">Nome do Assistido</h1>
+                </div>
+                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                </a>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-12">
+                    <div class="dl-card mb-0">
+                        <div class="dl-card-body d-flex align-items-center gap-3 flex-wrap">
+                            <span class="label">Status do Cartão</span>
+                            <span class="dl-badge dl-badge-info"
+                                  th:text="${statusCartao != null ? statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-heart-pulse"></i></span>
+                                <h2>Tratamento Atual</h2>
+                            </div>
+                        </div>
+                        <div class="dl-card-body">
+                            <div th:if="${assistido.tratamentoAtual != null}" class="d-flex align-items-start gap-3">
+                                <span class="dl-badge dl-badge-teal" style="font-size: 1rem; padding: 0.55rem 1rem;"
+                                      th:text="${assistido.tratamentoAtual.codigo}"></span>
+                                <div>
+                                    <div class="fw-semibold" th:text="${assistido.tratamentoAtual.nome}"></div>
+                                    <div class="dl-muted small" th:text="${assistido.tratamentoAtual.comoFunciona}"></div>
+                                </div>
+                            </div>
+                            <span th:if="${assistido.tratamentoAtual == null}" class="dl-muted">Tratamento ainda não definido.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="dl-card h-100 mb-0">
+                        <div class="dl-card-header">
+                            <div class="dl-card-header-title">
+                                <span class="dl-card-icon"><i class="bi bi-calendar-check"></i></span>
+                                <h2>Presenças</h2>
+                            </div>
+                        </div>
+                        <div class="dl-card-body">
+                            <strong class="fs-3" th:text="${#lists.size(sessoes)}">0</strong>
+                            <span class="dl-muted"> sessões registradas</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-calendar2-week"></i></span>
+                        <h2>Datas de Presença</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(sessoes)}">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">Sessão</th>
+                                    <th>Data da Presença</th>
+                                    <th>Preleção</th>
+                                    <th>Tipo</th>
+                                    <th>Observações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="sessao : ${sessoes}">
+                                    <td class="text-center" th:text="${sessao.numeroSerie != null ? sessao.numeroSerie + 'ª' : '—'}"></td>
+                                    <td th:text="${sessao.dataConsulta != null ? #temporals.format(sessao.dataConsulta, 'dd/MM/yyyy') : '—'}"></td>
+                                    <td>
+                                        <span th:if="${sessao.prelecao != null}" th:text="${sessao.prelecao.tema}"></span>
+                                        <span th:if="${sessao.prelecao == null}" class="dl-muted">—</span>
+                                    </td>
+                                    <td>
+                                        <span th:if="${sessao.ouvinte}" class="dl-badge dl-badge-neutral">Ouvinte</span>
+                                        <span th:unless="${sessao.ouvinte}" class="dl-badge dl-badge-success">Presença efetiva</span>
+                                    </td>
+                                    <td th:text="${sessao.observacoes ?: '—'}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(sessoes)}">
+                        <i class="bi bi-calendar-x"></i>
+                        <p class="mb-0">Nenhuma presença registrada para este assistido.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

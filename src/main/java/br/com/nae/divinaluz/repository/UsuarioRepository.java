@@ -9,4 +9,5 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByLoginAndAtivoTrue(String login);
     boolean existsByLogin(String login);
     java.util.List<Usuario> findAllByOrderByLoginAsc();
+    Optional<Usuario> findByAssistidoId(Long assistidoId);
 }

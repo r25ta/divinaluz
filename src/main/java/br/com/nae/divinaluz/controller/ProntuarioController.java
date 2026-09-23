@@ -8,6 +8,8 @@ import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
+import br.com.nae.divinaluz.model.PerfilAcesso;
+import br.com.nae.divinaluz.model.ProvedorIdentidade;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -66,11 +69,14 @@ public class ProntuarioController {
 
     private final UsuarioRepository usuarioRepository;
 
+    private final PasswordEncoder passwordEncoder;
+
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
-            EntrevistaRepository entrevistaRepository, UsuarioRepository usuarioRepository) {
+            EntrevistaRepository entrevistaRepository, UsuarioRepository usuarioRepository,
+            PasswordEncoder passwordEncoder) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -80,6 +86,7 @@ public class ProntuarioController {
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
         this.entrevistaRepository = entrevistaRepository;
         this.usuarioRepository = usuarioRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @GetMapping
@@ -307,8 +314,62 @@ public class ProntuarioController {
         model.addAttribute("proximaEntrevistaPrevista", proximaEntrevistaPrevista);
         model.addAttribute("diasFrequencia", DiaFrequencia.values());
         model.addAttribute("historicoDiaFrequencia", historicoDiaFrequenciaRepository.findByAssistidoIdOrderByDataHoraDesc(id));
+        model.addAttribute("usuarioVinculado", usuarioRepository.findByAssistidoId(id).orElse(null));
 
         return "prontuario"; // Nome do novo arquivo HTML
+    }
+
+    // Item 3.11: permite ao staff criar login para um assistido que já existe no sistema, sem
+    // passar pela tela administrativa separada de /usuarios. Complementa (não substitui) o CRUD
+    // de usuários — aqui o "assistido" já está definido, só falta o acesso.
+    @GetMapping("/prontuario/{id}/acesso")
+    public String novoAcesso(@PathVariable Long id, Model model) {
+        Assistido assistido = assistidoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        if (usuarioRepository.findByAssistidoId(id).isPresent()) {
+            return "redirect:/prontuario/" + id;
+        }
+
+        model.addAttribute("assistido", assistido);
+        return "acesso-form";
+    }
+
+    @PostMapping("/prontuario/{assistidoId}/acesso")
+    public String salvarAcesso(@PathVariable Long assistidoId, @RequestParam String login,
+            @RequestParam(required = false) String email, @RequestParam String senha,
+            @RequestParam String confirmacaoSenha, RedirectAttributes redirectAttributes) {
+        Assistido assistido = assistidoRepository.findById(assistidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+
+        if (usuarioRepository.findByAssistidoId(assistidoId).isPresent()) {
+            redirectAttributes.addFlashAttribute("erro", "Este assistido já possui um acesso.");
+            return "redirect:/prontuario/" + assistidoId;
+        }
+        if (login == null || login.isBlank() || senha == null || senha.length() < 6) {
+            redirectAttributes.addFlashAttribute("erro", "Informe um login e uma senha com pelo menos 6 caracteres.");
+            return "redirect:/prontuario/" + assistidoId + "/acesso";
+        }
+        if (!senha.equals(confirmacaoSenha)) {
+            redirectAttributes.addFlashAttribute("erro", "A confirmação da senha não confere.");
+            return "redirect:/prontuario/" + assistidoId + "/acesso";
+        }
+        if (usuarioRepository.existsByLogin(login.trim())) {
+            redirectAttributes.addFlashAttribute("erro", "Já existe um usuário com este login.");
+            return "redirect:/prontuario/" + assistidoId + "/acesso";
+        }
+
+        Usuario usuario = new Usuario();
+        usuario.setLogin(login.trim());
+        usuario.setEmail(email == null || email.isBlank() ? null : email.trim());
+        usuario.setSenha(passwordEncoder.encode(senha));
+        usuario.setPerfil(PerfilAcesso.ASSISTIDO);
+        usuario.setProvedor(ProvedorIdentidade.LOCAL);
+        usuario.setAssistido(assistido);
+        usuario.setAtivo(true);
+        usuarioRepository.save(usuario);
+
+        redirectAttributes.addFlashAttribute("sucesso", "Acesso criado. O assistido já pode entrar com o login \"" + usuario.getLogin() + "\".");
+        return "redirect:/prontuario/" + assistidoId;
     }
 
     @GetMapping("/prontuario/{id}/cartao")

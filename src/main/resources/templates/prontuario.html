@@ -18,6 +18,9 @@
                 </a>
             </div>
 
+            <div class="alert alert-success" th:if="${sucesso}">
+                <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
+            </div>
             <div class="alert alert-warning" th:if="${aviso}">
                 <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
             </div>
@@ -50,11 +53,19 @@
                             <span class="label">Idade</span>
                             <span class="value" th:text="${assistido.idade != null ? assistido.idade + ' anos' : '—'}"></span>
                         </div>
+                        <div class="dl-summary-item">
+                            <span class="label">Acesso ao Cartão</span>
+                            <span th:if="${usuarioVinculado != null}" class="dl-badge dl-badge-success" th:text="${usuarioVinculado.login}"></span>
+                            <span th:if="${usuarioVinculado == null}" class="dl-badge dl-badge-neutral">Sem acesso</span>
+                        </div>
                     </div>
 
                     <div class="d-flex flex-wrap gap-2 dl-summary-actions">
                         <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-pencil"></i> Editar Dados
+                        </a>
+                        <a th:if="${usuarioVinculado == null}" th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-person-plus"></i> Criar Acesso
                         </a>
                         <form th:if="${assistido.ativo}" th:action="@{/prontuario/{id}/desativar(id=${assistido.id})}" method="post" class="d-inline"
                               onsubmit="return confirm('Desativar o prontuário deste assistido? O histórico é mantido e ele pode ser reativado depois.');">

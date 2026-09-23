@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Criar Acesso')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
+                    <h1>Criar Acesso</h1>
+                </div>
+                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                </a>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body">
+                    <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
+                    <p class="dl-muted">
+                        Cria um login para <strong th:text="${assistido.nome}"></strong> consultar o próprio
+                        cartão de assistência. O perfil de acesso já é definido como Assistido.
+                    </p>
+
+                    <form th:action="@{/prontuario/{id}/acesso(id=${assistido.id})}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+                        <div class="mb-3">
+                            <label class="form-label" for="login">Login</label>
+                            <input id="login" name="login" class="form-control" maxlength="80" autocomplete="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="email">E-mail (opcional)</label>
+                            <input id="email" name="email" type="email" class="form-control" autocomplete="email">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="senha">Senha</label>
+                            <input id="senha" name="senha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label" for="confirmacaoSenha">Confirmar senha</label>
+                            <input id="confirmacaoSenha" name="confirmacaoSenha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 pt-2">
+                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <button type="submit" class="btn btn-teal text-white">
+                                <i class="bi bi-person-check"></i> Criar Acesso
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

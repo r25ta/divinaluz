@@ -289,7 +289,49 @@ try {
     $r = Invoke-CurlForm -Url "$BaseUrl/"
     Check "Assistido reativado volta a aparecer na listagem padrão" ($r.Body -match [regex]::Escape($nomeEditado))
 
-    # 14. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
+    # 14. Criar Acesso a partir do prontuário: dá login a um assistido que já existe (fluxo real —
+    # staff cadastra a pessoa presencialmente primeiro, o acesso ao cartão vem depois).
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário mostra 'Sem acesso' e o botão 'Criar Acesso' antes de criar o login" ($r.Body -match "Sem acesso" -and $r.Body -match "Criar Acesso")
+
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
+    Check "Formulário de criar acesso responde 200" ($r.StatusCode -eq 200)
+
+    $loginTeste = $nomeTeste.ToLower()
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/acesso" -Form @{ login = $loginTeste; senha = "senha123"; confirmacaoSenha = "senha123" }
+    Check "Criar acesso redireciona para o prontuário" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário mostra o login vinculado e some o botão 'Criar Acesso'" ($r.Body -match [regex]::Escape($loginTeste) -and $r.Body -notmatch "Criar Acesso")
+    Check "Prontuário mostra a mensagem de sucesso da criação de acesso" ($r.Body -match "Acesso criado")
+
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
+    Check "Tentar criar acesso de novo é bloqueado (já existe) e redireciona" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+
+    # Confere de ponta a ponta que o login criado funciona e respeita o limite do perfil Assistido
+    # (só o próprio cartão) — troca temporariamente para uma sessão HTTP separada do admin.
+    $adminCookieJar = $script:CookieJar
+    $adminCsrfToken = $script:CsrfToken
+    $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-assistido-$PID.txt"
+    if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+    try {
+        $assistidoLoginPage = Invoke-CurlForm -Url "$BaseUrl/login"
+        $csrfAssistido = Extract-Csrf $assistidoLoginPage.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/login" -Form @{ username = $loginTeste; password = "senha123"; "_csrf" = $csrfAssistido }
+        Check "Login do assistido criado funciona e redireciona para o próprio cartão" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId/cartao$")
+
+        $r = Invoke-CurlForm -Url $cartaoUrl
+        Check "Assistido logado consegue ver o próprio cartão" ($r.StatusCode -eq 200)
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/"
+        Check "Assistido logado é bloqueado na listagem geral (só vê o próprio cartão)" ($r.StatusCode -eq 403)
+    } finally {
+        if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+        $script:CookieJar = $adminCookieJar
+        $script:CsrfToken = $adminCsrfToken
+    }
+
+    # 15. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
     # 2024-01-14 é domingo.
     $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "2024-01-14"; funcoes = "DIRIGENTE" }
     Check "Cadastro de trabalhador redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
@@ -322,6 +364,9 @@ try {
     # FK "fk6c6t2lawkln7d6w90vhg2my0l" (sessao_tratamento -> assistido, sem CASCADE no banco real
     # — ver CLAUDE.md item 6) bloqueia o DELETE FROM assistido.
     $nomes = "'$nomeTeste', '$nomeEditado', '$nomeTrabalhador'"
+    # usuario.assistido_id também não tem ON DELETE CASCADE (V19) — o login criado no passo 14
+    # precisa ser removido antes do assistido, mesma lógica da sessao_tratamento acima.
+    Invoke-Sql "DELETE FROM usuario WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM historico_dia_frequencia WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM entrevista WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM sessao_tratamento WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null

@@ -16,7 +16,7 @@
 <body>
     <!--/* Fragmento de navbar: uso com th:replace="fragments/layout :: navbar" */-->
     <nav class="dl-navbar" th:fragment="navbar">
-        <div class="container-fluid d-flex align-items-center justify-content-between">
+        <div class="container-fluid d-flex align-items-center justify-content-between gap-3">
             <a th:href="@{/}" class="dl-brand">
                 <span class="dl-brand-mark"><i class="bi bi-brightness-high-fill"></i></span>
                 <span class="dl-brand-text">
@@ -24,9 +24,14 @@
                     <span class="dl-brand-subtitle d-block">Assistência Espiritual</span>
                 </span>
             </a>
-            <a th:href="@{/novo}" class="btn btn-nav btn-sm">
-                <i class="bi bi-plus-lg"></i> Novo Cadastro
-            </a>
+            <div class="d-flex align-items-center gap-2">
+                <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-calendar2-event"></i> Preleções
+                </a>
+                <a th:href="@{/novo}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-plus-lg"></i> Novo Cadastro
+                </a>
+            </div>
         </div>
     </nav>
 </body>

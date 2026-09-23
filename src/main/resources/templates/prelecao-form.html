@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead(${prelecao.id != null ? 'Editar Preleção' : 'Nova Preleção'})}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container" style="max-width: 760px;">
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Escala</span>
+                    <h1 th:text="${prelecao.id != null ? 'Editar Preleção' : 'Nova Preleção'}">Nova Preleção</h1>
+                </div>
+                <a th:href="@{/prelecao}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar
+                </a>
+            </div>
+
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body">
+                    <form th:action="${prelecao.id != null ? '/divinaluz/prelecao/' + prelecao.id + '/editar' : '/divinaluz/prelecao/salvar'}" method="post" th:object="${prelecao}">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="dataApresentacao">Data da apresentação</label>
+                                <input id="dataApresentacao" type="date" class="form-control" th:field="*{dataApresentacao}" required>
+                                <div class="form-text">Aceita somente terça-feira ou domingo.</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="preletorId">Preletor</label>
+                                <select id="preletorId" class="form-select" name="preletorId" required>
+                                    <option value="">Selecione...</option>
+                                    <option th:each="preletor : ${preletores}"
+                                            th:value="${preletor.id}"
+                                            th:text="${preletor.assistido.nome}"
+                                            th:selected="${prelecao.preletor != null and prelecao.preletor.id == preletor.id}">
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="tema">Tema / Título da preleção</label>
+                                <input id="tema" type="text" class="form-control" th:field="*{tema}" placeholder="Ex.: Evangelho no Lar" required>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a th:href="@{/prelecao}" class="btn btn-outline-teal">Cancelar</a>
+                            <button type="submit" class="btn btn-teal text-white">
+                                <i class="bi bi-check-lg"></i>
+                                <span th:text="${prelecao.id != null ? 'Salvar Alterações' : 'Salvar Preleção'}">Salvar</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

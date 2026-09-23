@@ -1,0 +1,6 @@
+ALTER TABLE assistido
+    ADD COLUMN cep VARCHAR(9),
+    ADD COLUMN endereco VARCHAR(255),
+    ADD COLUMN bairro VARCHAR(150),
+    ADD COLUMN cidade VARCHAR(150),
+    ADD COLUMN uf VARCHAR(2);

@@ -18,6 +18,13 @@ public class Assistido {
     private Long id;
     private String nome;
     private String residencia;
+    private String cep;
+    private String endereco;
+    private String numero;
+    private String complemento;
+    private String bairro;
+    private String cidade;
+    private String uf;
 
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate dataNascimento;

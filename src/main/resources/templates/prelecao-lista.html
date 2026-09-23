@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Escala de Preleções')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container">
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Escala</span>
+                    <h1>Preleções</h1>
+                </div>
+                <a th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
+                    <i class="bi bi-plus-lg"></i> Nova Preleção
+                </a>
+            </div>
+
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(prelecoes)}">
+                            <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Preletor</th>
+                                <th>Tema</th>
+                                <th class="text-center">Ações</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="prelecao : ${prelecoes}">
+                                <td th:text="${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy')}" class="fw-semibold"></td>
+                                <td th:text="${prelecao.preletor.assistido.nome}"></td>
+                                <td th:text="${prelecao.tema}"></td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <a th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${prelecao.id})}" class="btn btn-outline-teal btn-sm">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form th:action="@{/prelecao/{prelecaoId}/excluir(prelecaoId=${prelecao.id})}" method="post" onsubmit="return confirm('Deseja excluir esta preleção?');">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(prelecoes)}">
+                        <i class="bi bi-calendar2-event"></i>
+                        <p class="mb-0">Nenhuma preleção cadastrada ainda.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

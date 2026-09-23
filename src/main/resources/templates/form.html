@@ -34,8 +34,39 @@
                                     <input type="text" class="form-control" th:field="*{nome}" placeholder="Nome do assistido" required>
                                 </div>
                                 <div class="col-md-5">
-                                    <label class="form-label">Residência (Endereço)</label>
-                                    <input type="text" class="form-control" th:field="*{residencia}" placeholder="Bairro, cidade...">
+                                    <label class="form-label" for="cep">CEP</label>
+                                    <input type="text" class="form-control" id="cep" name="cep" th:value="${assistido.cep}"
+                                           inputmode="numeric"
+                                           autocomplete="postal-code" maxlength="9" placeholder="00000-000">
+                                    <div id="cepMensagem" class="form-text" aria-live="polite"></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="endereco">Endereço</label>
+                                    <input type="text" class="form-control" id="endereco" name="endereco"
+                                           th:value="${assistido.endereco != null ? assistido.endereco : assistido.residencia}"
+                                           placeholder="Rua, avenida...">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label" for="numero">Número</label>
+                                    <input type="text" class="form-control" id="numero" name="numero" th:value="${assistido.numero}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="complemento">Complemento</label>
+                                    <input type="text" class="form-control" id="complemento" name="complemento"
+                                           th:value="${assistido.complemento}" placeholder="Apto, casa...">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="bairro">Bairro</label>
+                                    <input type="text" class="form-control" id="bairro" name="bairro" th:value="${assistido.bairro}">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label" for="cidade">Cidade</label>
+                                    <input type="text" class="form-control" id="cidade" name="cidade" th:value="${assistido.cidade}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="uf">UF</label>
+                                    <input type="text" class="form-control" id="uf" name="uf" th:value="${assistido.uf}"
+                                           maxlength="2" style="text-transform: uppercase;">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Data de Nascimento</label>
@@ -77,8 +108,6 @@
                                 <input class="dl-chip-check" type="radio" id="vinc-trabalhador" th:field="*{vinculo}" value="TRABALHADOR">
                                 <label class="dl-chip-label" for="vinc-trabalhador"><span class="dl-chip-dot"></span> Trabalhador</label>
 
-                                <input class="dl-chip-check" type="radio" id="vinc-aluno" th:field="*{vinculo}" value="ALUNO">
-                                <label class="dl-chip-label" for="vinc-aluno"><span class="dl-chip-dot"></span> Aluno</label>
                             </div>
                         </div>
 
@@ -100,7 +129,7 @@
                             </div>
                         </div>
 
-                        <div class="dl-form-section">
+                        <div class="dl-form-section" th:if="${modoEdicao}">
                             <div class="dl-form-section-title">Tratamento</div>
                             <label class="form-label">Tratamento Atual</label>
                             <select class="form-select" id="tratamentoAtual" th:field="*{tratamentoAtual}"
@@ -122,7 +151,7 @@
                             <a th:href="${modoEdicao} ? @{/prontuario/{id}(id=${assistido.id})} : @{/}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
                                 <i class="bi bi-check-lg"></i>
-                                <span th:text="${modoEdicao} ? 'Salvar Alterações' : 'Salvar Prontuário'"></span>
+                                <span>Salvar</span>
                             </button>
                         </div>
                     </form>
@@ -159,6 +188,48 @@
         if (tratamentoSelect) {
             tratamentoSelect.addEventListener('change', atualizarDataPrimeiraSessao);
             atualizarDataPrimeiraSessao();
+        }
+
+        var cepInput = document.getElementById('cep');
+        var cepMensagem = document.getElementById('cepMensagem');
+        var enderecoInput = document.getElementById('endereco');
+        var bairroInput = document.getElementById('bairro');
+        var cidadeInput = document.getElementById('cidade');
+        var ufInput = document.getElementById('uf');
+
+        function formatarCep(valor) {
+            var digitos = valor.replace(/\D/g, '').slice(0, 8);
+            return digitos.length > 5 ? digitos.slice(0, 5) + '-' + digitos.slice(5) : digitos;
+        }
+
+        function consultarCep() {
+            var cep = cepInput ? cepInput.value.replace(/\D/g, '') : '';
+            if (cep.length !== 8) return;
+
+            if (cepMensagem) cepMensagem.textContent = 'Consultando CEP...';
+            fetch('https://viacep.com.br/ws/' + cep + '/json/')
+                .then(function (resposta) {
+                    if (!resposta.ok) throw new Error('Falha na consulta');
+                    return resposta.json();
+                })
+                .then(function (endereco) {
+                    if (endereco.erro) throw new Error('CEP não encontrado.');
+                    if (enderecoInput) enderecoInput.value = endereco.logradouro || '';
+                    if (bairroInput) bairroInput.value = endereco.bairro || '';
+                    if (cidadeInput) cidadeInput.value = endereco.localidade || '';
+                    if (ufInput) ufInput.value = endereco.uf || '';
+                    if (cepMensagem) cepMensagem.textContent = 'Endereço preenchido automaticamente.';
+                })
+                .catch(function (erro) {
+                    if (cepMensagem) cepMensagem.textContent = erro.message || 'Não foi possível consultar o CEP.';
+                });
+        }
+
+        if (cepInput) {
+            cepInput.addEventListener('input', function () {
+                cepInput.value = formatarCep(cepInput.value);
+            });
+            cepInput.addEventListener('blur', consultarCep);
         }
     })();
 </script>

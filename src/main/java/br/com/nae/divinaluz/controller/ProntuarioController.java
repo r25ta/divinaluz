@@ -133,6 +133,7 @@ public class ProntuarioController {
             RedirectAttributes redirectAttributes) {
         TipoTratamento tratamentoEscolhido = assistido.getTratamentoAtual();
         assistido.setTratamentoAtual(null);
+        atualizarResidenciaLegada(assistido);
         assistidoRepository.save(assistido);
 
         if ("TRABALHADOR".equals(assistido.getVinculo())) {
@@ -180,6 +181,14 @@ public class ProntuarioController {
 
         assistido.setNome(dadosForm.getNome());
         assistido.setResidencia(dadosForm.getResidencia());
+        assistido.setCep(dadosForm.getCep());
+        assistido.setEndereco(dadosForm.getEndereco());
+        assistido.setNumero(dadosForm.getNumero());
+        assistido.setComplemento(dadosForm.getComplemento());
+        assistido.setBairro(dadosForm.getBairro());
+        assistido.setCidade(dadosForm.getCidade());
+        assistido.setUf(dadosForm.getUf());
+        atualizarResidenciaLegada(assistido);
         assistido.setDataNascimento(dadosForm.getDataNascimento());
         assistido.setEstadoCivil(dadosForm.getEstadoCivil());
         assistido.setSexo(dadosForm.getSexo());
@@ -199,6 +208,20 @@ public class ProntuarioController {
         }
 
         return "redirect:/prontuario/" + assistidoId;
+    }
+
+    private void atualizarResidenciaLegada(Assistido assistido) {
+        List<String> partes = new ArrayList<>();
+        if (assistido.getEndereco() != null && !assistido.getEndereco().isBlank()) partes.add(assistido.getEndereco());
+        if (assistido.getNumero() != null && !assistido.getNumero().isBlank()) partes.add("n. " + assistido.getNumero());
+        if (assistido.getComplemento() != null && !assistido.getComplemento().isBlank()) partes.add(assistido.getComplemento());
+        if (assistido.getBairro() != null && !assistido.getBairro().isBlank()) partes.add(assistido.getBairro());
+        if (assistido.getCidade() != null && !assistido.getCidade().isBlank()) {
+            partes.add(assistido.getUf() != null && !assistido.getUf().isBlank()
+                    ? assistido.getCidade() + "/" + assistido.getUf().toUpperCase()
+                    : assistido.getCidade());
+        }
+        assistido.setResidencia(String.join(", ", partes));
     }
 
     // Exclusão lógica (item 1): nunca apaga o prontuário, só marca como inativo — o assistido

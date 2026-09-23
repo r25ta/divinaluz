@@ -29,7 +29,8 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 ## 3. Modelagem de Dados (Entidades)
 
 ### 3.1. Assistido (Dados Cadastrais)
-- **Atributos:** ID (PK), Nome, Residência, Data de Nascimento (Idade é `@Transient`, calculada como `Period.between(dataNascimento, hoje)`), Estado Civil, Sexo (M/F/I — Indefinido), E-mail, Vínculo (String livre: ASSISTIDO, TRABALHADOR, ALUNO), Dia de Assistência (Enum `DiaFrequencia`, opcional), Ciclo Iniciado Em (data-base para contar sessões/avaliações/entrevistas do ciclo atual), Ativo (boolean, default `true` — exclusão lógica).
+- **Atributos:** ID (PK), Nome, CEP, Endereço, Número, Complemento, Bairro, Cidade, UF, Residência (resumo legado), Data de Nascimento (Idade é `@Transient`, calculada como `Period.between(dataNascimento, hoje)`), Estado Civil, Sexo (M/F/I — Indefinido), E-mail, Vínculo (ASSISTIDO ou TRABALHADOR), Dia de Assistência (Enum `DiaFrequencia`, opcional), Ciclo Iniciado Em (data-base para contar sessões/avaliações/entrevistas do ciclo atual), Ativo (boolean, default `true` — exclusão lógica).
+- **Endereço:** o formulário consulta a API pública ViaCEP pelo CEP e preenche Endereço, Bairro, Cidade e UF. Número e Complemento são informados manualmente. O campo `residencia` continua sendo mantido como resumo para compatibilidade com listagens e prontuários antigos.
 - **Relacionamentos:** N:1 com `TipoTratamento` (`tratamentoAtual`), 1:N com `Avaliacao`, `SessaoTratamento` e `HistoricoDiaFrequencia`, 1:1 com `Trabalhador` (opcional).
 
 ### 3.2. DiaFrequencia (enum)
@@ -58,11 +59,16 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 ### 3.8. HistoricoDiaFrequencia (log de rastreabilidade)
 - **Atributos:** ID (PK), Assistido (FK), Dia Anterior, Dia Novo (ambos `DiaFrequencia`, nuláveis), Data/Hora, Motivo (texto livre, opcional).
 
+### 3.9. Prelecao (Escala de Preleções)
+- **Atributos:** ID (PK), Data da Apresentação, Tema/Título e Preletor (FK para `Trabalhador`).
+- **Regras:** o preletor precisa possuir a função `EXPOSITOR_PRELETOR`; a data deve cair em Domingo ou Terça-feira; existe no máximo uma preleção por data/sessão.
+- **Fluxo:** o formulário preserva tema e preletor quando a data é inválida e limpa somente a data, exibindo a mensagem de validação.
+
 ## 4. Estrutura do Projeto
 
 - **`application.properties`**: PostgreSQL na porta 5432 (`divinaluz_db`), aplicação na porta 8081 com contexto `/divinaluz`. Spring Security removido temporariamente. Schema gerenciado por Flyway (`ddl-auto=validate`, `baseline-on-migrate=true`).
-- **Pacote `model`**: `Assistido`, `Avaliacao`, `Entrevista`, `SessaoTratamento`, `TipoTratamento`, `Trabalhador`, `DiaFrequencia` (enum), `TipoTrabalhador` (enum), `Evolucao` (enum), `HistoricoDiaFrequencia`.
-- **Pacote `repository`**: um `JpaRepository` por entidade (`AssistidoRepository`, `AvaliacaoRepository`, `EntrevistaRepository`, `SessaoRepository`, `TipoTratamentoRepository`, `TrabalhadorRepository`, `HistoricoDiaFrequenciaRepository`), cada um com os `findBy...`/`countBy...` necessários às regras de negócio (ex.: `countByAssistidoIdAndDataConsultaGreaterThanEqual` para contar sessões do ciclo atual).
+- **Pacote `model`**: `Assistido`, `Avaliacao`, `Entrevista`, `SessaoTratamento`, `TipoTratamento`, `Trabalhador`, `Prelecao`, `DiaFrequencia` (enum), `TipoTrabalhador` (enum), `Evolucao` (enum), `HistoricoDiaFrequencia`.
+- **Pacote `repository`**: um `JpaRepository` por entidade (`AssistidoRepository`, `AvaliacaoRepository`, `EntrevistaRepository`, `SessaoRepository`, `TipoTratamentoRepository`, `TrabalhadorRepository`, `PrelecaoRepository`, `HistoricoDiaFrequenciaRepository`), cada um com os `findBy...`/`countBy...` necessários às regras de negócio (ex.: `countByAssistidoIdAndDataConsultaGreaterThanEqual` para contar sessões do ciclo atual).
 - **Pacote `service`**: `TratamentoService` concentra todas as regras da seção 2 (`registrarSessao`, `registrarAvaliacao`, `registrarEntrevista`, `definirTratamento`, `validarDiaDaSemana` privado).
 - **Pacote `config`**: `TipoTratamentoConverter` (Spring `Converter<String, TipoTratamento>`) para os `<select>` do Thymeleaf fazerem bind direto na entidade pelo ID. Enums (`DiaFrequencia`, `TipoTrabalhador`, `Evolucao`) não precisam de converter próprio — Spring já converte `String -> Enum` nativamente.
 - **Pacote `exception`**: `RegraNegocioException` (violação genérica) e `AvaliacaoPendenteException` (subclasse específica para o bloqueio das 4 sessões).
@@ -78,13 +84,16 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
   - `GET /prontuario/{id}/nova-sessao` / `POST /prontuario/{assistidoId}/sessao` → registro de sessão.
   - `GET /prontuario/{id}/nova-avaliacao` / `POST /prontuario/{assistidoId}/avaliacao` → registro de avaliação (diagnóstico).
   - `GET /prontuario/{id}/nova-entrevista?avaliacaoId=X` / `POST /prontuario/{assistidoId}/entrevista?avaliacaoId=X` → registro da entrevista referente a uma avaliação específica.
-- **Migrations Flyway**: V1 (tabelas iniciais) · V2 (`avaliacao`) · V3 (`tipo_tratamento` + seed) · V4 (`assistido.tratamento_atual_id`) · V5 (`avaliacao.tratamento_indicado_id`, hoje sem uso — ver 6) · V6 (`assistido.ciclo_iniciado_em`) · V7 (`trabalhador` + `trabalhador_funcao`) · V8 (`assistido.data_nascimento`) · V9 (`assistido.dia_frequencia`) · V10 (`historico_dia_frequencia`) · V11 (`assistido.ativo`) · V12 (`avaliacao.observacoes`) · V13 (`entrevista`).
+  - O formulário de cadastro/edição possui endereço estruturado (CEP, Endereço, Número, Complemento, Bairro, Cidade e UF). A categoria `ALUNO` não é mais oferecida na interface; permanecem `ASSISTIDO` e `TRABALHADOR`. O tratamento não é exibido no cadastro inicial, somente na edição.
+- **Pacote `controller`**: `PrelecaoController` com as rotas `GET /prelecao`, `GET /prelecao/novo`, `POST /prelecao/salvar`, edição e exclusão. A listagem e o formulário estão disponíveis pela navegação principal.
+- **Migrations Flyway**: V1 (tabelas iniciais) · V2 (`avaliacao`) · V3 (`tipo_tratamento` + seed) · V4 (`assistido.tratamento_atual_id`) · V5 (`avaliacao.tratamento_indicado_id`, hoje sem uso — ver 6) · V6 (`assistido.ciclo_iniciado_em`) · V7 (`trabalhador` + `trabalhador_funcao`) · V8 (`assistido.data_nascimento`) · V9 (`assistido.dia_frequencia`) · V10 (`historico_dia_frequencia`) · V11 (`assistido.ativo`) · V12 (`avaliacao.observacoes`) · V13 (`entrevista`) · V14 (`prelecao`) · V15 (endereço estruturado: CEP, Endereço, Bairro, Cidade e UF) · V16 (Número e Complemento).
 
 ## 5. Front-end (Thymeleaf/Templates)
 - **`fragments/layout.html`**: `pageHead(title)` (⚠️ não usar o nome `head` — colide com a tag `<head>`) e `navbar`. CSS próprio em `static/css/app.css` (paleta teal/turquesa inspirada no cartão físico original).
 - **`index.html`**: listagem com busca por nome, filtro de inativos, colunas de Vínculo/Dia/Tratamento e o checklist de **Frequência (Mês)** — mostra a própria data (`dd/MM`) de cada dia esperado no mês, verde se houve sessão e cinza se faltou.
-- **`form.html`**: cadastro/edição (mesmo template, `modoEdicao` liga/desliga textos e rotas). Mostra a seção de Funções de Trabalhador via JS quando `Vinculo = TRABALHADOR` é selecionado, e o campo "Data da 1ª Sessão" quando um tratamento novo é escolhido.
-- **`prontuario.html`**: resumo rápido no topo (vínculo, status, tratamento, dia de assistência, idade, próxima entrevista prevista + ações principais), cards de Dados/Tratamento/Dia de Assistência/Perfil de Trabalhador em grade, e abas (Sessões / Avaliações) para o histórico.
+- **`form.html`**: cadastro/edição (mesmo template, `modoEdicao` liga/desliga textos e rotas). Mostra a seção de Funções de Trabalhador via JS quando `Vinculo = TRABALHADOR` é selecionado. O cadastro inicial não exibe tratamento; a edição permite alterar o tratamento. O endereço é dividido em CEP, Endereço, Número, Complemento, Bairro, Cidade e UF, com preenchimento via ViaCEP. O botão principal exibe `Salvar`.
+- **`prelecao-form.html` / `prelecao-lista.html`**: cadastro, edição, exclusão e listagem da escala de preleções. A validação aceita somente Domingo/Terça e uma preleção por data.
+- **`prontuario.html`**: exibe os dados do assistido, o tratamento atual e o histórico de avaliações/tratamentos anteriores. O módulo não exibe dia de assistência, perfil de trabalhador, próxima entrevista, aba de sessões ou botões para registrar sessão/avaliação.
 - **`sessao-form.html`**: data + 7 checkboxes de recomendações + observações.
 - **`avaliacao-form.html`**: data (livre), evolução, histórico, observações.
 - **`entrevista-form.html`**: mostra a qual avaliação se refere, data (com aviso do dia de assistência esperado), entrevistador, tratamento indicado.
@@ -110,12 +119,12 @@ Sistema WEB para substituição do prontuário físico (fichas azuis) por um amb
 2. Cobrir as regras de negócio com testes unitários JUnit em `TratamentoService` (hoje a cobertura é só end-to-end via `smoke-test.ps1`).
 3. Avaliar se vale a pena um `DROP COLUMN` das colunas legadas órfãs (`assistido.idade`, `avaliacao.entrevistador`, `avaliacao.tratamento_indicado_id`) depois que não houver mais dúvida sobre a migração dos dados antigos.
 4. Criar módulo de Entrevista.
-5. Modulo Cadastro de Preleção:
+5. Módulo Cadastro de Preleção (base implementada; integração com Sessão pendente):
 O cadastro de preleção deverá ser construído uma escala conforme os dias de assistência espiritual da casa, neste caso Domingo ou Terça, portanto o sistema deverá permitir o cadastramento de preletores (Trabalhador) somente nestes dias da semana.
 O preletor deve escolher a data da apresentação, selecionar o nome do preletor e o titulo da preleção. Essas informações são importantes porque o modulo Sessão deverá recuperar a informação da preleção automaticamente na respectiva data.
 Ex: Data: 31/08/2026 - Preletor: Paulo de Tarso - Tema: Evangelho no Lar
     Data: 01/09/2026 - Preletor: Chico Xavier   - Tema: Amar e Perdoar
-6. Modulo Sessão:
+6. Módulo Sessão (pendente):
 Durante a semana ocorre duas sessões de atendimento aos domingos as 08:00 e as terças as 19:00, as sessões são compostas de trabalhadores e assistidos.
 Para cada sessão é realizado um cadastro dos trabalhadores e sua respectiva função: 
 DIRIGENTE: Responsável pela gestão da sessão, toda sessão precisa de um dirigente.

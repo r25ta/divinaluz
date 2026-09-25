@@ -17,58 +17,171 @@
                 </a>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-12">
-                    <div class="dl-card mb-0">
-                        <div class="dl-card-body d-flex align-items-center gap-3 flex-wrap">
-                            <span class="label">Status do Cartão</span>
-                            <span class="dl-badge dl-badge-info"
-                                  th:text="${statusCartao != null ? statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
+            <!-- Cartão virtual: reproduz a ficha física (frente com os dados, verso com as marcações
+                 de presença do ciclo atual). -->
+            <div class="dl-cartao" th:with="restantes=${sessoesPorCartao - #lists.size(presencasDoCiclo)}">
+                <div class="dl-cartao-frente">
+                    <div class="dl-cartao-topo">
+                        <div class="dl-cartao-casa">
+                            <span class="dl-cartao-selo">NAE</span>
+                            <div>
+                                <div class="nome">N.A.E. Divina Luz</div>
+                                <div class="sub">Assistência Espiritual</div>
+                            </div>
+                        </div>
+                        <span class="dl-cartao-status"
+                              th:classappend="${statusCartao != null ? statusCartao.badgeClasse : 'dl-badge-success'}">
+                            <i class="bi" th:classappend="${statusCartao != null ? statusCartao.icone : 'bi-heart-pulse-fill'}"></i>
+                            <span th:text="${statusCartao != null ? statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
+                        </span>
+                    </div>
+
+                    <div class="dl-cartao-titular">
+                        <span class="rotulo">Titular</span>
+                        <div class="nome" th:text="${assistido.nome}">Nome do Assistido</div>
+                        <div class="meta">
+                            <span th:if="${assistido.diaFrequencia != null}">
+                                <i class="bi bi-clock"></i>
+                                <span th:text="${assistido.diaFrequencia.label}">Domingo, 08h</span>
+                            </span>
+                            <span th:if="${assistido.cicloIniciadoEm != null}">
+                                <i class="bi bi-flag"></i>
+                                Ciclo desde
+                                <span th:text="${#temporals.format(assistido.cicloIniciadoEm, 'dd/MM/yyyy')}"></span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Com o cartão retido, o tratamento das próximas 4 sessões ainda vai ser
+                         decidido/comunicado na entrevista, então não é exibido ao assistido. -->
+                    <div class="dl-cartao-tratamento" th:unless="${cartaoRetido}">
+                        <th:block th:if="${assistido.tratamentoAtual != null}">
+                            <span class="codigo" th:text="${assistido.tratamentoAtual.codigo}">P2</span>
+                            <div class="descricao">
+                                <span class="rotulo">Tratamento atual</span>
+                                <div class="nome" th:text="${assistido.tratamentoAtual.nome}">Nome do tratamento</div>
+                            </div>
+                        </th:block>
+                        <div th:if="${assistido.tratamentoAtual == null}" class="descricao">
+                            <span class="rotulo">Tratamento atual</span>
+                            <div class="nome">Ainda não definido</div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-8">
-                    <div class="dl-card h-100 mb-0">
-                        <div class="dl-card-header">
-                            <div class="dl-card-header-title">
-                                <span class="dl-card-icon"><i class="bi bi-heart-pulse"></i></span>
-                                <h2>Tratamento Atual</h2>
-                            </div>
-                        </div>
-                        <div class="dl-card-body">
-                            <div th:if="${assistido.tratamentoAtual != null}" class="d-flex align-items-start gap-3">
-                                <span class="dl-badge dl-badge-teal" style="font-size: 1rem; padding: 0.55rem 1rem;"
-                                      th:text="${assistido.tratamentoAtual.codigo}"></span>
-                                <div>
-                                    <div class="fw-semibold" th:text="${assistido.tratamentoAtual.nome}"></div>
-                                    <div class="dl-muted small" th:text="${assistido.tratamentoAtual.comoFunciona}"></div>
-                                </div>
-                            </div>
-                            <span th:if="${assistido.tratamentoAtual == null}" class="dl-muted">Tratamento ainda não definido.</span>
+
+                <!-- Cartão retido: só o aviso do status, sem marcações nem histórico (regra 4). -->
+                <div class="dl-cartao-verso" th:if="${cartaoRetido}">
+                    <div class="dl-cartao-retido">
+                        <span class="dl-cartao-retido-icon">
+                            <i class="bi" th:classappend="${statusCartao.icone}"></i>
+                        </span>
+                        <div>
+                            <div class="titulo" th:text="${statusCartao.label}">Aguardando Avaliação</div>
+                            <p class="mb-0" th:if="${statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">
+                                Seu cartão está retido para a avaliação espiritual. As presenças voltam a
+                                aparecer aqui quando o novo tratamento for liberado na entrevista.
+                            </p>
+                            <p class="mb-0" th:if="${statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
+                                Sua avaliação já foi concluída. Procure a recepção para a entrevista: é nela
+                                que o tratamento das próximas sessões é definido e o cartão é liberado.
+                            </p>
+                            <p class="dl-muted small mb-0 mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                Enquanto o cartão estiver neste status, não há marcação de presença.
+                            </p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="dl-card h-100 mb-0">
-                        <div class="dl-card-header">
-                            <div class="dl-card-header-title">
-                                <span class="dl-card-icon"><i class="bi bi-calendar-check"></i></span>
-                                <h2>Presenças</h2>
-                            </div>
+
+                <div class="dl-cartao-verso" th:unless="${cartaoRetido}">
+                    <div class="dl-cartao-verso-head">
+                        <span class="rotulo">Presenças deste cartão</span>
+                        <span class="contagem">
+                            <strong th:text="${#lists.size(presencasDoCiclo)}">0</strong>
+                            <span th:text="'/ ' + ${sessoesPorCartao}">/ 4</span>
+                        </span>
+                    </div>
+
+                    <div class="dl-marcacoes">
+                        <div class="dl-marcacao ok" th:each="sessao : ${presencasDoCiclo}">
+                            <span class="selo">
+                                <i class="bi bi-check-lg"></i>
+                            </span>
+                            <span class="numero" th:text="${sessao.numeroSerie != null ? sessao.numeroSerie + 'ª' : '—'}">1ª</span>
+                            <span class="data" th:text="${#temporals.format(sessao.dataConsulta, 'dd/MM')}">30/08</span>
                         </div>
-                        <div class="dl-card-body">
-                            <strong class="fs-3" th:text="${#lists.size(sessoes)}">0</strong>
-                            <span class="dl-muted"> sessões registradas</span>
+                        <div class="dl-marcacao vazia" th:each="numero : ${marcacoesVazias}">
+                            <span class="selo"><i class="bi bi-dash"></i></span>
+                            <span class="numero" th:text="${numero} + 'ª'">2ª</span>
+                            <span class="data">—</span>
                         </div>
+                    </div>
+
+                    <div class="dl-cartao-nota">
+                        <th:block th:if="${statusCartao == null or statusCartao.name() == 'EM_TRATAMENTO'}">
+                            <i class="bi bi-info-circle"></i>
+                            <span th:if="${restantes > 1}"
+                                  th:text="'Faltam ' + ${restantes} + ' sessões para a avaliação espiritual.'"></span>
+                            <span th:if="${restantes == 1}">Falta 1 sessão para a avaliação espiritual.</span>
+                            <span th:if="${restantes <= 0}">Cartão completo: será encaminhado para avaliação espiritual.</span>
+                        </th:block>
+                        <th:block th:if="${statusCartao != null and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">
+                            <i class="bi bi-hourglass-split"></i>
+                            Cartão completo e retido para a avaliação espiritual.
+                        </th:block>
+                        <th:block th:if="${statusCartao != null and statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
+                            <i class="bi bi-chat-left-text"></i>
+                            Avaliação concluída. Aguardando a entrevista que define o próximo tratamento.
+                        </th:block>
+                        <th:block th:if="${statusCartao != null and statusCartao.name() == 'INCOMPLETO_POR_TEMPO'}">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Cartão encerrado por ausência. Um novo tratamento P2 será iniciado na próxima presença.
+                        </th:block>
                     </div>
                 </div>
             </div>
 
-            <div class="dl-card">
+            <!-- QR do cartão: a recepção escaneia na chegada para carimbar a presença. Fica visível
+                 também com o cartão retido, porque é assim que a recepção identifica a pessoa. -->
+            <div class="dl-cartao-qr">
+                <img th:src="@{/prontuario/{id}/cartao/qrcode.png(id=${assistido.id})}"
+                     alt="QR code do cartão de assistência" width="150" height="150">
+                <div class="dl-cartao-qr-texto">
+                    <span class="dl-eyebrow">Check-in</span>
+                    <div class="titulo">Apresente este QR na recepção</div>
+                    <p class="dl-muted small mb-0">
+                        A recepção escaneia o código para carimbar sua presença na sessão.
+                    </p>
+                    <div class="dl-badge dl-badge-success mt-2" th:if="${sessaoAberta != null}">
+                        <i class="bi bi-broadcast"></i>
+                        Check-in aberto — <span th:text="${#temporals.format(sessaoAberta.dataApresentacao, 'dd/MM/yyyy')}"></span>
+                    </div>
+                    <div class="dl-badge dl-badge-neutral mt-2" th:if="${sessaoAberta == null}">
+                        <i class="bi bi-slash-circle"></i> Nenhuma sessão em andamento
+                    </div>
+                </div>
+            </div>
+
+            <div class="dl-cartao-resumo" th:unless="${cartaoRetido}">
+                <div class="dl-cartao-resumo-item">
+                    <span class="valor" th:text="${#lists.size(sessoes)}">0</span>
+                    <span class="rotulo">Presenças no total</span>
+                </div>
+                <div class="dl-cartao-resumo-item">
+                    <span class="valor" th:text="${#lists.size(sessoes) - totalOuvinte}">0</span>
+                    <span class="rotulo">Efetivas</span>
+                </div>
+                <div class="dl-cartao-resumo-item">
+                    <span class="valor" th:text="${totalOuvinte}">0</span>
+                    <span class="rotulo">Como ouvinte</span>
+                </div>
+            </div>
+
+            <div class="dl-card" th:unless="${cartaoRetido}">
                 <div class="dl-card-header">
                     <div class="dl-card-header-title">
                         <span class="dl-card-icon"><i class="bi bi-calendar2-week"></i></span>
-                        <h2>Datas de Presença</h2>
+                        <h2>Histórico de Presenças</h2>
                     </div>
                 </div>
                 <div class="dl-card-body p-0">
@@ -92,8 +205,12 @@
                                         <span th:if="${sessao.prelecao == null}" class="dl-muted">—</span>
                                     </td>
                                     <td>
-                                        <span th:if="${sessao.ouvinte}" class="dl-badge dl-badge-neutral">Ouvinte</span>
-                                        <span th:unless="${sessao.ouvinte}" class="dl-badge dl-badge-success">Presença efetiva</span>
+                                        <span th:if="${sessao.ouvinte}" class="dl-badge dl-badge-neutral">
+                                            <i class="bi bi-ear"></i> Ouvinte
+                                        </span>
+                                        <span th:unless="${sessao.ouvinte}" class="dl-badge dl-badge-success">
+                                            <i class="bi bi-check-circle-fill"></i> Presença efetiva
+                                        </span>
                                     </td>
                                     <td th:text="${sessao.observacoes ?: '—'}"></td>
                                 </tr>

@@ -29,13 +29,96 @@
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
             </div>
+            <div class="alert alert-warning" th:if="${aviso}">
+                <i class="bi bi-info-circle-fill"></i> <span th:text="${aviso}"></span>
+            </div>
+
+            <!-- Check-in em andamento: a recepção precisa ver de longe que o QR está carimbando. -->
+            <div class="dl-checkin-banner" th:if="${sessaoAberta != null and not somenteConsulta}">
+                <span class="dl-checkin-pulse"><i class="bi bi-qr-code-scan"></i></span>
+                <div class="flex-grow-1">
+                    <div class="titulo">Check-in aberto</div>
+                    <div class="dl-muted small">
+                        Sessão de <span th:text="${#temporals.format(sessaoAberta.dataApresentacao, 'dd/MM/yyyy')}"></span>
+                        · <span th:text="${sessaoAberta.tema}"></span>
+                        — escaneie o QR do cartão de cada assistido na chegada.
+                    </div>
+                </div>
+                <form th:action="@{/prelecao/{id}/checkin/fechar(id=${sessaoAberta.id})}" method="post">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="bi bi-stop-circle"></i> Encerrar check-in
+                    </button>
+                </form>
+            </div>
+
+            <!-- Destaque do que acontece nesta semana de assistência (Domingo a Sábado) -->
+            <div class="dl-card dl-semana-card">
+                <div class="dl-card-body" th:with="semDestaque=${#lists.isEmpty(destaques)}">
+                    <div class="dl-semana-head">
+                        <span class="dl-semana-icon">
+                            <i class="bi"
+                               th:classappend="${semDestaque ? 'bi-moon-stars' : (destaqueNaSemana ? 'bi-broadcast' : 'bi-calendar-event')}"></i>
+                        </span>
+                        <div>
+                            <span class="dl-eyebrow"
+                                  th:text="${semDestaque ? 'Escala' : (destaqueNaSemana ? 'Nesta semana' : 'Fora desta semana')}">Nesta semana</span>
+                            <h2 class="dl-semana-titulo"
+                                th:text="${semDestaque ? 'Sem preleções futuras' : (destaqueNaSemana ? 'Preleção desta semana' : 'Próxima preleção agendada')}">Preleção desta semana</h2>
+                        </div>
+                    </div>
+
+                    <div th:if="${semDestaque}" class="dl-muted mt-2">
+                        As preleções já realizadas ficam no histórico abaixo.
+                    </div>
+
+                    <div class="dl-semana-lista" th:unless="${semDestaque}">
+                        <div class="dl-semana-item" th:each="item : ${destaques}">
+                            <div class="dl-semana-data">
+                                <span class="dia" th:text="${#temporals.format(item.prelecao.dataApresentacao, 'dd')}">31</span>
+                                <span class="mes" th:text="${#temporals.format(item.prelecao.dataApresentacao, 'MM/yyyy')}">08/2026</span>
+                            </div>
+                            <div class="dl-semana-info">
+                                <div class="tema" th:text="${item.prelecao.tema}">Tema da preleção</div>
+                                <div class="dl-muted small">
+                                    <i class="bi bi-person-badge"></i>
+                                    <span th:text="${item.prelecao.preletor.assistido.nome}">Preletor</span>
+                                    <span class="mx-1">·</span>
+                                    <span th:text="${item.prelecao.dataApresentacao.dayOfWeek.name() == 'SUNDAY' ? 'Domingo, 08h' : 'Terça-feira, 19h'}">Domingo, 08h</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtros por situação: combinam com a busca por texto -->
+            <div class="dl-filtro-chips" th:if="${not #lists.isEmpty(escala)}">
+                <button type="button" class="dl-filtro-chip active" data-filtro="TODAS">
+                    <i class="bi bi-list-ul"></i> Todas
+                    <span class="dl-filtro-contagem" th:text="${#lists.size(escala)}">0</span>
+                </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="ESTA_SEMANA">
+                    <i class="bi bi-broadcast"></i> Esta semana
+                    <span class="dl-filtro-contagem" th:text="${totalEstaSemana}">0</span>
+                </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="AGENDADA">
+                    <i class="bi bi-calendar-event"></i> Agendadas
+                    <span class="dl-filtro-contagem" th:text="${totalAgendadas}">0</span>
+                </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="REALIZADA">
+                    <i class="bi bi-check-circle-fill"></i> Realizadas
+                    <span class="dl-filtro-contagem" th:text="${totalRealizadas}">0</span>
+                </button>
+            </div>
 
             <div class="dl-card">
                 <div class="dl-card-body p-0">
                     <div class="table-responsive">
-                        <table class="dl-table" id="tabelaPrelecoes" th:if="${not #lists.isEmpty(prelecoes)}">
+                        <table class="dl-table" id="tabelaPrelecoes" th:if="${not #lists.isEmpty(escala)}">
                             <thead>
                             <tr>
+                                <th>Situação</th>
                                 <th>Data</th>
                                 <th>Preletor</th>
                                 <th>Tema</th>
@@ -43,17 +126,44 @@
                             </tr>
                             </thead>
                             <tbody>
-                            <tr th:each="prelecao : ${prelecoes}" class="linha-prelecao"
-                                th:attr="data-busca=${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy') + ' ' + prelecao.preletor.assistido.nome + ' ' + prelecao.tema}">
-                                <td th:text="${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy')}" class="fw-semibold"></td>
-                                <td th:text="${prelecao.preletor.assistido.nome}"></td>
-                                <td th:text="${prelecao.tema}"></td>
+                            <tr th:each="item : ${escala}" class="linha-prelecao"
+                                th:classappend="${item.situacao.name() == 'REALIZADA' ? 'linha-realizada' : (item.situacao.name() == 'ESTA_SEMANA' ? 'linha-semana' : '')}"
+                                th:attr="data-situacao=${item.situacao.name()},data-busca=${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy') + ' ' + item.prelecao.preletor.assistido.nome + ' ' + item.prelecao.tema}">
+                                <td>
+                                    <span class="dl-badge" th:classappend="${item.situacao.badgeClasse}"
+                                          th:title="${item.situacao.label}">
+                                        <i class="bi" th:classappend="${item.situacao.icone}"></i>
+                                        <span th:text="${item.situacao.label}">Situação</span>
+                                    </span>
+                                </td>
+                                <td class="fw-semibold text-nowrap">
+                                    <span th:text="${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy')}"></span>
+                                    <div class="dl-muted small"
+                                         th:text="${item.prelecao.dataApresentacao.dayOfWeek.name() == 'SUNDAY' ? 'Domingo, 08h' : 'Terça-feira, 19h'}">Domingo, 08h</div>
+                                </td>
+                                <td th:text="${item.prelecao.preletor.assistido.nome}"></td>
+                                <td th:text="${item.prelecao.tema}"></td>
                                 <td class="text-center" th:unless="${somenteConsulta}">
                                     <div class="d-flex justify-content-center gap-2">
-                                        <a th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${prelecao.id})}" class="btn btn-outline-teal btn-sm">
+                                        <!-- Check-in só na sessão de hoje: é ela que recebe presença. -->
+                                        <form th:if="${item.prelecao.dataApresentacao.equals(hoje) and not item.prelecao.checkinAberto}"
+                                              th:action="@{/prelecao/{id}/checkin/abrir(id=${item.prelecao.id})}" method="post">
+                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                            <button type="submit" class="btn btn-teal btn-sm text-white" title="Abrir check-in por QR code">
+                                                <i class="bi bi-qr-code-scan"></i> Check-in
+                                            </button>
+                                        </form>
+                                        <form th:if="${item.prelecao.checkinAberto}"
+                                              th:action="@{/prelecao/{id}/checkin/fechar(id=${item.prelecao.id})}" method="post">
+                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Encerrar check-in">
+                                                <i class="bi bi-stop-circle"></i> Encerrar
+                                            </button>
+                                        </form>
+                                        <a th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${item.prelecao.id})}" class="btn btn-outline-teal btn-sm">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <form th:action="@{/prelecao/{prelecaoId}/excluir(prelecaoId=${prelecao.id})}" method="post" onsubmit="return confirm('Deseja excluir esta preleção?');">
+                                        <form th:action="@{/prelecao/{prelecaoId}/excluir(prelecaoId=${item.prelecao.id})}" method="post" onsubmit="return confirm('Deseja excluir esta preleção?');">
                                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                             <button type="submit" class="btn btn-outline-danger btn-sm">
                                                 <i class="bi bi-trash"></i>
@@ -66,13 +176,13 @@
                         </table>
                     </div>
 
-                    <div class="dl-table-empty" th:if="${#lists.isEmpty(prelecoes)}">
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(escala)}">
                         <i class="bi bi-calendar2-event"></i>
                         <p class="mb-0">Nenhuma preleção cadastrada ainda.</p>
                     </div>
                     <div class="dl-table-empty d-none" id="nenhumaPrelecaoEncontrada">
                         <i class="bi bi-search"></i>
-                        <p class="mb-0">Nenhuma preleção corresponde à busca.</p>
+                        <p class="mb-0">Nenhuma preleção corresponde ao filtro.</p>
                     </div>
                 </div>
             </div>
@@ -84,17 +194,31 @@
         var busca = document.getElementById('buscaPrelecao');
         var linhas = document.querySelectorAll('.linha-prelecao');
         var vazio = document.getElementById('nenhumaPrelecaoEncontrada');
-        if (!busca) return;
+        var chips = document.querySelectorAll('.dl-filtro-chip');
+        var filtroAtual = 'TODAS';
 
-        busca.addEventListener('input', function () {
-            var termo = busca.value.trim().toLowerCase();
+        function aplicar() {
+            var termo = busca ? busca.value.trim().toLowerCase() : '';
             var visiveis = 0;
             linhas.forEach(function (linha) {
-                var corresponde = linha.getAttribute('data-busca').toLowerCase().includes(termo);
-                linha.style.display = corresponde ? '' : 'none';
-                if (corresponde) visiveis++;
+                var casaTermo = linha.getAttribute('data-busca').toLowerCase().includes(termo);
+                var casaSituacao = filtroAtual === 'TODAS' || linha.getAttribute('data-situacao') === filtroAtual;
+                var mostrar = casaTermo && casaSituacao;
+                linha.style.display = mostrar ? '' : 'none';
+                if (mostrar) visiveis++;
             });
             if (vazio) vazio.classList.toggle('d-none', visiveis > 0);
+        }
+
+        if (busca) busca.addEventListener('input', aplicar);
+
+        chips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                chips.forEach(function (outro) { outro.classList.remove('active'); });
+                chip.classList.add('active');
+                filtroAtual = chip.getAttribute('data-filtro');
+                aplicar();
+            });
         });
     })();
 </script>

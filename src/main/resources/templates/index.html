@@ -51,7 +51,8 @@
                                     <span class="dl-badge dl-badge-neutral" data-sort-value="vinculo" th:text="${a.vinculo}"></span>
                                 </td>
                                 <td>
-                                    <span class="dl-badge dl-badge-info"
+                                    <span class="dl-badge"
+                                          th:classappend="${a.statusCartao != null ? a.statusCartao.badgeClasse : 'dl-badge-success'}"
                                           data-sort-value="status"
                                           th:text="${a.statusCartao != null ? a.statusCartao.label : 'Em Tratamento'}">
                                         Em Tratamento

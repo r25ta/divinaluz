@@ -25,6 +25,9 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         .requestMatchers("/usuarios/**").hasRole("ADMINISTRADOR")
                         .requestMatchers("/prontuario/*/cartao").authenticated()
+                        // O QR do próprio cartão precisa carregar para o assistido; a posse é
+                        // checada no ProntuarioController (exigirAcessoAoCartao).
+                        .requestMatchers("/prontuario/*/cartao/qrcode.png").authenticated()
                         .requestMatchers(HttpMethod.GET, "/prelecao").authenticated()
                         .requestMatchers("/**").hasAnyRole("ADMINISTRADOR", "TRABALHADOR")
                         .anyRequest().authenticated())

@@ -41,6 +41,9 @@ if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
 $nomeTeste = "SMOKE_TEST_$(Get-Date -Format yyyyMMddHHmmssfff)"
 $nomeEditado = "${nomeTeste}_EDITADO"
 $nomeTrabalhador = "SMOKE_TEST_TRAB_$(Get-Date -Format yyyyMMddHHmmssfff)"
+# Preleções criadas pelo teste do check-in por QR code (seção 16).
+$temaPrelecaoTeste = "SMOKE_TEST_PRELECAO_HOJE"
+$temaPrelecaoAntiga = "SMOKE_TEST_PRELECAO_ANTIGA"
 
 function Check([string]$Nome, [bool]$Condicao, [string]$Detalhe = "") {
     if ($Condicao) {
@@ -341,15 +344,50 @@ try {
         Check "Assistido não consegue incluir preleção (403)" ($r.StatusCode -eq 403)
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/1/excluir"
         Check "Assistido não consegue excluir preleção (403)" ($r.StatusCode -eq 403)
+        # O QR é o próprio cartão: o assistido carrega o dele, mas não o de outra pessoa.
+        $r = Invoke-CurlForm -Url "$cartaoUrl/qrcode.png"
+        Check "Assistido carrega o QR do próprio cartão (200)" ($r.StatusCode -eq 200 -and $r.Body -match "image/png")
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/1/cartao/qrcode.png"
+        Check "Assistido não carrega o QR do cartão de outra pessoa (403)" ($r.StatusCode -eq 403)
+
         $r = Invoke-CurlForm -Url "$prontuarioUrl/editar"
         Check "Assistido não acessa a edição do cadastro (403)" ($r.StatusCode -eq 403)
         $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/editar" -Form @{ nome = "HACK" }
         Check "Assistido não consegue alterar o cadastro (403)" ($r.StatusCode -eq 403)
+
+        # Regra 4 do cartão: com o cartão retido (Aguardando Avaliação / Aguardando Entrevista) o
+        # assistido perde a visibilidade do conteúdo e vê apenas os próprios dados e o status. O
+        # status é posicionado direto no banco porque aqui o ciclo já foi liberado pela entrevista.
+        Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_AVALIACAO' WHERE id = $assistidoId;" | Out-Null
+        $r = Invoke-CurlForm -Url $cartaoUrl
+        Check "Cartão 'Aguardando Avaliação' ainda abre para o assistido (200)" ($r.StatusCode -eq 200)
+        Check "Cartão retido mostra o nome e o status ao assistido" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Aguardando Avaliação")
+        Check "Cartão retido esconde as marcações de presença" ($r.Body -notmatch "dl-marcacao")
+        Check "Cartão retido esconde o histórico de presenças" ($r.Body -notmatch "Histórico de Presenças")
+        Check "Cartão retido esconde o tratamento atual" ($r.Body -notmatch "Tratamento atual")
+        Check "Cartão retido avisa que não há marcação de presença" ($r.Body -match "não há marcação de presença")
+
+        Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
+        $r = Invoke-CurlForm -Url $cartaoUrl
+        Check "Cartão 'Aguardando Entrevista' também fica retido para o assistido" ($r.StatusCode -eq 200 -and $r.Body -match "Aguardando Entrevista" -and $r.Body -notmatch "dl-marcacao")
+        Check "Cartão retido orienta o assistido a procurar a entrevista" ($r.Body -match "Procure a recepção para a entrevista")
+
+        Invoke-Sql "UPDATE assistido SET status_cartao = 'EM_TRATAMENTO' WHERE id = $assistidoId;" | Out-Null
+        $r = Invoke-CurlForm -Url $cartaoUrl
+        Check "Cartão volta a mostrar marcações e histórico com 'Em Tratamento'" ($r.Body -match "dl-marcacao" -and $r.Body -match "Histórico de Presenças")
     } finally {
         if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
         $script:CookieJar = $adminCookieJar
         $script:CsrfToken = $adminCsrfToken
     }
+
+    # Regra 5: o cartão retido esconde o conteúdo do assistido, mas o staff (recepção/entrevistador)
+    # continua vendo tudo para poder encaminhar a pessoa.
+    Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
+    $r = Invoke-CurlForm -Url $cartaoUrl
+    Check "Staff vê marcações e histórico mesmo com o cartão 'Aguardando Entrevista'" ($r.Body -match "dl-marcacao" -and $r.Body -match "Histórico de Presenças")
+    Check "Staff vê o tratamento atual mesmo com o cartão retido" ($r.Body -match "Tratamento atual")
+    Invoke-Sql "UPDATE assistido SET status_cartao = 'EM_TRATAMENTO' WHERE id = $assistidoId;" | Out-Null
 
     # 15. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
     # 2024-01-14 é domingo.
@@ -377,6 +415,80 @@ try {
         Check "Função atualizada para Passista (Dirigente removida)" ($funcaoAtualizada -eq "PASSISTA")
     }
 
+    # 16. Check-in por QR code (CLAUDE.md 3.12): o QR fica no cartão do assistido e é a recepção que
+    # escaneia, e só carimba enquanto a janela de check-in da sessão de hoje estiver aberta.
+    # A preleção de hoje é inserida por SQL porque hoje pode não ser Domingo/Terça (o formulário, com
+    # razão, só aceita esses dias) — e a janela de check-in exige a data de hoje.
+    $trabalhadorRowId = Invoke-SqlScalar "SELECT id FROM trabalhador ORDER BY id LIMIT 1;"
+    Check "Existe um trabalhador para ser preletor da sessão de hoje" ([bool]$trabalhadorRowId)
+
+    if ($trabalhadorRowId) {
+        $prelecaoHojeId = Invoke-SqlScalar "SELECT id FROM prelecao WHERE data_apresentacao = CURRENT_DATE LIMIT 1;"
+        if (-not $prelecaoHojeId) {
+            $prelecaoHojeId = Invoke-SqlScalar "INSERT INTO prelecao (data_apresentacao, tema, trabalhador_id) VALUES (CURRENT_DATE, '$temaPrelecaoTeste', $trabalhadorRowId) RETURNING id;"
+        }
+        # Preleção em data passada: serve para provar que a janela só abre no dia da sessão.
+        $prelecaoAntigaId = Invoke-SqlScalar "INSERT INTO prelecao (data_apresentacao, tema, trabalhador_id) VALUES (DATE '2024-01-07', '$temaPrelecaoAntiga', $trabalhadorRowId) RETURNING id;"
+
+        $codigoCartao = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
+        Check "Cartão do assistido tem código para o QR" ([bool]$codigoCartao)
+
+        $r = Invoke-CurlForm -Url "$cartaoUrl/qrcode.png"
+        Check "QR code do cartão responde 200 como imagem PNG" ($r.StatusCode -eq 200 -and $r.Body -match "image/png")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Scan sem check-in aberto avisa que falta abrir a sessão" ($r.StatusCode -eq 200 -and $r.Body -match "Nenhuma sessão está com o check-in aberto")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/qr-que-nao-existe"
+        Check "QR desconhecido não resolve nenhum cartão" ($r.Body -match "não corresponde a nenhum cartão")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoAntigaId/checkin/abrir"
+        $abertoAntiga = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoAntigaId;"
+        Check "Check-in não abre em preleção de outra data" ($abertoAntiga -eq "NULL")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoHojeId/checkin/abrir"
+        Check "Abrir check-in da sessão de hoje redireciona para a escala" ($r.StatusCode -eq 302 -and $r.Location -match "prelecao")
+        $abertoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoHojeId;"
+        Check "Janela de check-in registrada como aberta" ($abertoHoje -ne "NULL")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Scan com check-in aberto mostra o assistido e o botão de carimbar" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Carimbar presença")
+
+        # Sem dia de assistência definido, qualquer data é aceita — assim o teste não depende do dia
+        # da semana em que roda (com dia definido, a validação do TratamentoService barraria).
+        Invoke-Sql "UPDATE assistido SET dia_frequencia = NULL WHERE id = $assistidoId;" | Out-Null
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Carimbar presença pelo QR redireciona de volta para o check-in" ($r.StatusCode -eq 302 -and $r.Location -match "checkin/$codigoCartao")
+
+        $presencaHoje = Invoke-SqlScalar "SELECT ouvinte::text || '|' || COALESCE(prelecao_id::text, 'NULL') FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE ORDER BY id LIMIT 1;"
+        Check "Presença do QR gravada como efetiva e ligada à preleção da sessão" ($presencaHoje -eq "false|$prelecaoHojeId")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Check-in confirma a presença carimbada" ($r.Body -match "presença carimbada no cartão")
+
+        # 2ª leitura na mesma semana: a regra semanal transforma em ouvinte, sem avançar o cartão.
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "2ª leitura na mesma semana entra como ouvinte" ($r.Body -match "já tinha presença nesta semana")
+
+        # Ouvinte por decisão da recepção (quem aparece num dia que não é o dele).
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao/ouvinte"
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Recepção consegue marcar ouvinte explicitamente" ($r.Body -match "entrou como ouvinte")
+
+        $ouvintesHoje = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE AND ouvinte = true;"
+        Check "As duas presenças extras do dia ficaram como ouvinte" ($ouvintesHoje -eq "2")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoHojeId/checkin/fechar"
+        $fechadoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_fechado_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoHojeId;"
+        Check "Encerrar check-in registra o fechamento da janela" ($fechadoHoje -ne "NULL")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
+        Check "Com o check-in fechado o QR não carimba mais presença" ($r.Body -match "Nenhuma sessão está com o check-in aberto")
+    }
+
 } finally {
     Write-Output "Limpando dados de teste ($nomeTeste)..."
     # O cadastro de trabalhador agora também exige dataPrimeiraSessao (item 4), então ele também
@@ -390,6 +502,11 @@ try {
     Invoke-Sql "DELETE FROM avaliacao WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM assistido WHERE nome IN ($nomes);" | Out-Null
     # trabalhador/trabalhador_funcao têm ON DELETE CASCADE a partir de assistido, não precisam de DELETE próprio.
+    # Check-in (seção 16): as preleções do teste só podem sair depois das sessões que as referenciam;
+    # e se o teste reaproveitou uma preleção que já existia para hoje, a janela dela volta ao estado
+    # original (fechada) para não deixar um check-in aberto no banco de dev.
+    Invoke-Sql "DELETE FROM prelecao WHERE tema IN ('$temaPrelecaoTeste', '$temaPrelecaoAntiga');" | Out-Null
+    Invoke-Sql "UPDATE prelecao SET checkin_aberto_em = NULL, checkin_fechado_em = NULL WHERE data_apresentacao = CURRENT_DATE;" | Out-Null
     if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
 }
 

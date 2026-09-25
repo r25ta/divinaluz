@@ -58,6 +58,11 @@ public class Assistido {
     // prontuário nunca é removido de fato, apenas desativado (some da listagem principal).
     private boolean ativo = true;
 
+    // Código opaco do cartão, usado no QR que a recepção escaneia no check-in. É gerado na primeira
+    // vez que o cartão é aberto; o id não vai na URL do QR para não permitir adivinhar prontuários.
+    @Column(name = "codigo_cartao", unique = true, length = 36)
+    private String codigoCartao;
+
     // Dados de acesso ao sistema (opcionais): o assistido é a mesma pessoa do usuário, então o
     // login vive aqui em vez de numa entidade separada. login == null significa "sem acesso".
     @Column(unique = true, length = 80)

@@ -4,6 +4,7 @@ import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
+import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.Evolucao;
@@ -20,8 +21,11 @@ import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import br.com.nae.divinaluz.service.CheckinService;
+import br.com.nae.divinaluz.service.QrCodeService;
 import br.com.nae.divinaluz.service.TratamentoService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -31,12 +35,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +54,10 @@ import java.util.stream.Collectors;
 @Controller
 @RequestMapping("/")
 public class ProntuarioController {
+
+    // Marcações do cartão virtual — mesmo bloco de 4 sessões da regra de avaliação
+    // (TratamentoService.SESSOES_POR_AVALIACAO).
+    private static final int SESSOES_POR_CARTAO = 4;
 
     private final AssistidoRepository assistidoRepository;
 
@@ -65,6 +75,9 @@ public class ProntuarioController {
 
     private final EntrevistaRepository entrevistaRepository;
 
+    private final CheckinService checkinService;
+
+    private final QrCodeService qrCodeService;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -73,6 +86,7 @@ public class ProntuarioController {
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
             EntrevistaRepository entrevistaRepository,
+            CheckinService checkinService, QrCodeService qrCodeService,
             PasswordEncoder passwordEncoder) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
@@ -82,6 +96,8 @@ public class ProntuarioController {
         this.trabalhadorRepository = trabalhadorRepository;
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
         this.entrevistaRepository = entrevistaRepository;
+        this.checkinService = checkinService;
+        this.qrCodeService = qrCodeService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -394,20 +410,81 @@ public class ProntuarioController {
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMINISTRADOR"));
     }
 
-    @GetMapping("/prontuario/{id}/cartao")
-    public String verCartao(@PathVariable Long id, Model model,
-            @AuthenticationPrincipal UserDetails usuarioLogado) {
-        Assistido logado = assistidoRepository.findByLoginAndAcessoAtivoTrue(usuarioLogado.getUsername())
+    // PNG do QR code do cartão: o assistido abre no celular e a recepção escaneia. Rota separada do
+    // /prontuario/** de staff (ver SecurityConfig) porque o próprio assistido precisa carregá-la.
+    @GetMapping(value = "/prontuario/{id}/cartao/qrcode.png", produces = MediaType.IMAGE_PNG_VALUE)
+    @ResponseBody
+    public byte[] qrCodeDoCartao(@PathVariable Long id, @AuthenticationPrincipal UserDetails usuarioLogado) {
+        Assistido assistido = exigirAcessoAoCartao(id, assistidoLogado(usuarioLogado));
+        String codigo = checkinService.garantirCodigoCartao(assistido);
+        String urlCheckin = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/checkin/{codigo}")
+                .buildAndExpand(codigo)
+                .toUriString();
+        return qrCodeService.png(urlCheckin, 320);
+    }
+
+    private Assistido assistidoLogado(UserDetails usuarioLogado) {
+        return assistidoRepository.findByLoginAndAcessoAtivoTrue(usuarioLogado.getUsername())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não encontrado."));
+    }
+
+    // O assistido só alcança o próprio cartão (e o próprio QR); o staff alcança qualquer um.
+    private Assistido exigirAcessoAoCartao(Long id, Assistido logado) {
         if (logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO && !id.equals(logado.getId())) {
             throw new AccessDeniedException("O assistido só pode consultar o próprio cartão.");
         }
-        Assistido assistido = assistidoRepository.findById(id)
+        return assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+    }
+
+    @GetMapping("/prontuario/{id}/cartao")
+    public String verCartao(@PathVariable Long id, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado) {
+        Assistido logado = assistidoLogado(usuarioLogado);
+        Assistido assistido = exigirAcessoAoCartao(id, logado);
+
+        // Regra 4 do cartão: enquanto o cartão está retido (Aguardando Avaliação / Aguardando
+        // Entrevista) o assistido não tem visibilidade do conteúdo — vê apenas os próprios dados e
+        // o status. O staff (recepção/entrevistador) continua com visibilidade total (regra 5).
+        CartaoStatus status = assistido.getStatusCartao();
+        boolean cartaoRetido = logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO
+                && (status == CartaoStatus.AGUARDANDO_AVALIACAO || status == CartaoStatus.AGUARDANDO_ENTREVISTA);
+
+        List<SessaoTratamento> sessoes = cartaoRetido
+                ? List.of()
+                : sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id);
+
+        // Presenças efetivas do ciclo atual: são elas que preenchem as 4 marcações do cartão
+        // virtual (o mesmo bloco de 4 sessões que o TratamentoService conta para a avaliação).
+        LocalDate cicloIniciadoEm = assistido.getCicloIniciadoEm();
+        List<SessaoTratamento> presencasDoCiclo = sessoes.stream()
+                .filter(sessao -> !sessao.isOuvinte() && sessao.getDataConsulta() != null)
+                .filter(sessao -> cicloIniciadoEm == null || !sessao.getDataConsulta().isBefore(cicloIniciadoEm))
+                .sorted(Comparator.comparing(SessaoTratamento::getDataConsulta))
+                .limit(SESSOES_POR_CARTAO)
+                .toList();
+
+        // Lista (possivelmente vazia) só para o template desenhar as marcações que faltam — com um
+        // contador simples, #numbers.sequence(1,0) devolveria [1,0] e desenharia um slot a mais.
+        List<Integer> marcacoesVazias = new ArrayList<>();
+        for (int i = presencasDoCiclo.size() + 1; i <= SESSOES_POR_CARTAO; i++) {
+            marcacoesVazias.add(i);
+        }
+
+        // Código do QR que a recepção escaneia. Fica visível mesmo com o cartão retido: é como a
+        // recepção identifica a pessoa para encaminhá-la à avaliação/entrevista (regra 5).
+        checkinService.garantirCodigoCartao(assistido);
 
         model.addAttribute("assistido", assistido);
-        model.addAttribute("sessoes", sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id));
-        model.addAttribute("statusCartao", assistido.getStatusCartao());
+        model.addAttribute("sessoes", sessoes);
+        model.addAttribute("statusCartao", status);
+        model.addAttribute("cartaoRetido", cartaoRetido);
+        model.addAttribute("sessaoAberta", checkinService.sessaoComCheckinAberto().orElse(null));
+        model.addAttribute("presencasDoCiclo", presencasDoCiclo);
+        model.addAttribute("marcacoesVazias", marcacoesVazias);
+        model.addAttribute("sessoesPorCartao", SESSOES_POR_CARTAO);
+        model.addAttribute("totalOuvinte", sessoes.stream().filter(SessaoTratamento::isOuvinte).count());
         return "cartao";
     }
 

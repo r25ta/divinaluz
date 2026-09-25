@@ -1,10 +1,12 @@
 package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.model.Prelecao;
+import br.com.nae.divinaluz.model.SituacaoPrelecao;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import br.com.nae.divinaluz.service.CheckinService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -25,16 +29,58 @@ public class PrelecaoController {
 
     private final PrelecaoRepository prelecaoRepository;
     private final TrabalhadorRepository trabalhadorRepository;
+    private final CheckinService checkinService;
 
-    public PrelecaoController(PrelecaoRepository prelecaoRepository, TrabalhadorRepository trabalhadorRepository) {
+    public PrelecaoController(PrelecaoRepository prelecaoRepository, TrabalhadorRepository trabalhadorRepository,
+            CheckinService checkinService) {
         this.prelecaoRepository = prelecaoRepository;
         this.trabalhadorRepository = trabalhadorRepository;
+        this.checkinService = checkinService;
     }
+
+    /**
+     * Item da escala já classificado para a view (ver {@link SituacaoPrelecao}). A ordenação
+     * coloca primeiro o que ainda vai acontecer — esta semana, depois as agendadas — e por último
+     * o histórico, da mais recente para a mais antiga.
+     */
+    public record ItemEscala(Prelecao prelecao, SituacaoPrelecao situacao) {}
 
     @GetMapping("/prelecao")
     public String listarPrelecoes(Model model) {
-        model.addAttribute("prelecoes", prelecaoRepository.findAllByOrderByDataApresentacaoAsc());
+        LocalDate hoje = LocalDate.now();
+        List<ItemEscala> classificadas = prelecaoRepository.findAllByOrderByDataApresentacaoAsc().stream()
+                .map(prelecao -> new ItemEscala(prelecao, SituacaoPrelecao.de(prelecao.getDataApresentacao(), hoje)))
+                .toList();
+
+        // Primeiro o que ainda vai acontecer (repositório já devolve por data crescente) e depois o
+        // histórico invertido, para a preleção mais recente ficar no topo do passado.
+        List<ItemEscala> escala = new ArrayList<>(porSituacao(classificadas, SituacaoPrelecao.ESTA_SEMANA));
+        escala.addAll(porSituacao(classificadas, SituacaoPrelecao.AGENDADA));
+        List<ItemEscala> realizadas = new ArrayList<>(porSituacao(classificadas, SituacaoPrelecao.REALIZADA));
+        Collections.reverse(realizadas);
+        escala.addAll(realizadas);
+
+        // Destaque do topo: o que acontece nesta semana de assistência ou, se a semana já passou,
+        // a próxima preleção agendada — para o assistido nunca cair num destaque vazio.
+        List<ItemEscala> daSemana = porSituacao(classificadas, SituacaoPrelecao.ESTA_SEMANA);
+        List<ItemEscala> destaques = daSemana;
+        if (destaques.isEmpty()) {
+            destaques = porSituacao(classificadas, SituacaoPrelecao.AGENDADA).stream().limit(1).toList();
+        }
+
+        model.addAttribute("escala", escala);
+        model.addAttribute("hoje", hoje);
+        model.addAttribute("sessaoAberta", checkinService.sessaoComCheckinAberto().orElse(null));
+        model.addAttribute("destaques", destaques);
+        model.addAttribute("destaqueNaSemana", !daSemana.isEmpty());
+        model.addAttribute("totalEstaSemana", daSemana.size());
+        model.addAttribute("totalAgendadas", porSituacao(classificadas, SituacaoPrelecao.AGENDADA).size());
+        model.addAttribute("totalRealizadas", realizadas.size());
         return "prelecao-lista";
+    }
+
+    private List<ItemEscala> porSituacao(List<ItemEscala> escala, SituacaoPrelecao situacao) {
+        return escala.stream().filter(item -> item.situacao() == situacao).toList();
     }
 
     @GetMapping("/prelecao/novo")

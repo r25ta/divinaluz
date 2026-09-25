@@ -55,8 +55,8 @@
                         </div>
                         <div class="dl-summary-item">
                             <span class="label">Acesso ao Cartão</span>
-                            <span th:if="${usuarioVinculado != null}" class="dl-badge dl-badge-success" th:text="${usuarioVinculado.login}"></span>
-                            <span th:if="${usuarioVinculado == null}" class="dl-badge dl-badge-neutral">Sem acesso</span>
+                            <span th:if="${assistido.login != null}" class="dl-badge dl-badge-success" th:text="${assistido.login}"></span>
+                            <span th:if="${assistido.login == null}" class="dl-badge dl-badge-neutral">Sem acesso</span>
                         </div>
                     </div>
 
@@ -64,8 +64,8 @@
                         <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-pencil"></i> Editar Dados
                         </a>
-                        <a th:if="${usuarioVinculado == null}" th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
-                            <i class="bi bi-person-plus"></i> Criar Acesso
+                        <a th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-person-plus"></i> <span th:text="${assistido.login == null ? 'Criar Acesso' : 'Editar Acesso'}">Criar Acesso</span>
                         </a>
                         <form th:if="${assistido.ativo}" th:action="@{/prontuario/{id}/desativar(id=${assistido.id})}" method="post" class="d-inline"
                               onsubmit="return confirm('Desativar o prontuário deste assistido? O histórico é mantido e ele pode ser reativado depois.');">

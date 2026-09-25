@@ -58,6 +58,28 @@ public class Assistido {
     // prontuário nunca é removido de fato, apenas desativado (some da listagem principal).
     private boolean ativo = true;
 
+    // Dados de acesso ao sistema (opcionais): o assistido é a mesma pessoa do usuário, então o
+    // login vive aqui em vez de numa entidade separada. login == null significa "sem acesso".
+    @Column(unique = true, length = 80)
+    private String login;
+
+    @ToString.Exclude
+    private String senha;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "perfil_acesso", length = 20)
+    private PerfilAcesso perfilAcesso;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ProvedorIdentidade provedor = ProvedorIdentidade.LOCAL;
+
+    @Column(name = "identificador_externo")
+    private String identificadorExterno;
+
+    @Column(name = "acesso_ativo", nullable = false)
+    private boolean acessoAtivo = true;
+
     @Transient
     public Integer getIdade() {
         return dataNascimento != null ? Period.between(dataNascimento, LocalDate.now()).getYears() : null;

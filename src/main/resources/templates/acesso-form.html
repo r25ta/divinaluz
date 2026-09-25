@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: pageHead('Criar Acesso')}"></head>
+<head th:replace="~{fragments/layout :: pageHead('Acesso ao Sistema')}"></head>
 <body>
 <div class="dl-app">
     <nav th:replace="~{fragments/layout :: navbar}"></nav>
@@ -11,7 +11,7 @@
             <div class="dl-page-header">
                 <div>
                     <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
-                    <h1>Criar Acesso</h1>
+                    <h1>Acesso ao Sistema</h1>
                 </div>
                 <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                     <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
@@ -22,8 +22,8 @@
                 <div class="dl-card-body">
                     <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
                     <p class="dl-muted">
-                        Cria um login para <strong th:text="${assistido.nome}"></strong> consultar o próprio
-                        cartão de assistência. O perfil de acesso já é definido como Assistido.
+                        Login de <strong th:text="${assistido.nome}"></strong> no sistema. O e-mail e o nome
+                        são os do próprio cadastro do assistido.
                     </p>
 
                     <form th:action="@{/prontuario/{id}/acesso(id=${assistido.id})}" method="post">
@@ -31,25 +31,40 @@
 
                         <div class="mb-3">
                             <label class="form-label" for="login">Login</label>
-                            <input id="login" name="login" class="form-control" maxlength="80" autocomplete="username" required>
+                            <input id="login" name="login" class="form-control" maxlength="80" autocomplete="username"
+                                   th:value="${assistido.login ?: assistido.email}" required>
+                            <div class="form-text" th:if="${assistido.login == null and assistido.email != null}">
+                                Sugerido a partir do e-mail do cadastro; pode ser alterado.
+                            </div>
+                        </div>
+                        <div class="mb-3" th:if="${podeEscolherPerfil}">
+                            <label class="form-label" for="perfil">Perfil de acesso</label>
+                            <select id="perfil" name="perfil" class="form-select">
+                                <option th:each="p : ${perfis}" th:value="${p.name()}" th:text="${p.name()}"
+                                        th:selected="${assistido.perfilAcesso != null ? assistido.perfilAcesso == p : p.name() == 'ASSISTIDO'}"></option>
+                            </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="email">E-mail (opcional)</label>
-                            <input id="email" name="email" type="email" class="form-control" autocomplete="email">
+                            <label class="form-label" for="senha"
+                                   th:text="${assistido.login == null ? 'Senha' : 'Nova senha (deixe em branco para manter)'}">Senha</label>
+                            <input id="senha" name="senha" type="password" class="form-control" minlength="6"
+                                   autocomplete="new-password" th:required="${assistido.login == null}">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="senha">Senha</label>
-                            <input id="senha" name="senha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
-                        </div>
-                        <div class="mb-4">
                             <label class="form-label" for="confirmacaoSenha">Confirmar senha</label>
-                            <input id="confirmacaoSenha" name="confirmacaoSenha" type="password" class="form-control" minlength="6" autocomplete="new-password" required>
+                            <input id="confirmacaoSenha" name="confirmacaoSenha" type="password" class="form-control" minlength="6"
+                                   autocomplete="new-password" th:required="${assistido.login == null}">
+                        </div>
+                        <div class="form-check mb-4" th:if="${assistido.login != null}">
+                            <input class="form-check-input" type="checkbox" id="acessoAtivo" name="acessoAtivo" value="true"
+                                   th:checked="${assistido.acessoAtivo}">
+                            <label class="form-check-label" for="acessoAtivo">Acesso ativo</label>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
                             <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
-                                <i class="bi bi-person-check"></i> Criar Acesso
+                                <i class="bi bi-person-check"></i> Salvar Acesso
                             </button>
                         </div>
                     </form>

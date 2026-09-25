@@ -17,7 +17,7 @@
     <!--/* Fragmento de navbar: uso com th:replace="fragments/layout :: navbar" */-->
     <nav class="dl-navbar" th:fragment="navbar">
         <div class="container-fluid d-flex align-items-center justify-content-between gap-3">
-            <a th:href="@{/}" class="dl-brand">
+            <a th:href="${somenteConsulta and meuAssistidoId != null} ? @{/prontuario/{id}/cartao(id=${meuAssistidoId})} : @{/}" class="dl-brand">
                 <span class="dl-brand-mark"><i class="bi bi-brightness-high-fill"></i></span>
                 <span class="dl-brand-text">
                     <span class="dl-brand-title d-block">N.A.E. Divina Luz</span>
@@ -25,13 +25,16 @@
                 </span>
             </a>
             <div class="d-flex align-items-center gap-2">
+                <a th:if="${somenteConsulta and meuAssistidoId != null}" th:href="@{/prontuario/{id}/cartao(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-card-checklist"></i> Meu Cartão
+                </a>
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções
                 </a>
-                <a th:href="@{/usuarios}" class="btn btn-nav btn-sm">
+                <a th:unless="${somenteConsulta}" th:href="@{/usuarios}" class="btn btn-nav btn-sm">
                     <i class="bi bi-people"></i> Usuários
                 </a>
-                <a th:href="@{/novo}" class="btn btn-nav btn-sm">
+                <a th:unless="${somenteConsulta}" th:href="@{/novo}" class="btn btn-nav btn-sm">
                     <i class="bi bi-plus-lg"></i> Novo Cadastro
                 </a>
                 <form th:action="@{/logout}" method="post" class="d-inline">

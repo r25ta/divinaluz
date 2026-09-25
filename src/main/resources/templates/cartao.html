@@ -12,7 +12,7 @@
                     <span class="dl-eyebrow">Cartão de Assistência</span>
                     <h1 th:text="${assistido.nome}">Nome do Assistido</h1>
                 </div>
-                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                <a th:unless="${somenteConsulta}" th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                     <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
                 </a>
             </div>

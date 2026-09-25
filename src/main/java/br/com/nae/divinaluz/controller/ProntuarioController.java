@@ -9,12 +9,10 @@ import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.PerfilAcesso;
-import br.com.nae.divinaluz.model.ProvedorIdentidade;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
-import br.com.nae.divinaluz.model.Usuario;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
@@ -22,12 +20,12 @@ import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
-import br.com.nae.divinaluz.repository.UsuarioRepository;
 import br.com.nae.divinaluz.service.TratamentoService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.ui.Model;
@@ -67,7 +65,6 @@ public class ProntuarioController {
 
     private final EntrevistaRepository entrevistaRepository;
 
-    private final UsuarioRepository usuarioRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -75,7 +72,7 @@ public class ProntuarioController {
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
-            EntrevistaRepository entrevistaRepository, UsuarioRepository usuarioRepository,
+            EntrevistaRepository entrevistaRepository,
             PasswordEncoder passwordEncoder) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
@@ -85,7 +82,6 @@ public class ProntuarioController {
         this.trabalhadorRepository = trabalhadorRepository;
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
         this.entrevistaRepository = entrevistaRepository;
-        this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -155,6 +151,10 @@ public class ProntuarioController {
         TipoTratamento tratamentoInicial = tipoTratamentoRepository.findByCodigo("P2")
                 .orElseThrow(() -> new IllegalStateException("Tratamento padrão P2 não encontrado no catálogo."));
         assistido.setTratamentoAtual(null);
+        // Acesso só é definido pela rota /acesso (senha passa por BCrypt lá); nunca via bind do form.
+        assistido.setLogin(null);
+        assistido.setSenha(null);
+        assistido.setPerfilAcesso(null);
         assistido.setDiaFrequencia(diaFrequenciaDaData(dataPrimeiraSessao));
         atualizarResidenciaLegada(assistido);
         assistidoRepository.save(assistido);
@@ -314,71 +314,92 @@ public class ProntuarioController {
         model.addAttribute("proximaEntrevistaPrevista", proximaEntrevistaPrevista);
         model.addAttribute("diasFrequencia", DiaFrequencia.values());
         model.addAttribute("historicoDiaFrequencia", historicoDiaFrequenciaRepository.findByAssistidoIdOrderByDataHoraDesc(id));
-        model.addAttribute("usuarioVinculado", usuarioRepository.findByAssistidoId(id).orElse(null));
 
         return "prontuario"; // Nome do novo arquivo HTML
     }
 
-    // Item 3.11: permite ao staff criar login para um assistido que já existe no sistema, sem
-    // passar pela tela administrativa separada de /usuarios. Complementa (não substitui) o CRUD
-    // de usuários — aqui o "assistido" já está definido, só falta o acesso.
+    // Dados de acesso (login/senha/perfil) fazem parte do próprio cadastro do assistido — ver
+    // Assistido.login. Qualquer staff cria o acesso (sempre como ASSISTIDO); só o Administrador
+    // altera um acesso existente ou escolhe outro perfil.
     @GetMapping("/prontuario/{id}/acesso")
-    public String novoAcesso(@PathVariable Long id, Model model) {
+    public String editarAcesso(@PathVariable Long id, Authentication authentication, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
-        if (usuarioRepository.findByAssistidoId(id).isPresent()) {
+        boolean admin = ehAdministrador(authentication);
+        if (assistido.getLogin() != null && !admin) {
             return "redirect:/prontuario/" + id;
         }
 
         model.addAttribute("assistido", assistido);
+        model.addAttribute("perfis", PerfilAcesso.values());
+        model.addAttribute("podeEscolherPerfil", admin);
         return "acesso-form";
     }
 
     @PostMapping("/prontuario/{assistidoId}/acesso")
     public String salvarAcesso(@PathVariable Long assistidoId, @RequestParam String login,
-            @RequestParam(required = false) String email, @RequestParam String senha,
-            @RequestParam String confirmacaoSenha, RedirectAttributes redirectAttributes) {
+            @RequestParam(required = false) String senha, @RequestParam(required = false) String confirmacaoSenha,
+            @RequestParam(required = false) PerfilAcesso perfil,
+            @RequestParam(defaultValue = "false") boolean acessoAtivo,
+            Authentication authentication, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
 
-        if (usuarioRepository.findByAssistidoId(assistidoId).isPresent()) {
-            redirectAttributes.addFlashAttribute("erro", "Este assistido já possui um acesso.");
+        boolean admin = ehAdministrador(authentication);
+        boolean novo = assistido.getLogin() == null;
+        String destinoForm = "redirect:/prontuario/" + assistidoId + "/acesso";
+
+        if (!novo && !admin) {
+            redirectAttributes.addFlashAttribute("erro", "Somente o administrador pode alterar um acesso existente.");
             return "redirect:/prontuario/" + assistidoId;
         }
-        if (login == null || login.isBlank() || senha == null || senha.length() < 6) {
-            redirectAttributes.addFlashAttribute("erro", "Informe um login e uma senha com pelo menos 6 caracteres.");
-            return "redirect:/prontuario/" + assistidoId + "/acesso";
+        String loginLimpo = login == null ? "" : login.trim();
+        if (loginLimpo.isEmpty()) {
+            redirectAttributes.addFlashAttribute("erro", "Informe o login.");
+            return destinoForm;
         }
-        if (!senha.equals(confirmacaoSenha)) {
-            redirectAttributes.addFlashAttribute("erro", "A confirmação da senha não confere.");
-            return "redirect:/prontuario/" + assistidoId + "/acesso";
-        }
-        if (usuarioRepository.existsByLogin(login.trim())) {
+        if (!loginLimpo.equals(assistido.getLogin()) && assistidoRepository.existsByLogin(loginLimpo)) {
             redirectAttributes.addFlashAttribute("erro", "Já existe um usuário com este login.");
-            return "redirect:/prontuario/" + assistidoId + "/acesso";
+            return destinoForm;
+        }
+        boolean trocaSenha = senha != null && !senha.isBlank();
+        if (novo || trocaSenha) {
+            if (!trocaSenha || senha.length() < 6) {
+                redirectAttributes.addFlashAttribute("erro", "Informe uma senha com pelo menos 6 caracteres.");
+                return destinoForm;
+            }
+            if (!senha.equals(confirmacaoSenha)) {
+                redirectAttributes.addFlashAttribute("erro", "A confirmação da senha não confere.");
+                return destinoForm;
+            }
+            assistido.setSenha(passwordEncoder.encode(senha));
         }
 
-        Usuario usuario = new Usuario();
-        usuario.setLogin(login.trim());
-        usuario.setEmail(email == null || email.isBlank() ? null : email.trim());
-        usuario.setSenha(passwordEncoder.encode(senha));
-        usuario.setPerfil(PerfilAcesso.ASSISTIDO);
-        usuario.setProvedor(ProvedorIdentidade.LOCAL);
-        usuario.setAssistido(assistido);
-        usuario.setAtivo(true);
-        usuarioRepository.save(usuario);
+        assistido.setLogin(loginLimpo);
+        if (admin && perfil != null) {
+            assistido.setPerfilAcesso(perfil);
+        } else if (novo) {
+            assistido.setPerfilAcesso(PerfilAcesso.ASSISTIDO);
+        }
+        assistido.setAcessoAtivo(novo || acessoAtivo);
+        assistidoRepository.save(assistido);
 
-        redirectAttributes.addFlashAttribute("sucesso", "Acesso criado. O assistido já pode entrar com o login \"" + usuario.getLogin() + "\".");
+        redirectAttributes.addFlashAttribute("sucesso",
+                (novo ? "Acesso criado" : "Acesso atualizado") + ". Login: \"" + loginLimpo + "\".");
         return "redirect:/prontuario/" + assistidoId;
+    }
+
+    private boolean ehAdministrador(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMINISTRADOR"));
     }
 
     @GetMapping("/prontuario/{id}/cartao")
     public String verCartao(@PathVariable Long id, Model model,
             @AuthenticationPrincipal UserDetails usuarioLogado) {
-        Usuario usuario = usuarioRepository.findByLoginAndAtivoTrue(usuarioLogado.getUsername())
+        Assistido logado = assistidoRepository.findByLoginAndAcessoAtivoTrue(usuarioLogado.getUsername())
                 .orElseThrow(() -> new AccessDeniedException("Usuário não encontrado."));
-        if (usuario.getPerfil().name().equals("ASSISTIDO")
-                && (usuario.getAssistido() == null || !id.equals(usuario.getAssistido().getId()))) {
+        if (logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO && !id.equals(logado.getId())) {
             throw new AccessDeniedException("O assistido só pode consultar o próprio cartão.");
         }
         Assistido assistido = assistidoRepository.findById(id)

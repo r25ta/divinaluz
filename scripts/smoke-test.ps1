@@ -306,7 +306,7 @@ try {
     Check "Prontuário mostra a mensagem de sucesso da criação de acesso" ($r.Body -match "Acesso criado")
 
     $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
-    Check "Tentar criar acesso de novo é bloqueado (já existe) e redireciona" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+    Check "Administrador consegue reabrir o formulário para editar o acesso existente (200)" ($r.StatusCode -eq 200)
 
     # Confere de ponta a ponta que o login criado funciona e respeita o limite do perfil Assistido
     # (só o próprio cartão) — troca temporariamente para uma sessão HTTP separada do admin.
@@ -325,6 +325,26 @@ try {
 
         $r = Invoke-CurlForm -Url "$BaseUrl/"
         Check "Assistido logado é bloqueado na listagem geral (só vê o próprio cartão)" ($r.StatusCode -eq 403)
+
+        # Perfil Assistido é somente consulta: cartão + escala de preleções, sem incluir/alterar/excluir.
+        $r = Invoke-CurlForm -Url $cartaoUrl
+        $script:CsrfToken = Extract-Csrf $r.Body
+        Check "Cartão do assistido não oferece botões de staff (Usuários/Novo Cadastro)" ($r.Body -notmatch "Novo Cadastro" -and $r.Body -notmatch "bi-people")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
+        Check "Assistido consegue consultar a escala de preleções (200)" ($r.StatusCode -eq 200)
+        Check "Escala de preleções não mostra 'Nova Preleção' nem coluna de ações ao assistido" ($r.Body -notmatch "Nova Preleção" -and $r.Body -notmatch "bi-trash")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
+        Check "Assistido não acessa o formulário de nova preleção (403)" ($r.StatusCode -eq 403)
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/salvar" -Form @{ tema = "x"; dataApresentacao = "2024-01-07" }
+        Check "Assistido não consegue incluir preleção (403)" ($r.StatusCode -eq 403)
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/1/excluir"
+        Check "Assistido não consegue excluir preleção (403)" ($r.StatusCode -eq 403)
+        $r = Invoke-CurlForm -Url "$prontuarioUrl/editar"
+        Check "Assistido não acessa a edição do cadastro (403)" ($r.StatusCode -eq 403)
+        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/editar" -Form @{ nome = "HACK" }
+        Check "Assistido não consegue alterar o cadastro (403)" ($r.StatusCode -eq 403)
     } finally {
         if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
         $script:CookieJar = $adminCookieJar
@@ -364,9 +384,6 @@ try {
     # FK "fk6c6t2lawkln7d6w90vhg2my0l" (sessao_tratamento -> assistido, sem CASCADE no banco real
     # — ver CLAUDE.md item 6) bloqueia o DELETE FROM assistido.
     $nomes = "'$nomeTeste', '$nomeEditado', '$nomeTrabalhador'"
-    # usuario.assistido_id também não tem ON DELETE CASCADE (V19) — o login criado no passo 14
-    # precisa ser removido antes do assistido, mesma lógica da sessao_tratamento acima.
-    Invoke-Sql "DELETE FROM usuario WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM historico_dia_frequencia WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM entrevista WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null
     Invoke-Sql "DELETE FROM sessao_tratamento WHERE assistido_id IN (SELECT id FROM assistido WHERE nome IN ($nomes));" | Out-Null

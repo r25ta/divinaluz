@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: pageHead('Usuários')}" ></head>
+<head th:replace="~{fragments/layout :: pageHead('Acessos')}" ></head>
 <body>
 <div class="dl-app">
     <nav th:replace="~{fragments/layout :: navbar}"></nav>
@@ -9,13 +9,17 @@
             <div class="dl-page-header">
                 <div>
                     <span class="dl-eyebrow">Administração</span>
-                    <h1>Usuários</h1>
+                    <h1>Acessos ao Sistema</h1>
                 </div>
-                <a th:href="@{/usuarios/novo}" class="btn btn-teal btn-sm text-white">
-                    <i class="bi bi-person-plus"></i> Novo Usuário
+                <a th:href="@{/}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-people"></i> Assistidos
                 </a>
             </div>
 
+            <div class="alert alert-info small">
+                O acesso pertence ao cadastro do assistido: para criar ou alterar login, perfil e senha,
+                abra o prontuário e use "Acesso ao Sistema".
+            </div>
             <div class="alert alert-success" th:if="${sucesso}" th:text="${sucesso}"></div>
             <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
 
@@ -26,41 +30,32 @@
                             <thead>
                             <tr>
                                 <th>Login</th>
+                                <th>Nome</th>
                                 <th>E-mail</th>
-                                <th>Provedor</th>
                                 <th>Perfil</th>
-                                <th>Assistido vinculado</th>
                                 <th>Status</th>
                                 <th class="text-end">Ações</th>
                             </tr>
                             </thead>
                             <tbody>
-                            <tr th:each="usuario : ${usuarios}">
-                                <td class="fw-semibold" th:text="${usuario.login}"></td>
-                                <td th:text="${usuario.email ?: '—'}"></td>
-                                <td th:text="${usuario.provedor ?: 'LOCAL'}"></td>
-                                <td><span class="dl-badge dl-badge-info" th:text="${usuario.perfil}"></span></td>
-                                <td th:text="${usuario.assistido != null ? usuario.assistido.nome : '—'}"></td>
+                            <tr th:each="a : ${usuarios}">
+                                <td class="fw-semibold" th:text="${a.login}"></td>
+                                <td th:text="${a.nome}"></td>
+                                <td th:text="${a.email ?: '—'}"></td>
+                                <td><span class="dl-badge dl-badge-info" th:text="${a.perfilAcesso}"></span></td>
                                 <td>
-                                    <span th:if="${usuario.ativo}" class="dl-badge dl-badge-success">Ativo</span>
-                                    <span th:unless="${usuario.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
+                                    <span th:if="${a.acessoAtivo}" class="dl-badge dl-badge-success">Ativo</span>
+                                    <span th:unless="${a.acessoAtivo}" class="dl-badge dl-badge-neutral">Inativo</span>
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2 flex-wrap">
-                                        <a th:href="@{/usuarios/{id}/editar(id=${usuario.id})}" class="btn btn-outline-teal btn-sm" title="Editar usuário">
+                                        <a th:href="@{/prontuario/{id}/acesso(id=${a.id})}" class="btn btn-outline-teal btn-sm" title="Editar acesso">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <form th:action="@{/usuarios/{id}/alternar(id=${usuario.id})}" method="post" class="d-inline">
+                                        <form th:action="@{/usuarios/{id}/alternar(id=${a.id})}" method="post" class="d-inline">
                                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                            <button type="submit" class="btn btn-outline-teal btn-sm" th:title="${usuario.ativo ? 'Desativar usuário' : 'Ativar usuário'}">
-                                                <i th:class="${usuario.ativo ? 'bi bi-person-slash' : 'bi bi-person-check'}"></i>
-                                            </button>
-                                        </form>
-                                        <form th:action="@{/usuarios/{id}/senha(id=${usuario.id})}" method="post" class="d-flex gap-1">
-                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                            <input type="password" name="senha" class="form-control form-control-sm" placeholder="Nova senha" minlength="6" required style="max-width: 150px;">
-                                            <button type="submit" class="btn btn-outline-teal btn-sm" title="Alterar senha">
-                                                <i class="bi bi-key"></i>
+                                            <button type="submit" class="btn btn-outline-teal btn-sm" th:title="${a.acessoAtivo ? 'Desativar acesso' : 'Ativar acesso'}">
+                                                <i th:class="${a.acessoAtivo ? 'bi bi-person-slash' : 'bi bi-person-check'}"></i>
                                             </button>
                                         </form>
                                     </div>
@@ -71,7 +66,7 @@
                     </div>
                     <div class="dl-table-empty" th:if="${#lists.isEmpty(usuarios)}">
                         <i class="bi bi-people"></i>
-                        <p class="mb-0">Nenhum usuário cadastrado.</p>
+                        <p class="mb-0">Nenhum acesso cadastrado.</p>
                     </div>
                 </div>
             </div>

@@ -19,7 +19,7 @@
                             <input type="search" id="buscaPrelecao" class="form-control"
                                    placeholder="Buscar por data, preletor ou tema...">
                         </div>
-                        <a th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
+                        <a th:unless="${somenteConsulta}" th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
                             <i class="bi bi-plus-lg"></i> Nova Preleção
                         </a>
                     </div>
@@ -39,7 +39,7 @@
                                 <th>Data</th>
                                 <th>Preletor</th>
                                 <th>Tema</th>
-                                <th class="text-center">Ações</th>
+                                <th class="text-center" th:unless="${somenteConsulta}">Ações</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -48,7 +48,7 @@
                                 <td th:text="${#temporals.format(prelecao.dataApresentacao, 'dd/MM/yyyy')}" class="fw-semibold"></td>
                                 <td th:text="${prelecao.preletor.assistido.nome}"></td>
                                 <td th:text="${prelecao.tema}"></td>
-                                <td class="text-center">
+                                <td class="text-center" th:unless="${somenteConsulta}">
                                     <div class="d-flex justify-content-center gap-2">
                                         <a th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${prelecao.id})}" class="btn btn-outline-teal btn-sm">
                                             <i class="bi bi-pencil"></i>

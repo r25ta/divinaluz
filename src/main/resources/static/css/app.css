@@ -1352,3 +1352,28 @@ a {
   background: var(--dl-danger-bg);
   color: var(--dl-danger);
 }
+
+.dl-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.dl-resultado {
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  padding: 0.75rem 0.9rem;
+  background: var(--dl-surface);
+}
+
+.dl-resultado-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dl-resultado-acoes:not(:empty) {
+  margin-top: 0.6rem;
+}

@@ -195,91 +195,81 @@
                             </form>
 
                             <div th:if="${busca != null and !#strings.isEmpty(busca)}">
-                                <div class="table-responsive" th:if="${not #lists.isEmpty(resultados)}">
-                                    <table class="dl-table">
-                                        <thead>
-                                        <tr>
-                                            <th>Nome</th>
-                                            <th>Tratamento</th>
-                                            <th>Status</th>
-                                            <th class="text-end">Ações</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        <tr th:each="a : ${resultados}"
-                                            th:with="retido=${a.statusCartao != null and (a.statusCartao.name() == 'AGUARDANDO_AVALIACAO' or a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA')},
-                                                     expirado=${a.statusCartao != null and a.statusCartao.name() == 'INCOMPLETO_POR_TEMPO'},
-                                                     outroDia=${a.diaFrequencia != null and a.diaFrequencia != sessao.diaFrequencia},
-                                                     presente=${presentesIds.contains(a.id)}">
-                                            <td>
-                                                <a th:href="@{/prontuario/{id}(id=${a.id})}" th:text="${a.nome}">Nome</a>
-                                                <div class="dl-muted small"
-                                                     th:text="${a.diaFrequencia != null ? a.diaFrequencia.label : 'Dia não definido'}">Domingo, 08h</div>
-                                            </td>
-                                            <td th:text="${a.tratamentoAtual != null ? a.tratamentoAtual.codigo : '—'}">P2</td>
-                                            <td>
-                                                <span class="dl-badge"
-                                                      th:classappend="${a.statusCartao != null ? a.statusCartao.badgeClasse : 'dl-badge-success'}">
-                                                    <i class="bi" th:classappend="${a.statusCartao != null ? a.statusCartao.icone : 'bi-heart-pulse-fill'}"></i>
-                                                    <span th:text="${a.statusCartao != null ? a.statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
-                                                </span>
-                                            </td>
-                                            <td class="text-end">
-                                                <span class="dl-badge dl-badge-success" th:if="${presente}">
-                                                    <i class="bi bi-check2-all"></i> Já presente
-                                                </span>
-
-                                                <div class="d-inline-flex flex-wrap justify-content-end gap-1"
-                                                     th:if="${sessao.checkinAberto and !presente}">
-                                                    <span class="dl-muted small text-start" th:if="${retido}">
-                                                        <i class="bi bi-signpost-split"></i>
-                                                        <span th:text="${a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'} ? 'Encaminhar para avaliação' : 'Encaminhar para entrevista'"></span>
-                                                    </span>
-
-                                                    <form th:if="${expirado}" method="post"
-                                                          th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
-                                                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                                        <input type="hidden" name="reiniciarP2" value="true">
-                                                        <input type="hidden" name="busca" th:value="${busca}">
-                                                        <button type="submit" class="btn btn-warning btn-sm">
-                                                            <i class="bi bi-arrow-repeat"></i> Reiniciar em P2 e carimbar
-                                                        </button>
-                                                    </form>
-
-                                                    <form th:if="${!retido and !expirado and !outroDia}" method="post"
-                                                          th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
-                                                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                                        <input type="hidden" name="busca" th:value="${busca}">
-                                                        <button type="submit" class="btn btn-teal text-white btn-sm">
-                                                            <i class="bi bi-check2-square"></i> Carimbar
-                                                        </button>
-                                                    </form>
-
-                                                    <!-- Assistido de outro dia pedindo para mudar: troca com histórico e carimba. -->
-                                                    <form th:if="${outroDia and !retido and !expirado}" method="post"
-                                                          th:action="@{/sessao/{id}/mudar-dia/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}"
-                                                          onsubmit="return confirm('Mudar o dia de assistência para o desta sessão (fica no histórico) e marcar presença?');">
-                                                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                                        <input type="hidden" name="busca" th:value="${busca}">
-                                                        <button type="submit" class="btn btn-outline-teal btn-sm">
-                                                            <i class="bi bi-calendar2-week"></i>
-                                                            Mudar para <span th:text="${sessao.diaFrequencia.name() == 'TERCA_19H' ? 'Terça' : 'Domingo'}">Terça</span> e carimbar
-                                                        </button>
-                                                    </form>
-
-                                                    <form method="post"
-                                                          th:action="@{/sessao/{id}/ouvinte/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
-                                                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                                        <input type="hidden" name="busca" th:value="${busca}">
-                                                        <button type="submit" class="btn btn-outline-teal btn-sm" title="Presença sem avançar o cartão">
-                                                            <i class="bi bi-ear"></i> Ouvinte
-                                                        </button>
-                                                    </form>
+                                <!-- Lista em cartões (não tabela): no celular os botões de ação precisam ficar visíveis sem rolar para o lado. -->
+                                <div class="dl-resultados" th:if="${not #lists.isEmpty(resultados)}">
+                                    <div class="dl-resultado" th:each="a : ${resultados}"
+                                         th:with="retido=${a.statusCartao != null and (a.statusCartao.name() == 'AGUARDANDO_AVALIACAO' or a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA')},
+                                                  expirado=${a.statusCartao != null and a.statusCartao.name() == 'INCOMPLETO_POR_TEMPO'},
+                                                  outroDia=${a.diaFrequencia != null and a.diaFrequencia != sessao.diaFrequencia},
+                                                  presente=${presentesIds.contains(a.id)}">
+                                        <div class="dl-resultado-topo">
+                                            <div>
+                                                <a class="fw-semibold" th:href="@{/prontuario/{id}(id=${a.id})}" th:text="${a.nome}">Nome</a>
+                                                <div class="dl-muted small">
+                                                    <span th:text="${a.tratamentoAtual != null ? a.tratamentoAtual.codigo : 'Sem tratamento'}">P2</span>
+                                                    · <span th:text="${a.diaFrequencia != null ? a.diaFrequencia.label : 'Dia não definido'}">Domingo, 08h</span>
                                                 </div>
-                                            </td>
-                                        </tr>
-                                        </tbody>
-                                    </table>
+                                            </div>
+                                            <span class="dl-badge"
+                                                  th:classappend="${a.statusCartao != null ? a.statusCartao.badgeClasse : 'dl-badge-success'}">
+                                                <i class="bi" th:classappend="${a.statusCartao != null ? a.statusCartao.icone : 'bi-heart-pulse-fill'}"></i>
+                                                <span th:text="${a.statusCartao != null ? a.statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
+                                            </span>
+                                        </div>
+                                        <div class="dl-resultado-acoes">
+                                            <span class="dl-badge dl-badge-success" th:if="${presente}">
+                                                <i class="bi bi-check2-all"></i> Já presente
+                                            </span>
+
+                                            <div class="d-flex flex-wrap gap-2"
+                                                 th:if="${sessao.checkinAberto and !presente}">
+                                                <span class="dl-muted small text-start" th:if="${retido}">
+                                                    <i class="bi bi-signpost-split"></i>
+                                                    <span th:text="${a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'} ? 'Encaminhar para avaliação' : 'Encaminhar para entrevista'"></span>
+                                                </span>
+
+                                                <form th:if="${expirado}" method="post"
+                                                      th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
+                                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                                    <input type="hidden" name="reiniciarP2" value="true">
+                                                    <input type="hidden" name="busca" th:value="${busca}">
+                                                    <button type="submit" class="btn btn-warning btn-sm">
+                                                        <i class="bi bi-arrow-repeat"></i> Reiniciar em P2 e carimbar
+                                                    </button>
+                                                </form>
+
+                                                <form th:if="${!retido and !expirado and !outroDia}" method="post"
+                                                      th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
+                                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                                    <input type="hidden" name="busca" th:value="${busca}">
+                                                    <button type="submit" class="btn btn-teal text-white btn-sm">
+                                                        <i class="bi bi-check2-square"></i> Carimbar
+                                                    </button>
+                                                </form>
+
+                                                <!-- Assistido de outro dia pedindo para mudar: troca com histórico e carimba. -->
+                                                <form th:if="${outroDia and !retido and !expirado}" method="post"
+                                                      th:action="@{/sessao/{id}/mudar-dia/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}"
+                                                      onsubmit="return confirm('Mudar o dia de assistência para o desta sessão (fica no histórico) e marcar presença?');">
+                                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                                    <input type="hidden" name="busca" th:value="${busca}">
+                                                    <button type="submit" class="btn btn-outline-teal btn-sm">
+                                                        <i class="bi bi-calendar2-week"></i>
+                                                        Mudar para <span th:text="${sessao.diaFrequencia.name() == 'TERCA_19H' ? 'Terça' : 'Domingo'}">Terça</span> e carimbar
+                                                    </button>
+                                                </form>
+
+                                                <form method="post"
+                                                      th:action="@{/sessao/{id}/ouvinte/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
+                                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                                    <input type="hidden" name="busca" th:value="${busca}">
+                                                    <button type="submit" class="btn btn-outline-teal btn-sm" title="Presença sem avançar o cartão">
+                                                        <i class="bi bi-ear"></i> Ouvinte
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <p class="dl-muted small" th:if="${#lists.isEmpty(resultados)}">
                                     <i class="bi bi-search"></i>

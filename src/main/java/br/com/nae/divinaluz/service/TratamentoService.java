@@ -9,11 +9,13 @@ import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
+import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
+import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.DayOfWeek;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
@@ -44,16 +47,19 @@ public class TratamentoService {
     private final AssistidoRepository assistidoRepository;
     private final TipoTratamentoRepository tipoTratamentoRepository;
     private final PrelecaoRepository prelecaoRepository;
+    private final HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository;
 
     public TratamentoService(SessaoRepository sessaoRepository, AvaliacaoRepository avaliacaoRepository,
             EntrevistaRepository entrevistaRepository, AssistidoRepository assistidoRepository,
-            TipoTratamentoRepository tipoTratamentoRepository, PrelecaoRepository prelecaoRepository) {
+            TipoTratamentoRepository tipoTratamentoRepository, PrelecaoRepository prelecaoRepository,
+            HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository) {
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
         this.entrevistaRepository = entrevistaRepository;
         this.assistidoRepository = assistidoRepository;
         this.tipoTratamentoRepository = tipoTratamentoRepository;
         this.prelecaoRepository = prelecaoRepository;
+        this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
     }
 
     public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
@@ -224,6 +230,27 @@ public class TratamentoService {
         } else {
             assistidoRepository.save(assistido);
         }
+    }
+
+    // Rastreabilidade do dia de assistência: toda mudança (inclusive a primeira definição) fica em
+    // HistoricoDiaFrequencia. Devolve false quando o dia não mudou (nada é gravado).
+    @Transactional
+    public boolean alterarDiaFrequencia(Assistido assistido, DiaFrequencia novoDia, String motivo) {
+        DiaFrequencia anterior = assistido.getDiaFrequencia();
+        if (Objects.equals(anterior, novoDia)) {
+            return false;
+        }
+        HistoricoDiaFrequencia log = new HistoricoDiaFrequencia();
+        log.setAssistido(assistido);
+        log.setDiaAnterior(anterior);
+        log.setDiaNovo(novoDia);
+        log.setDataHora(LocalDateTime.now());
+        log.setMotivo(motivo);
+        historicoDiaFrequenciaRepository.save(log);
+
+        assistido.setDiaFrequencia(novoDia);
+        assistidoRepository.save(assistido);
+        return true;
     }
 
     @Transactional

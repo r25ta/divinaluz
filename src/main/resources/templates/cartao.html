@@ -154,7 +154,7 @@
                     </p>
                     <div class="dl-badge dl-badge-success mt-2" th:if="${sessaoAberta != null}">
                         <i class="bi bi-broadcast"></i>
-                        Check-in aberto — <span th:text="${#temporals.format(sessaoAberta.dataApresentacao, 'dd/MM/yyyy')}"></span>
+                        Check-in aberto — <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
                     </div>
                     <div class="dl-badge dl-badge-neutral mt-2" th:if="${sessaoAberta == null}">
                         <i class="bi bi-slash-circle"></i> Nenhuma sessão em andamento

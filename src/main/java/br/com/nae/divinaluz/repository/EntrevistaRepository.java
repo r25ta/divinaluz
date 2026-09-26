@@ -11,4 +11,5 @@ public interface EntrevistaRepository extends JpaRepository<Entrevista, Long> {
     long countByAssistidoId(Long assistidoId);
     long countByAssistidoIdAndDataGreaterThanEqual(Long assistidoId, LocalDate desde);
     boolean existsByAvaliacaoId(Long avaliacaoId);
+    long countByData(LocalDate data);
 }

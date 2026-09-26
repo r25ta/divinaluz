@@ -7,7 +7,6 @@ import lombok.ToString;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -31,16 +30,6 @@ public class Prelecao {
     @ToString.Exclude
     private Trabalhador preletor;
 
-    // Janela de check-in por QR code: a recepção abre no início da assistência e fecha no fim. O QR
-    // do cartão só carimba presença enquanto a janela da preleção daquela data estiver aberta.
-    @Column(name = "checkin_aberto_em")
-    private LocalDateTime checkinAbertoEm;
-
-    @Column(name = "checkin_fechado_em")
-    private LocalDateTime checkinFechadoEm;
-
-    @Transient
-    public boolean isCheckinAberto() {
-        return checkinAbertoEm != null && checkinFechadoEm == null;
-    }
+    // As colunas checkin_aberto_em/checkin_fechado_em da tabela ficaram sem uso desde a V27: a janela
+    // de check-in passou para a SessaoAssistencia (a preleção deixou de ser a "sessão do dia").
 }

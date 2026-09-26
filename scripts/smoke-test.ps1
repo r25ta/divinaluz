@@ -354,6 +354,8 @@ try {
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/1/excluir"
         Check "Assistido não consegue excluir preleção (403)" ($r.StatusCode -eq 403)
         # O QR é o próprio cartão: o assistido carrega o dele, mas não o de outra pessoa.
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+        Check "Assistido não acessa o Módulo Sessão (403)" ($r.StatusCode -eq 403)
         $r = Invoke-CurlForm -Url "$cartaoUrl/qrcode.png"
         Check "Assistido carrega o QR do próprio cartão (200)" ($r.StatusCode -eq 200 -and $r.Body -match "image/png")
         $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/1/cartao/qrcode.png"
@@ -424,10 +426,11 @@ try {
         Check "Função atualizada para Passista (Dirigente removida)" ($funcaoAtualizada -eq "PASSISTA")
     }
 
-    # 16. Check-in por QR code (CLAUDE.md 3.12): o QR fica no cartão do assistido e é a recepção que
-    # escaneia, e só carimba enquanto a janela de check-in da sessão de hoje estiver aberta.
-    # A preleção de hoje é inserida por SQL porque hoje pode não ser Domingo/Terça (o formulário, com
-    # razão, só aceita esses dias) — e a janela de check-in exige a data de hoje.
+    # 16. Check-in por QR code (CLAUDE.md 3.12) e Módulo Sessão (3.13): o QR fica no cartão do
+    # assistido e é a recepção que escaneia, e só carimba enquanto a janela de check-in da sessão de
+    # hoje (sessao_assistencia) estiver aberta. A sessão e a preleção de hoje são inseridas por SQL
+    # porque hoje pode não ser Domingo/Terça (a tela, com razão, só aceita esses dias) — e a janela
+    # de check-in exige a data de hoje.
     $trabalhadorRowId = Invoke-SqlScalar "SELECT id FROM trabalhador ORDER BY id LIMIT 1;"
     Check "Existe um trabalhador para ser preletor da sessão de hoje" ([bool]$trabalhadorRowId)
 
@@ -436,8 +439,15 @@ try {
         if (-not $prelecaoHojeId) {
             $prelecaoHojeId = Invoke-SqlScalar "INSERT INTO prelecao (data_apresentacao, tema, trabalhador_id) VALUES (CURRENT_DATE, '$temaPrelecaoTeste', $trabalhadorRowId) RETURNING id;"
         }
-        # Preleção em data passada: serve para provar que a janela só abre no dia da sessão.
-        $prelecaoAntigaId = Invoke-SqlScalar "INSERT INTO prelecao (data_apresentacao, tema, trabalhador_id) VALUES (DATE '2024-01-07', '$temaPrelecaoAntiga', $trabalhadorRowId) RETURNING id;"
+        # A sessão de hoje pode já existir no banco de dev; só é apagada na limpeza se o teste a criou.
+        $sessaoHojeId = Invoke-SqlScalar "SELECT id FROM sessao_assistencia WHERE data = CURRENT_DATE;"
+        if (-not $sessaoHojeId) {
+            $sessaoHojeId = Invoke-SqlScalar "INSERT INTO sessao_assistencia (data, dia_frequencia) VALUES (CURRENT_DATE, 'DOMINGO_08H') RETURNING id;"
+            $script:sessaoHojeCriada = $sessaoHojeId
+        }
+        # Sessão em data passada: serve para provar que a janela só abre no dia da sessão.
+        $sessaoAntigaId = Invoke-SqlScalar "INSERT INTO sessao_assistencia (data, dia_frequencia) VALUES (DATE '2024-01-07', 'DOMINGO_08H') ON CONFLICT (data) DO UPDATE SET data = EXCLUDED.data RETURNING id;"
+        $script:sessaoAntigaId = $sessaoAntigaId
 
         $codigoCartao = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
         Check "Cartão do assistido tem código para o QR" ([bool]$codigoCartao)
@@ -451,14 +461,20 @@ try {
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/qr-que-nao-existe"
         Check "QR desconhecido não resolve nenhum cartão" ($r.Body -match "não corresponde a nenhum cartão")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoAntigaId/checkin/abrir"
-        $abertoAntiga = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoAntigaId;"
-        Check "Check-in não abre em preleção de outra data" ($abertoAntiga -eq "NULL")
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = "2024-01-08" }
+        Check "Segunda-feira não vira sessão (volta para a lista)" ($r.StatusCode -eq 302 -and $r.Location -match "sessao$")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoHojeId/checkin/abrir"
-        Check "Abrir check-in da sessão de hoje redireciona para a escala" ($r.StatusCode -eq 302 -and $r.Location -match "prelecao")
-        $abertoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoHojeId;"
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoAntigaId/checkin/abrir"
+        $abertoAntiga = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoAntigaId;"
+        Check "Check-in não abre em sessão de outra data" ($abertoAntiga -eq "NULL")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/checkin/abrir"
+        Check "Abrir check-in da sessão de hoje volta para o painel da sessão" ($r.StatusCode -eq 302 -and $r.Location -match "sessao/$sessaoHojeId$")
+        $abertoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
         Check "Janela de check-in registrada como aberta" ($abertoHoje -ne "NULL")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        Check "Painel da sessão abre com indicadores e escala" ($r.StatusCode -eq 200 -and $r.Body -match "Indicadores" -and $r.Body -match "Câmara de Passe")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
         Check "Scan com check-in aberto mostra o assistido e o botão de carimbar" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Carimbar presença")
@@ -483,6 +499,9 @@ try {
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
         Check "Check-in confirma a presença carimbada" ($r.Body -match "presença carimbada no cartão")
 
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/indicadores"
+        Check "Indicadores da sessão contam a presença carimbada" ($r.StatusCode -eq 200 -and $r.Body -match "painelIndicadores" -and $r.Body -match [regex]::Escape($nomeEditado))
+
         # 2ª leitura na mesma semana: a regra semanal transforma em ouvinte, sem avançar o cartão.
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
@@ -496,8 +515,8 @@ try {
         $ouvintesHoje = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE AND ouvinte = true;"
         Check "As duas presenças extras do dia ficaram como ouvinte" ($ouvintesHoje -eq "2")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoHojeId/checkin/fechar"
-        $fechadoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_fechado_em::text, 'NULL') FROM prelecao WHERE id = $prelecaoHojeId;"
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/checkin/fechar"
+        $fechadoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_fechado_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
         Check "Encerrar check-in registra o fechamento da janela" ($fechadoHoje -ne "NULL")
 
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
@@ -522,7 +541,12 @@ try {
     # e se o teste reaproveitou uma preleção que já existia para hoje, a janela dela volta ao estado
     # original (fechada) para não deixar um check-in aberto no banco de dev.
     Invoke-Sql "DELETE FROM prelecao WHERE tema IN ('$temaPrelecaoTeste', '$temaPrelecaoAntiga');" | Out-Null
-    Invoke-Sql "UPDATE prelecao SET checkin_aberto_em = NULL, checkin_fechado_em = NULL WHERE data_apresentacao = CURRENT_DATE;" | Out-Null
+    if ($script:sessaoAntigaId) { Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoAntigaId);" | Out-Null }
+    if ($script:sessaoHojeCriada) {
+        Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoHojeCriada);" | Out-Null
+    } else {
+        Invoke-Sql "UPDATE sessao_assistencia SET checkin_aberto_em = NULL, checkin_fechado_em = NULL WHERE data = CURRENT_DATE;" | Out-Null
+    }
     if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
 }
 

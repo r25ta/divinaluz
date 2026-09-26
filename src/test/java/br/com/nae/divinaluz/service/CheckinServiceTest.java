@@ -2,10 +2,13 @@ package br.com.nae.divinaluz.service;
 
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
+import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Prelecao;
+import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
+import br.com.nae.divinaluz.repository.SessaoAssistenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,9 @@ import static org.mockito.Mockito.when;
 class CheckinServiceTest {
 
     @Mock
+    private SessaoAssistenciaRepository sessaoAssistenciaRepository;
+
+    @Mock
     private PrelecaoRepository prelecaoRepository;
 
     @Mock
@@ -51,15 +57,21 @@ class CheckinServiceTest {
 
     private static final LocalDate DOMINGO = LocalDate.of(2026, 9, 27);
 
-    private Prelecao sessaoDeDomingo;
+    private SessaoAssistencia sessaoDeDomingo;
+    private Prelecao prelecaoDeDomingo;
     private Assistido assistido;
 
     @BeforeEach
     void setUp() {
-        sessaoDeDomingo = new Prelecao();
+        sessaoDeDomingo = new SessaoAssistencia();
         sessaoDeDomingo.setId(10L);
-        sessaoDeDomingo.setTema("Evangelho no Lar");
-        sessaoDeDomingo.setDataApresentacao(DOMINGO);
+        sessaoDeDomingo.setData(DOMINGO);
+        sessaoDeDomingo.setDiaFrequencia(DiaFrequencia.DOMINGO_08H);
+
+        prelecaoDeDomingo = new Prelecao();
+        prelecaoDeDomingo.setId(30L);
+        prelecaoDeDomingo.setTema("Evangelho no Lar");
+        prelecaoDeDomingo.setDataApresentacao(DOMINGO);
 
         assistido = new Assistido();
         assistido.setId(5L);
@@ -67,25 +79,31 @@ class CheckinServiceTest {
         assistido.setCodigoCartao("codigo-do-cartao");
     }
 
+    private void comSessaoAberta() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
+                .thenReturn(Optional.of(sessaoDeDomingo));
+    }
+
     @Test
     void checkinSoAbreNaDataDaSessao() {
-        when(prelecaoRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
 
         RegraNegocioException erro = assertThrows(RegraNegocioException.class,
                 () -> checkinService.abrirCheckin(10L, DOMINGO.minusDays(2)));
 
         assertTrue(erro.getMessage().contains("27/09/2026"));
-        verify(prelecaoRepository, never()).save(any());
+        verify(sessaoAssistenciaRepository, never()).save(any());
     }
 
     @Test
     void abrirCheckinNaDataMarcaAJanelaComoAberta() {
-        when(prelecaoRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
                 .thenReturn(Optional.empty());
-        when(prelecaoRepository.save(any(Prelecao.class))).thenAnswer(i -> i.getArgument(0));
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
 
-        Prelecao aberta = checkinService.abrirCheckin(10L, DOMINGO);
+        SessaoAssistencia aberta = checkinService.abrirCheckin(10L, DOMINGO);
 
         assertNotNull(aberta.getCheckinAbertoEm());
         assertNull(aberta.getCheckinFechadoEm());
@@ -95,15 +113,15 @@ class CheckinServiceTest {
     // Uma janela esquecida aberta em outra data travaria o check-in de hoje, então ela é fechada.
     @Test
     void abrirCheckinFechaJanelaEsquecidaDeOutraData() {
-        Prelecao esquecida = new Prelecao();
+        SessaoAssistencia esquecida = new SessaoAssistencia();
         esquecida.setId(9L);
-        esquecida.setDataApresentacao(DOMINGO.minusWeeks(1));
+        esquecida.setData(DOMINGO.minusWeeks(1));
         esquecida.setCheckinAbertoEm(LocalDateTime.now().minusDays(7));
 
-        when(prelecaoRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
                 .thenReturn(Optional.of(esquecida));
-        when(prelecaoRepository.save(any(Prelecao.class))).thenAnswer(i -> i.getArgument(0));
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
 
         checkinService.abrirCheckin(10L, DOMINGO);
 
@@ -112,7 +130,7 @@ class CheckinServiceTest {
 
     @Test
     void semJanelaAbertaOQrNaoCarimbaPresenca() {
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
+        when(sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
                 .thenReturn(Optional.empty());
 
         RegraNegocioException erro = assertThrows(RegraNegocioException.class,
@@ -123,10 +141,9 @@ class CheckinServiceTest {
     }
 
     @Test
-    void presencaPeloQrUsaADataEAPrelecaoDaSessaoAberta() {
-        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
-                .thenReturn(Optional.of(sessaoDeDomingo));
+    void presencaPeloQrUsaADataDaSessaoAbertaEAPrelecaoDaMesmaData() {
+        comSessaoAberta();
+        when(prelecaoRepository.findByDataApresentacao(DOMINGO)).thenReturn(Optional.of(prelecaoDeDomingo));
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
         when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
                 .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));
@@ -136,33 +153,70 @@ class CheckinServiceTest {
         ArgumentCaptor<SessaoTratamento> captor = ArgumentCaptor.forClass(SessaoTratamento.class);
         verify(tratamentoService).registrarSessao(captor.capture(), eq(false));
         assertEquals(DOMINGO, captor.getValue().getDataConsulta());
-        assertEquals(sessaoDeDomingo, captor.getValue().getPrelecao());
+        assertEquals(prelecaoDeDomingo, captor.getValue().getPrelecao());
         assertEquals(assistido, captor.getValue().getAssistido());
+    }
+
+    // Decisão 8.1: a sessão não depende mais da escala de preleções — sem preleção na data, a
+    // presença entra do mesmo jeito, só sem preleção vinculada.
+    @Test
+    void sessaoSemPrelecaoCadastradaAindaCarimbaPresenca() {
+        comSessaoAberta();
+        when(prelecaoRepository.findByDataApresentacao(DOMINGO)).thenReturn(Optional.empty());
+        when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
+        when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
+                .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));
+
+        CheckinService.ResultadoCheckin resultado = checkinService.registrarPresenca("codigo-do-cartao");
+
+        assertEquals(DOMINGO, resultado.presenca().getDataConsulta());
+        assertNull(resultado.presenca().getPrelecao());
+    }
+
+    @Test
+    void presencaPelaBuscaExigeOCheckinAbertoDaquelaSessao() {
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class,
+                () -> checkinService.registrarPresenca(10L, 5L, false));
+
+        assertTrue(erro.getMessage().contains("não está aberto"));
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
+    }
+
+    @Test
+    void presencaPelaBuscaRepassaAConfirmacaoDeReinicio() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(assistidoRepository.findById(5L)).thenReturn(Optional.of(assistido));
+        when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(true)))
+                .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), true, false));
+
+        CheckinService.ResultadoCheckin resultado = checkinService.registrarPresenca(10L, 5L, true);
+
+        assertTrue(resultado.tratamentoReiniciado());
+        assertEquals(sessaoDeDomingo, resultado.sessao());
     }
 
     // Saída prevista para quem comparece num dia que não é o dele: não passa pelas regras do cartão.
     @Test
     void ouvinteExplicitoNaoAvancaOCartaoNemPassaPeloTratamentoService() {
-        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
-                .thenReturn(Optional.of(sessaoDeDomingo));
+        comSessaoAberta();
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
         when(sessaoRepository.save(any(SessaoTratamento.class))).thenAnswer(i -> i.getArgument(0));
 
         CheckinService.ResultadoCheckin resultado = checkinService.registrarOuvinte("codigo-do-cartao");
 
         assertTrue(resultado.ouvinte());
-        assertTrue(resultado.sessao().isOuvinte());
-        assertNull(resultado.sessao().getNumeroSerie());
+        assertTrue(resultado.presenca().isOuvinte());
+        assertNull(resultado.presenca().getNumeroSerie());
         verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
     @Test
     void cartaoDeAssistidoInativoNaoCarimbaPresenca() {
-        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        comSessaoAberta();
         assistido.setAtivo(false);
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
-                .thenReturn(Optional.of(sessaoDeDomingo));
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
 
         RegraNegocioException erro = assertThrows(RegraNegocioException.class,
@@ -174,9 +228,7 @@ class CheckinServiceTest {
 
     @Test
     void qrDesconhecidoNaoResolveCartao() {
-        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
-        when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
-                .thenReturn(Optional.of(sessaoDeDomingo));
+        comSessaoAberta();
         when(assistidoRepository.findByCodigoCartao("nao-existe")).thenReturn(Optional.empty());
 
         assertThrows(RegraNegocioException.class, () -> checkinService.registrarPresenca("nao-existe"));

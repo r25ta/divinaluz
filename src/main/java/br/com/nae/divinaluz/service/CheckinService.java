@@ -3,10 +3,11 @@ package br.com.nae.divinaluz.service;
 import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
-import br.com.nae.divinaluz.model.Prelecao;
+import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
+import br.com.nae.divinaluz.repository.SessaoAssistenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,72 +19,77 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Check-in por QR code (ver CLAUDE.md 3.12). O QR fica no cartão do assistido e é a recepção que
- * escaneia: a presença só é carimbada enquanto a recepção mantiver aberta a janela de check-in da
- * preleção daquela data. Todas as regras do cartão continuam no {@link TratamentoService} — aqui só
- * se resolve "quem" (código do cartão) e "em qual sessão" (janela aberta).
+ * Check-in da sessão (ver CLAUDE.md 3.12 e 3.13). A presença só é carimbada enquanto a recepção
+ * mantiver aberta a janela de check-in da sessão de assistência daquela data — seja pelo QR do
+ * cartão, seja pela busca por nome no painel da sessão. Todas as regras do cartão continuam no
+ * {@link TratamentoService}: aqui só se resolve "quem" e "em qual sessão".
  */
 @Service
 public class CheckinService {
 
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    public static final String SEM_SESSAO_ABERTA =
+            "Nenhuma sessão está com o check-in aberto. Abra o check-in da sessão de hoje no painel da Sessão.";
 
+    private final SessaoAssistenciaRepository sessaoAssistenciaRepository;
     private final PrelecaoRepository prelecaoRepository;
     private final AssistidoRepository assistidoRepository;
     private final SessaoRepository sessaoRepository;
     private final TratamentoService tratamentoService;
 
-    public CheckinService(PrelecaoRepository prelecaoRepository, AssistidoRepository assistidoRepository,
+    public CheckinService(SessaoAssistenciaRepository sessaoAssistenciaRepository,
+            PrelecaoRepository prelecaoRepository, AssistidoRepository assistidoRepository,
             SessaoRepository sessaoRepository, TratamentoService tratamentoService) {
+        this.sessaoAssistenciaRepository = sessaoAssistenciaRepository;
         this.prelecaoRepository = prelecaoRepository;
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.tratamentoService = tratamentoService;
     }
 
-    public record ResultadoCheckin(Assistido assistido, Prelecao prelecao, SessaoTratamento sessao,
+    public record ResultadoCheckin(Assistido assistido, SessaoAssistencia sessao, SessaoTratamento presenca,
             boolean ouvinte, boolean tratamentoReiniciado) {}
 
-    public Optional<Prelecao> sessaoComCheckinAberto() {
-        return prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull();
+    public Optional<SessaoAssistencia> sessaoComCheckinAberto() {
+        return sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull();
     }
 
     /**
-     * Abre a janela de check-in da preleção. Só é permitido na própria data da preleção — é a sessão
-     * de hoje que recebe presença. Uma janela esquecida aberta em outra data é fechada aqui, senão
-     * ela travaria o check-in de hoje.
+     * Abre a janela de check-in da sessão. Só é permitido na própria data da sessão — é a sessão de
+     * hoje que recebe presença. Uma janela esquecida aberta em outra data é fechada aqui, senão ela
+     * travaria o check-in de hoje.
      */
     @Transactional
-    public Prelecao abrirCheckin(Long prelecaoId, LocalDate hoje) {
-        Prelecao prelecao = buscarPrelecao(prelecaoId);
+    public SessaoAssistencia abrirCheckin(Long sessaoId, LocalDate hoje) {
+        SessaoAssistencia sessao = buscarSessao(sessaoId);
 
-        if (!hoje.equals(prelecao.getDataApresentacao())) {
+        if (!hoje.equals(sessao.getData())) {
             throw new RegraNegocioException("O check-in só pode ser aberto no dia da sessão ("
-                    + prelecao.getDataApresentacao().format(FORMATO_DATA) + ").");
+                    + sessao.getData().format(FORMATO_DATA) + ").");
         }
-        if (prelecao.isCheckinAberto()) {
-            return prelecao;
+        if (sessao.isCheckinAberto()) {
+            return sessao;
         }
 
         sessaoComCheckinAberto()
-                .filter(aberta -> !aberta.getId().equals(prelecaoId))
+                .filter(aberta -> !aberta.getId().equals(sessaoId))
                 .ifPresent(this::fechar);
 
-        prelecao.setCheckinAbertoEm(LocalDateTime.now());
-        prelecao.setCheckinFechadoEm(null);
-        return prelecaoRepository.save(prelecao);
+        sessao.setCheckinAbertoEm(LocalDateTime.now());
+        sessao.setCheckinFechadoEm(null);
+        return sessaoAssistenciaRepository.save(sessao);
     }
 
     @Transactional
-    public Prelecao fecharCheckin(Long prelecaoId) {
-        return fechar(buscarPrelecao(prelecaoId));
+    public SessaoAssistencia fecharCheckin(Long sessaoId) {
+        return fechar(buscarSessao(sessaoId));
     }
 
-    private Prelecao fechar(Prelecao prelecao) {
-        if (prelecao.getCheckinAbertoEm() != null && prelecao.getCheckinFechadoEm() == null) {
-            prelecao.setCheckinFechadoEm(LocalDateTime.now());
+    private SessaoAssistencia fechar(SessaoAssistencia sessao) {
+        if (sessao.isCheckinAberto()) {
+            sessao.setCheckinFechadoEm(LocalDateTime.now());
         }
-        return prelecaoRepository.save(prelecao);
+        return sessaoAssistenciaRepository.save(sessao);
     }
 
     /**
@@ -105,7 +111,7 @@ public class CheckinService {
                         "Este QR code não corresponde a nenhum cartão de assistência."));
     }
 
-    /** Presença normal: aplica todas as regras do cartão (semana, ciclo de 4, 21 dias, dia da semana). */
+    /** Presença normal pelo QR: aplica todas as regras do cartão (semana, ciclo de 4, 21 dias, dia da semana). */
     public ResultadoCheckin registrarPresenca(String codigoCartao) {
         return registrarPresenca(codigoCartao, false);
     }
@@ -113,11 +119,20 @@ public class CheckinService {
     /** Com confirmarReinicio a recepção reinicia em P2 um cartão expirado (21 dias) e carimba a presença. */
     @Transactional(noRollbackFor = CartaoExpiradoException.class)
     public ResultadoCheckin registrarPresenca(String codigoCartao, boolean confirmarReinicio) {
-        Prelecao sessao = exigirSessaoAberta();
-        Assistido assistido = exigirCartaoUtilizavel(codigoCartao);
+        SessaoAssistencia sessao = exigirSessaoAberta();
+        return carimbar(exigirCartaoUtilizavel(buscarPorCodigoCartao(codigoCartao)), sessao, confirmarReinicio);
+    }
 
+    /** Presença pela busca por nome no painel: mesmas regras do QR, mas na sessão do painel. */
+    @Transactional(noRollbackFor = CartaoExpiradoException.class)
+    public ResultadoCheckin registrarPresenca(Long sessaoId, Long assistidoId, boolean confirmarReinicio) {
+        SessaoAssistencia sessao = exigirCheckinAberto(sessaoId);
+        return carimbar(exigirCartaoUtilizavel(buscarAssistido(assistidoId)), sessao, confirmarReinicio);
+    }
+
+    private ResultadoCheckin carimbar(Assistido assistido, SessaoAssistencia sessao, boolean confirmarReinicio) {
         TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(
-                novaSessao(assistido, sessao), confirmarReinicio);
+                novaPresenca(assistido, sessao), confirmarReinicio);
         return new ResultadoCheckin(assistido, sessao, resultado.sessao(), resultado.ouvinte(),
                 resultado.tratamentoReiniciado());
     }
@@ -129,30 +144,46 @@ public class CheckinService {
      */
     @Transactional
     public ResultadoCheckin registrarOuvinte(String codigoCartao) {
-        Prelecao sessao = exigirSessaoAberta();
-        Assistido assistido = exigirCartaoUtilizavel(codigoCartao);
+        SessaoAssistencia sessao = exigirSessaoAberta();
+        return ouvinte(exigirCartaoUtilizavel(buscarPorCodigoCartao(codigoCartao)), sessao);
+    }
 
-        SessaoTratamento ouvinte = novaSessao(assistido, sessao);
+    @Transactional
+    public ResultadoCheckin registrarOuvinte(Long sessaoId, Long assistidoId) {
+        SessaoAssistencia sessao = exigirCheckinAberto(sessaoId);
+        return ouvinte(exigirCartaoUtilizavel(buscarAssistido(assistidoId)), sessao);
+    }
+
+    private ResultadoCheckin ouvinte(Assistido assistido, SessaoAssistencia sessao) {
+        SessaoTratamento ouvinte = novaPresenca(assistido, sessao);
         ouvinte.setOuvinte(true);
         ouvinte.setNumeroSerie(null);
         return new ResultadoCheckin(assistido, sessao, sessaoRepository.save(ouvinte), true, false);
     }
 
-    private SessaoTratamento novaSessao(Assistido assistido, Prelecao sessao) {
+    private SessaoTratamento novaPresenca(Assistido assistido, SessaoAssistencia sessao) {
         SessaoTratamento nova = new SessaoTratamento();
         nova.setAssistido(assistido);
-        nova.setDataConsulta(sessao.getDataApresentacao());
-        nova.setPrelecao(sessao);
+        nova.setDataConsulta(sessao.getData());
+        nova.setPrelecao(prelecaoRepository.findByDataApresentacao(sessao.getData()).orElse(null));
         return nova;
     }
 
-    private Prelecao exigirSessaoAberta() {
-        return sessaoComCheckinAberto().orElseThrow(() -> new RegraNegocioException(
-                "Nenhuma sessão está com o check-in aberto. Abra o check-in da sessão de hoje na escala de preleções."));
+    private SessaoAssistencia exigirSessaoAberta() {
+        return sessaoComCheckinAberto().orElseThrow(() -> new RegraNegocioException(SEM_SESSAO_ABERTA));
     }
 
-    private Assistido exigirCartaoUtilizavel(String codigoCartao) {
-        Assistido assistido = buscarPorCodigoCartao(codigoCartao);
+    /** O painel é de uma sessão específica: ela precisa ser a que está com o check-in aberto. */
+    public SessaoAssistencia exigirCheckinAberto(Long sessaoId) {
+        SessaoAssistencia sessao = buscarSessao(sessaoId);
+        if (!sessao.isCheckinAberto()) {
+            throw new RegraNegocioException("O check-in desta sessão ("
+                    + sessao.getData().format(FORMATO_DATA) + ") não está aberto.");
+        }
+        return sessao;
+    }
+
+    private Assistido exigirCartaoUtilizavel(Assistido assistido) {
         if (!assistido.isAtivo()) {
             throw new RegraNegocioException("O cadastro de " + assistido.getNome()
                     + " está inativo. Reative o prontuário antes de marcar presença.");
@@ -160,8 +191,13 @@ public class CheckinService {
         return assistido;
     }
 
-    private Prelecao buscarPrelecao(Long prelecaoId) {
-        return prelecaoRepository.findById(prelecaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Preleção inválida: " + prelecaoId));
+    private Assistido buscarAssistido(Long assistidoId) {
+        return assistidoRepository.findById(assistidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+    }
+
+    private SessaoAssistencia buscarSessao(Long sessaoId) {
+        return sessaoAssistenciaRepository.findById(sessaoId)
+                .orElseThrow(() -> new IllegalArgumentException("Sessão inválida: " + sessaoId));
     }
 }

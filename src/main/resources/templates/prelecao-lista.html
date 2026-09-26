@@ -39,17 +39,14 @@
                 <div class="flex-grow-1">
                     <div class="titulo">Check-in aberto</div>
                     <div class="dl-muted small">
-                        Sessão de <span th:text="${#temporals.format(sessaoAberta.dataApresentacao, 'dd/MM/yyyy')}"></span>
-                        · <span th:text="${sessaoAberta.tema}"></span>
+                        Sessão de <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
+                        · <span th:text="${sessaoAberta.diaFrequencia.label}"></span>
                         — escaneie o QR do cartão de cada assistido na chegada.
                     </div>
                 </div>
-                <form th:action="@{/prelecao/{id}/checkin/fechar(id=${sessaoAberta.id})}" method="post">
-                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-outline-danger btn-sm">
-                        <i class="bi bi-stop-circle"></i> Encerrar check-in
-                    </button>
-                </form>
+                <a th:href="@{/sessao/{id}(id=${sessaoAberta.id})}" class="btn btn-teal btn-sm text-white">
+                    <i class="bi bi-speedometer2"></i> Painel da sessão
+                </a>
             </div>
 
             <!-- Destaque do que acontece nesta semana de assistência (Domingo a Sábado) -->
@@ -145,19 +142,13 @@
                                 <td th:text="${item.prelecao.tema}"></td>
                                 <td class="text-center" th:unless="${somenteConsulta}">
                                     <div class="d-flex justify-content-center gap-2">
-                                        <!-- Check-in só na sessão de hoje: é ela que recebe presença. -->
-                                        <form th:if="${item.prelecao.dataApresentacao.equals(hoje) and not item.prelecao.checkinAberto}"
-                                              th:action="@{/prelecao/{id}/checkin/abrir(id=${item.prelecao.id})}" method="post">
+                                        <!-- A sessão de hoje (check-in, escala, indicadores) fica no painel da Sessão. -->
+                                        <form th:if="${item.prelecao.dataApresentacao.equals(hoje)}"
+                                              th:action="@{/sessao}" method="post">
                                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                            <button type="submit" class="btn btn-teal btn-sm text-white" title="Abrir check-in por QR code">
-                                                <i class="bi bi-qr-code-scan"></i> Check-in
-                                            </button>
-                                        </form>
-                                        <form th:if="${item.prelecao.checkinAberto}"
-                                              th:action="@{/prelecao/{id}/checkin/fechar(id=${item.prelecao.id})}" method="post">
-                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Encerrar check-in">
-                                                <i class="bi bi-stop-circle"></i> Encerrar
+                                            <input type="hidden" name="data" th:value="${item.prelecao.dataApresentacao}">
+                                            <button type="submit" class="btn btn-teal btn-sm text-white" title="Abrir o painel da sessão de hoje">
+                                                <i class="bi bi-speedometer2"></i> Sessão
                                             </button>
                                         </form>
                                         <a th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${item.prelecao.id})}" class="btn btn-outline-teal btn-sm">

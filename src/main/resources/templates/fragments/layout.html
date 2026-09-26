@@ -28,6 +28,9 @@
                 <a th:if="${somenteConsulta and meuAssistidoId != null}" th:href="@{/prontuario/{id}/cartao(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
                     <i class="bi bi-card-checklist"></i> Meu Cartão
                 </a>
+                <a th:unless="${somenteConsulta}" th:href="@{/sessao}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-speedometer2"></i> Sessão
+                </a>
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções
                 </a>

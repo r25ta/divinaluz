@@ -9,7 +9,6 @@ import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.Evolucao;
-import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
@@ -39,7 +38,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -48,7 +46,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -498,19 +495,7 @@ public class ProntuarioController {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
 
-        DiaFrequencia anterior = assistido.getDiaFrequencia();
-        if (!Objects.equals(anterior, diaFrequencia)) {
-            HistoricoDiaFrequencia log = new HistoricoDiaFrequencia();
-            log.setAssistido(assistido);
-            log.setDiaAnterior(anterior);
-            log.setDiaNovo(diaFrequencia);
-            log.setDataHora(LocalDateTime.now());
-            log.setMotivo(motivo);
-            historicoDiaFrequenciaRepository.save(log);
-
-            assistido.setDiaFrequencia(diaFrequencia);
-            assistidoRepository.save(assistido);
-        }
+        tratamentoService.alterarDiaFrequencia(assistido, diaFrequencia, motivo);
 
         return "redirect:/prontuario/" + assistidoId;
     }

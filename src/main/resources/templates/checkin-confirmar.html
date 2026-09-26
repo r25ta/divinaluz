@@ -13,8 +13,8 @@
                     <span class="dl-eyebrow">Recepção</span>
                     <h1>Check-in da Sessão</h1>
                 </div>
-                <a th:href="@{/prelecao}" class="btn btn-outline-teal btn-sm">
-                    <i class="bi bi-calendar2-event"></i> Escala
+                <a th:href="${sessaoAberta != null} ? @{/sessao/{id}(id=${sessaoAberta.id})} : @{/sessao}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-speedometer2"></i> Painel da sessão
                 </a>
             </div>
 
@@ -60,7 +60,7 @@
                         </div>
                         <div class="dl-info-strip-item">
                             <span class="label">Sessão de hoje</span>
-                            <span class="value" th:text="${sessaoAberta != null ? #temporals.format(sessaoAberta.dataApresentacao, 'dd/MM/yyyy') : 'Check-in fechado'}">27/09/2026</span>
+                            <span class="value" th:text="${sessaoAberta != null ? #temporals.format(sessaoAberta.data, 'dd/MM/yyyy') : 'Check-in fechado'}">27/09/2026</span>
                         </div>
                     </div>
 

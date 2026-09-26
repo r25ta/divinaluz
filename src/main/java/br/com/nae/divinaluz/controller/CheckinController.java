@@ -4,7 +4,7 @@ import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoStatus;
-import br.com.nae.divinaluz.model.Prelecao;
+import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.service.CheckinService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -13,12 +13,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.time.LocalDate;
-
 /**
  * Check-in por QR code, do lado da recepção (ver CLAUDE.md 3.12). O QR está no cartão do assistido;
  * quem escaneia é a recepção, já autenticada como staff — por isso todas as rotas daqui caem na
- * regra de staff do SecurityConfig, inclusive a tela de confirmação do scan.
+ * regra de staff do SecurityConfig, inclusive a tela de confirmação do scan. A janela de check-in é
+ * aberta e fechada no painel da sessão (SessaoController).
  */
 @Controller
 public class CheckinController {
@@ -27,25 +26,6 @@ public class CheckinController {
 
     public CheckinController(CheckinService checkinService) {
         this.checkinService = checkinService;
-    }
-
-    @PostMapping("/prelecao/{prelecaoId}/checkin/abrir")
-    public String abrirCheckin(@PathVariable Long prelecaoId, RedirectAttributes redirectAttributes) {
-        try {
-            Prelecao sessao = checkinService.abrirCheckin(prelecaoId, LocalDate.now());
-            redirectAttributes.addFlashAttribute("aviso",
-                    "Check-in aberto para a sessão de " + sessao.getTema() + ". Escaneie o QR do cartão de cada assistido.");
-        } catch (RegraNegocioException e) {
-            redirectAttributes.addFlashAttribute("erro", e.getMessage());
-        }
-        return "redirect:/prelecao";
-    }
-
-    @PostMapping("/prelecao/{prelecaoId}/checkin/fechar")
-    public String fecharCheckin(@PathVariable Long prelecaoId, RedirectAttributes redirectAttributes) {
-        checkinService.fecharCheckin(prelecaoId);
-        redirectAttributes.addFlashAttribute("aviso", "Check-in encerrado. O QR não carimba mais presença.");
-        return "redirect:/prelecao";
     }
 
     /** Tela que abre quando a recepção escaneia o QR do cartão: mostra quem é e o que fazer. */
@@ -60,11 +40,10 @@ public class CheckinController {
             return "checkin-confirmar";
         }
 
-        Prelecao sessao = checkinService.sessaoComCheckinAberto().orElse(null);
+        SessaoAssistencia sessao = checkinService.sessaoComCheckinAberto().orElse(null);
         model.addAttribute("sessaoAberta", sessao);
         if (sessao == null) {
-            model.addAttribute("erro",
-                    "Nenhuma sessão está com o check-in aberto. Abra o check-in da sessão de hoje na escala de preleções.");
+            model.addAttribute("erro", CheckinService.SEM_SESSAO_ABERTA);
         }
         return "checkin-confirmar";
     }
@@ -104,21 +83,24 @@ public class CheckinController {
     public String registrarOuvinte(@PathVariable String codigoCartao, RedirectAttributes redirectAttributes) {
         try {
             CheckinService.ResultadoCheckin resultado = checkinService.registrarOuvinte(codigoCartao);
-            redirectAttributes.addFlashAttribute("sucesso", resultado.assistido().getNome()
-                    + " entrou como ouvinte na sessão de "
-                    + resultado.prelecao().getTema() + ". O cartão não avançou.");
+            redirectAttributes.addFlashAttribute("sucesso", mensagemOuvinte(resultado));
         } catch (RegraNegocioException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
         }
         return "redirect:/checkin/" + codigoCartao;
     }
 
-    private String mensagemDeSucesso(CheckinService.ResultadoCheckin resultado) {
+    static String mensagemOuvinte(CheckinService.ResultadoCheckin resultado) {
+        return resultado.assistido().getNome() + " entrou como ouvinte na sessão de "
+                + resultado.sessao().getDiaFrequencia().getLabel() + ". O cartão não avançou.";
+    }
+
+    static String mensagemDeSucesso(CheckinService.ResultadoCheckin resultado) {
         String nome = resultado.assistido().getNome();
         if (resultado.ouvinte()) {
             return nome + " já tinha presença nesta semana: entrou como ouvinte e o cartão não avançou.";
         }
-        Integer numero = resultado.sessao().getNumeroSerie();
+        Integer numero = resultado.presenca().getNumeroSerie();
         String presenca = numero != null ? numero + "ª presença" : "presença";
         String aviso = resultado.assistido().getStatusCartao() == CartaoStatus.AGUARDANDO_AVALIACAO
                 ? " Cartão completo: encaminhe para a avaliação espiritual."

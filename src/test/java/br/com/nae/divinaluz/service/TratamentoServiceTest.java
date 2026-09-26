@@ -3,6 +3,8 @@ package br.com.nae.divinaluz.service;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoStatus;
+import br.com.nae.divinaluz.model.DiaFrequencia;
+import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
@@ -11,10 +13,12 @@ import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
+import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +56,9 @@ class TratamentoServiceTest {
 
     @Mock
     private PrelecaoRepository prelecaoRepository;
+
+    @Mock
+    private HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository;
 
     @InjectMocks
     private TratamentoService tratamentoService;
@@ -281,5 +288,27 @@ class TratamentoServiceTest {
         sessao.setAssistido(assistido);
         sessao.setDataConsulta(data);
         return sessao;
+    }
+
+    // Rastreabilidade do dia de assistência: a troca feita pela recepção (painel da sessão) grava o
+    // histórico com o valor anterior; reenviar o mesmo dia não gera linha nova.
+    @Test
+    void alterarDiaFrequenciaGravaHistoricoSoQuandoMuda() {
+        assistido.setDiaFrequencia(DiaFrequencia.DOMINGO_08H);
+
+        boolean mudou = tratamentoService.alterarDiaFrequencia(assistido, DiaFrequencia.TERCA_19H, "Pedido na recepção");
+
+        assertTrue(mudou);
+        assertEquals(DiaFrequencia.TERCA_19H, assistido.getDiaFrequencia());
+        ArgumentCaptor<HistoricoDiaFrequencia> captor = ArgumentCaptor.forClass(HistoricoDiaFrequencia.class);
+        verify(historicoDiaFrequenciaRepository).save(captor.capture());
+        assertEquals(DiaFrequencia.DOMINGO_08H, captor.getValue().getDiaAnterior());
+        assertEquals(DiaFrequencia.TERCA_19H, captor.getValue().getDiaNovo());
+        assertEquals("Pedido na recepção", captor.getValue().getMotivo());
+
+        boolean mudouDeNovo = tratamentoService.alterarDiaFrequencia(assistido, DiaFrequencia.TERCA_19H, null);
+
+        assertFalse(mudouDeNovo);
+        verify(historicoDiaFrequenciaRepository).save(any());
     }
 }

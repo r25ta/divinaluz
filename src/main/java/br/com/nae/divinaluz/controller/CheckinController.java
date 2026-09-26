@@ -71,8 +71,18 @@ public class CheckinController {
 
     @PostMapping("/checkin/{codigoCartao}")
     public String registrarPresenca(@PathVariable String codigoCartao, RedirectAttributes redirectAttributes) {
+        return carimbar(codigoCartao, false, redirectAttributes);
+    }
+
+    // Reinício em P2 de cartão expirado: decisão da recepção (o assistido tem acesso só de consulta).
+    @PostMapping("/checkin/{codigoCartao}/reiniciar")
+    public String reiniciarEPresenca(@PathVariable String codigoCartao, RedirectAttributes redirectAttributes) {
+        return carimbar(codigoCartao, true, redirectAttributes);
+    }
+
+    private String carimbar(String codigoCartao, boolean confirmarReinicio, RedirectAttributes redirectAttributes) {
         try {
-            CheckinService.ResultadoCheckin resultado = checkinService.registrarPresenca(codigoCartao);
+            CheckinService.ResultadoCheckin resultado = checkinService.registrarPresenca(codigoCartao, confirmarReinicio);
             redirectAttributes.addFlashAttribute("sucesso", mensagemDeSucesso(resultado));
             if (resultado.tratamentoReiniciado()) {
                 redirectAttributes.addFlashAttribute("aviso",

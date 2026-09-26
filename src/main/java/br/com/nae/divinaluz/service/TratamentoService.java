@@ -1,6 +1,7 @@
 package br.com.nae.divinaluz.service;
 
 import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
+import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
@@ -57,8 +58,15 @@ public class TratamentoService {
 
     public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
 
-    @Transactional
     public ResultadoSessao registrarSessao(SessaoTratamento novaSessao) {
+        return registrarSessao(novaSessao, false);
+    }
+
+    // confirmarReinicio: só a recepção confirma o reinício em P2 de um cartão expirado (21 dias);
+    // sem a confirmação o cartão é marcado INCOMPLETO_POR_TEMPO e a presença não entra.
+    // noRollbackFor: o status INCOMPLETO_POR_TEMPO gravado precisa sobreviver à exceção.
+    @Transactional(noRollbackFor = CartaoExpiradoException.class)
+    public ResultadoSessao registrarSessao(SessaoTratamento novaSessao, boolean confirmarReinicio) {
         Assistido assistido = novaSessao.getAssistido();
         Long assistidoId = assistido.getId();
 
@@ -70,7 +78,8 @@ public class TratamentoService {
         if (assistido.getStatusCartao() == null) {
             assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
         }
-        if (assistido.getStatusCartao() != CartaoStatus.EM_TRATAMENTO) {
+        if (assistido.getStatusCartao() != CartaoStatus.EM_TRATAMENTO
+                && assistido.getStatusCartao() != CartaoStatus.INCOMPLETO_POR_TEMPO) {
             throw new RegraNegocioException("O cartão está com status '"
                     + assistido.getStatusCartao().getLabel()
                     + "' e não pode receber uma presença efetiva neste momento.");
@@ -87,15 +96,23 @@ public class TratamentoService {
                 sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(assistidoId);
         boolean tratamentoReiniciado = false;
 
-        if (ultimaSessao.isPresent()) {
-            long dias = ChronoUnit.DAYS.between(ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta());
+        boolean expirado = assistido.getStatusCartao() == CartaoStatus.INCOMPLETO_POR_TEMPO
+                || (ultimaSessao.isPresent() && ChronoUnit.DAYS.between(
+                        ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta()) >= DIAS_TOLERANCIA_AUSENCIA);
 
-            if (dias >= DIAS_TOLERANCIA_AUSENCIA) {
-                // Passou de 2 semanas de tolerância (faltou na 3ª semana): reinicia o tratamento em P2,
-                // independente do tratamento anterior, e zera a contagem do ciclo (regra das 4 sessões).
-                reiniciarTratamento(assistido, novaSessao.getDataConsulta());
-                tratamentoReiniciado = true;
+        if (expirado && ultimaSessao.isPresent()) {
+            // Passou de 2 semanas de tolerância (faltou na 3ª semana): o cartão expira. Quem reinicia em
+            // P2 (independente do tratamento anterior, zerando o ciclo) é a recepção, nunca o assistido.
+            if (!confirmarReinicio) {
+                assistido.setStatusCartao(CartaoStatus.INCOMPLETO_POR_TEMPO);
+                assistidoRepository.save(assistido);
+                throw new CartaoExpiradoException("O assistido ficou 3 semanas ou mais sem sessão: o cartão "
+                        + "expirou (Incompleto por Tempo). Confirme o reinício em P2 para registrar a presença.");
             }
+            reiniciarTratamento(assistido, novaSessao.getDataConsulta());
+            tratamentoReiniciado = true;
+        } else if (ultimaSessao.isPresent()) {
+            // dentro da tolerância: nada a fazer
         } else {
             // Primeira sessão do assistido: inicia o ciclo e, se ainda não houver tratamento definido
             // na triagem, direciona automaticamente para P2 (porta de entrada padrão).
@@ -254,6 +271,7 @@ public class TratamentoService {
     private void reiniciarTratamento(Assistido assistido, LocalDate dataReinicio) {
         assistido.setTratamentoAtual(buscarTratamentoInicial());
         assistido.setCicloIniciadoEm(dataReinicio);
+        assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
         assistidoRepository.save(assistido);
     }
 

@@ -25,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -117,7 +119,7 @@ class CheckinServiceTest {
                 () -> checkinService.registrarPresenca("codigo-do-cartao"));
 
         assertTrue(erro.getMessage().contains("check-in aberto"));
-        verify(tratamentoService, never()).registrarSessao(any());
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
     @Test
@@ -126,13 +128,13 @@ class CheckinServiceTest {
         when(prelecaoRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
                 .thenReturn(Optional.of(sessaoDeDomingo));
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
-        when(tratamentoService.registrarSessao(any(SessaoTratamento.class)))
+        when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
                 .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));
 
         checkinService.registrarPresenca("codigo-do-cartao");
 
         ArgumentCaptor<SessaoTratamento> captor = ArgumentCaptor.forClass(SessaoTratamento.class);
-        verify(tratamentoService).registrarSessao(captor.capture());
+        verify(tratamentoService).registrarSessao(captor.capture(), eq(false));
         assertEquals(DOMINGO, captor.getValue().getDataConsulta());
         assertEquals(sessaoDeDomingo, captor.getValue().getPrelecao());
         assertEquals(assistido, captor.getValue().getAssistido());
@@ -152,7 +154,7 @@ class CheckinServiceTest {
         assertTrue(resultado.ouvinte());
         assertTrue(resultado.sessao().isOuvinte());
         assertNull(resultado.sessao().getNumeroSerie());
-        verify(tratamentoService, never()).registrarSessao(any());
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
     @Test
@@ -167,7 +169,7 @@ class CheckinServiceTest {
                 () -> checkinService.registrarPresenca("codigo-do-cartao"));
 
         assertTrue(erro.getMessage().contains("inativo"));
-        verify(tratamentoService, never()).registrarSessao(any());
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
     @Test

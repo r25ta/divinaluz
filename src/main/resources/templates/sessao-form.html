@@ -75,6 +75,11 @@
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
                             <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <!-- Cartão expirado (21 dias): só a recepção confirma o reinício em P2. -->
+                            <button type="submit" class="btn btn-warning" th:if="${cartaoExpirado}"
+                                    th:formaction="@{/prontuario/{id}/sessao(id=${assistido.id},reiniciarP2=true)}">
+                                <i class="bi bi-arrow-repeat"></i> Reiniciar em P2 e registrar
+                            </button>
                             <button type="submit" class="btn btn-teal text-white">
                                 <i class="bi bi-check-lg"></i> Salvar Sessão
                             </button>

@@ -221,10 +221,19 @@ try {
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a 1ª sessão automática do novo ciclo em 06/02/2024" ($r.Body -match "06/02/2024")
 
-    # 11. Reinício automático por ausência de 21+ dias (regra dos 21 dias): próxima sessão 21 dias
-    # depois (27/02, terça) deve ser aceita e reiniciar o tratamento em P2, independente do anterior.
+    # 11. Cartão expirado por ausência de 21+ dias: a sessão (27/02, terça) é barrada, o cartão vira
+    # INCOMPLETO_POR_TEMPO e só a confirmação da recepção (reiniciarP2=true) reinicia em P2.
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-02-27" }
-    Check "Sessão após 21+ dias de hiato é aceita (reinício de ciclo)" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
+    Check "Sessão após 21+ dias sem confirmação é barrada" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
+
+    $statusExpirado = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+    Check "Cartão fica 'Incompleto por Tempo'" ($statusExpirado -eq "INCOMPLETO_POR_TEMPO")
+
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao?reiniciarP2=true" -Form @{ dataConsulta = "2024-02-27" }
+    Check "Recepção confirma o reinício em P2 e a sessão é aceita" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
+
+    $statusReiniciado = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+    Check "Status volta para 'Em Tratamento' após o reinício" ($statusReiniciado -eq "EM_TRATAMENTO")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Tratamento reiniciado em P2 após hiato de 21+ dias" ($r.Body -match ">P2<")
@@ -458,7 +467,14 @@ try {
         # da semana em que roda (com dia definido, a validação do TratamentoService barraria).
         Invoke-Sql "UPDATE assistido SET dia_frequencia = NULL WHERE id = $assistidoId;" | Out-Null
 
+        # A última presença é de 2024: o cartão expira (21 dias) e o QR só carimba após a recepção
+        # confirmar o reinício em P2 (/reiniciar).
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"  # consome o flash de erro
+        $statusQr = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+        Check "QR de cartão expirado não carimba e marca 'Incompleto por Tempo'" ($statusQr -eq "INCOMPLETO_POR_TEMPO")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao/reiniciar"
         Check "Carimbar presença pelo QR redireciona de volta para o check-in" ($r.StatusCode -eq 302 -and $r.Location -match "checkin/$codigoCartao")
 
         $presencaHoje = Invoke-SqlScalar "SELECT ouvinte::text || '|' || COALESCE(prelecao_id::text, 'NULL') FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE ORDER BY id LIMIT 1;"

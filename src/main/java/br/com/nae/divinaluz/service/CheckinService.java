@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Prelecao;
@@ -105,13 +106,18 @@ public class CheckinService {
     }
 
     /** Presença normal: aplica todas as regras do cartão (semana, ciclo de 4, 21 dias, dia da semana). */
-    @Transactional
     public ResultadoCheckin registrarPresenca(String codigoCartao) {
+        return registrarPresenca(codigoCartao, false);
+    }
+
+    /** Com confirmarReinicio a recepção reinicia em P2 um cartão expirado (21 dias) e carimba a presença. */
+    @Transactional(noRollbackFor = CartaoExpiradoException.class)
+    public ResultadoCheckin registrarPresenca(String codigoCartao, boolean confirmarReinicio) {
         Prelecao sessao = exigirSessaoAberta();
         Assistido assistido = exigirCartaoUtilizavel(codigoCartao);
 
         TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(
-                novaSessao(assistido, sessao));
+                novaSessao(assistido, sessao), confirmarReinicio);
         return new ResultadoCheckin(assistido, sessao, resultado.sessao(), resultado.ouvinte(),
                 resultado.tratamentoReiniciado());
     }

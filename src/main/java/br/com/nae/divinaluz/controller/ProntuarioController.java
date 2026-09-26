@@ -1,6 +1,7 @@
 package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
+import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
@@ -579,13 +580,13 @@ public class ProntuarioController {
     // form, fazendo o save() tentar um UPDATE em vez de um INSERT.
     @PostMapping("/prontuario/{assistidoId}/sessao")
     public String salvarSessao(@PathVariable Long assistidoId, @ModelAttribute SessaoTratamento sessao,
-            RedirectAttributes redirectAttributes) {
+            @RequestParam(defaultValue = "false") boolean reiniciarP2, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
         sessao.setAssistido(assistido);
 
         try {
-            TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(sessao);
+            TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(sessao, reiniciarP2);
             if (resultado.tratamentoReiniciado()) {
                 redirectAttributes.addFlashAttribute("aviso",
                         "O assistido ficou 3 semanas ou mais sem sessão. O tratamento foi reiniciado em P2. "
@@ -595,6 +596,10 @@ public class ProntuarioController {
                 redirectAttributes.addFlashAttribute("aviso",
                         "O assistido já teve presença nesta semana. Esta chegada foi registrada como ouvinte e não contou para o cartão.");
             }
+        } catch (CartaoExpiradoException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+            redirectAttributes.addFlashAttribute("cartaoExpirado", true);
+            return "redirect:/prontuario/" + assistidoId + "/nova-sessao";
         } catch (AvaliacaoPendenteException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             redirectAttributes.addFlashAttribute("avaliacaoPendente", true);

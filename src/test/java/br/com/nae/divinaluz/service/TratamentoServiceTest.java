@@ -159,6 +159,123 @@ class TratamentoServiceTest {
                         && sessao.getPrelecao() == prelecao));
     }
 
+    @Test
+    void ausenciaDe21DiasSemConfirmacaoMarcaIncompletoPorTempoENaoRegistra() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 1));
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 1))));
+
+        assertThrows(br.com.nae.divinaluz.exception.CartaoExpiradoException.class,
+                () -> tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 22))));
+
+        assertEquals(CartaoStatus.INCOMPLETO_POR_TEMPO, assistido.getStatusCartao());
+        verify(assistidoRepository).save(assistido);
+        verify(sessaoRepository, never()).save(any(SessaoTratamento.class));
+    }
+
+    @Test
+    void ausenciaDe21DiasReiniciaEmP2ComNovoCiclo() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 1));
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 1))));
+        when(tipoTratamentoRepository.findByCodigo("P2")).thenReturn(Optional.of(tratamento));
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 22)))
+                .thenReturn(0L);
+        when(sessaoRepository.save(any(SessaoTratamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        SessaoTratamento nova = sessao(LocalDate.of(2026, 9, 22));
+        // a recepção confirma o reinício
+        TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(nova, true);
+
+        assertTrue(resultado.tratamentoReiniciado());
+        assertEquals(tratamento, assistido.getTratamentoAtual());
+        assertEquals(LocalDate.of(2026, 9, 22), assistido.getCicloIniciadoEm());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+        assertEquals(1, nova.getNumeroSerie());
+    }
+
+    @Test
+    void ausenciaDe14DiasNaoReiniciaTratamento() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 1));
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 8))));
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 1)))
+                .thenReturn(1L);
+        when(sessaoRepository.save(any(SessaoTratamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TratamentoService.ResultadoSessao resultado =
+                tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 22)));
+
+        assertFalse(resultado.tratamentoReiniciado());
+        assertEquals(LocalDate.of(2026, 9, 1), assistido.getCicloIniciadoEm());
+    }
+
+    @Test
+    void sessaoForaDoDiaDeAssistenciaEBloqueada() {
+        assistido.setDiaFrequencia(br.com.nae.divinaluz.model.DiaFrequencia.TERCA_19H);
+
+        // 2026-09-20 é domingo
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 20))));
+        verify(sessaoRepository, never()).save(any(SessaoTratamento.class));
+    }
+
+    @Test
+    void avaliacaoNumeraDentroDoCicloEMoveCartaoParaAguardandoEntrevista() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 1));
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        when(avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(1L, LocalDate.of(2026, 9, 1)))
+                .thenReturn(1L);
+        when(avaliacaoRepository.save(any(br.com.nae.divinaluz.model.Avaliacao.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setAssistido(assistido);
+        av.setData(LocalDate.of(2026, 9, 23)); // data livre
+        tratamentoService.registrarAvaliacao(av);
+
+        assertEquals(2, av.getNumeroVez());
+        assertEquals(CartaoStatus.AGUARDANDO_ENTREVISTA, assistido.getStatusCartao());
+    }
+
+    @Test
+    void entrevistaAtualizaTratamentoReabreCartaoEIniciaCiclo() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setId(9L);
+        when(entrevistaRepository.existsByAvaliacaoId(9L)).thenReturn(false);
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Entrevista e = new br.com.nae.divinaluz.model.Entrevista();
+        e.setAssistido(assistido);
+        e.setAvaliacao(av);
+        e.setData(LocalDate.of(2026, 9, 22));
+        e.setTratamentoIndicado(tratamento);
+        tratamentoService.registrarEntrevista(e);
+
+        assertEquals(tratamento, assistido.getTratamentoAtual());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+        assertEquals(LocalDate.of(2026, 9, 22), assistido.getCicloIniciadoEm());
+        verify(sessaoRepository).save(any(SessaoTratamento.class));
+    }
+
+    @Test
+    void entrevistaDuplicadaParaMesmaAvaliacaoEBloqueada() {
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setId(9L);
+        when(entrevistaRepository.existsByAvaliacaoId(9L)).thenReturn(true);
+
+        br.com.nae.divinaluz.model.Entrevista e = new br.com.nae.divinaluz.model.Entrevista();
+        e.setAssistido(assistido);
+        e.setAvaliacao(av);
+        e.setData(LocalDate.of(2026, 9, 22));
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e));
+    }
+
     private SessaoTratamento sessao(LocalDate data) {
         SessaoTratamento sessao = new SessaoTratamento();
         sessao.setAssistido(assistido);

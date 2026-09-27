@@ -1,6 +1,8 @@
 # Blueprint do Render para a versão de demonstração (ver DEPLOY-DEMO.md).
-# O banco fica no Neon (PostgreSQL gratuito sem prazo); as variáveis marcadas com sync: false são
-# pedidas pelo painel do Render na criação e nunca ficam no repositório.
+# O banco fica no Neon (PostgreSQL gratuito sem prazo). As variáveis com sync: false são pedidas
+# pelo painel do Render na criação e nunca ficam no repositório:
+#   DATABASE_URL      a connection string do Neon, colada inteira (postgresql://...)
+#   DEMO_ADMIN_SENHA  a senha do login "admin" na demo
 services:
   - type: web
     name: divinaluz-demo
@@ -11,11 +13,7 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: demo
-      - key: SPRING_DATASOURCE_URL
-        sync: false
-      - key: SPRING_DATASOURCE_USERNAME
-        sync: false
-      - key: SPRING_DATASOURCE_PASSWORD
+      - key: DATABASE_URL
         sync: false
       - key: DEMO_ADMIN_SENHA
         sync: false

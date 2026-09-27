@@ -84,7 +84,7 @@ O repositório tem um arquivo `render.yaml` que já descreve tudo: servidor grat
 
 ### 2.3 Acompanhar o primeiro deploy
 1. Toque no serviço **divinaluz-demo** e abra a aba **Logs** (ou **Events**).
-2. O primeiro build leva de **5 a 10 minutos**: o Render baixa as bibliotecas e compila o sistema.
+2. O primeiro build leva de **5 a 10 minutos**: o Render baixa as bibliotecas, compila o sistema e prepara a inicialização rápida. Depois disso a aplicação ainda leva cerca de **1 minuto** para subir (o plano gratuito tem pouca CPU).
 3. Está pronto quando aparecerem estas linhas no log:
    ```
    Started DivinaluzApplication in ... seconds
@@ -115,13 +115,14 @@ A senha provisória `admin` / `password` do ambiente de desenvolvimento **não**
 | Log com `password authentication failed` | A senha no endereço está errada ou com `****`. Copie de novo no Neon com **Show password** |
 | Log com `Connection refused` ou `timeout` | Confira se o endereço é o do projeto certo e se o banco no Neon está ativo (no painel do Neon, abrir o projeto já acorda o banco) |
 | O build falha antes de aparecer `Started` | Copie as últimas linhas do log e me mande |
-| O link abre mas demora quase 1 minuto | Normal no plano gratuito: a aplicação "dorme" depois de 15 minutos sem uso e acorda no primeiro acesso |
+| O link abre mas demora de 1 a 2 minutos | Normal no plano gratuito: a aplicação "dorme" depois de 15 minutos sem uso e acorda no primeiro acesso |
+| Deploy aparece como **Failed** | Abra o deploy que falhou (em **Events**, toque nele) e copie as últimas 30 linhas do log para mim |
 
 ---
 
 ## Antes e durante a apresentação
 
-- **Abra o link uns 2 minutos antes**, para a aplicação estar acordada.
+- **Abra o link uns 3 minutos antes**, para a aplicação estar acordada (ela leva de 1 a 2 minutos para acordar).
 - **O check-in só abre no dia da sessão.** A regra do sistema vale na demo também: a janela de check-in só abre num Domingo ou numa Terça, na data de hoje. Em outro dia dá para mostrar o painel, a escala, os indicadores do último domingo, a escala de preleções e os cartões, mas não marcar presença.
 - **Casos prontos para mostrar na recepção** (no painel da sessão, busque por "souza"):
   - *Pedro Souza*: a próxima presença é a 4ª, e o cartão vai para Aguardando Avaliação.

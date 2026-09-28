@@ -129,15 +129,20 @@ try {
     Check "Index responde 200 (autenticado)" ($r.StatusCode -eq 200)
 
     # 2. Cadastro: 1ª sessão obrigatória em Domingo/Terça (item 4). 2024-01-07 é domingo ->
-    # define diaFrequencia=DOMINGO_08H, entra em P2, cria a 1ª sessão automaticamente.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; vinculo = "ASSISTIDO"; dataPrimeiraSessao = "07/01/2024" }
+    # define diaFrequencia=DOMINGO_08H, entra em P2, cria a 1ª sessão automaticamente. Sem e-mail,
+    # o cadastro exige a senha de acesso (o acesso ASSISTIDO agora é criado automaticamente).
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; vinculo = "ASSISTIDO"; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
     Check "Cadastro redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
     $assistidoId = $null
-    if ($r.Body -match "$([regex]::Escape($nomeTeste))[\s\S]*?prontuario/(\d+)") { $assistidoId = $Matches[1] }
+    # Âncora na célula "nome-assistido" da tabela (não em qualquer ocorrência do nome na página —
+    # a mensagem flash de sucesso do cadastro, acima da tabela, também repete o nome; sem ancorar
+    # na célula, um SMOKE_TEST_ residual de outra execução com link próprio podia ser capturado).
+    if ($r.Body -match "nome-assistido""[^>]*>$([regex]::Escape($nomeTeste))<[\s\S]*?prontuario/(\d+)") { $assistidoId = $Matches[1] }
     Check "Assistido de teste aparece na listagem com ID" ($null -ne $assistidoId)
     if (-not $assistidoId) { throw "Não foi possível continuar sem o ID do assistido de teste." }
+    Check "Listagem mostra a mensagem de sucesso do cadastro com o login gerado" ($r.Body -match "Login de acesso")
 
     $prontuarioUrl = "$BaseUrl/prontuario/$assistidoId"
     $cartaoUrl = "$prontuarioUrl/cartao"
@@ -301,24 +306,20 @@ try {
     $r = Invoke-CurlForm -Url "$BaseUrl/"
     Check "Assistido reativado volta a aparecer na listagem padrão" ($r.Body -match [regex]::Escape($nomeEditado))
 
-    # 14. Criar Acesso a partir do prontuário: dá login a um assistido que já existe (fluxo real —
-    # staff cadastra a pessoa presencialmente primeiro, o acesso ao cartão vem depois).
+    # 14. O cadastro (item /novo) já cria o acesso automaticamente (perfil ASSISTIDO). Sem e-mail,
+    # o login é gerado a partir do nome (fácil memorização) e a senha é a informada no form
+    # (senhaAcesso, na etapa 2) — não existe mais o estado "Sem acesso" logo após o cadastro.
     $r = Invoke-CurlForm -Url $prontuarioUrl
-    Check "Prontuário mostra 'Sem acesso' e o botão 'Criar Acesso' antes de criar o login" ($r.Body -match "Sem acesso" -and $r.Body -match "Criar Acesso")
+    Check "Prontuário já mostra o acesso criado no cadastro (sem 'Sem acesso'/'Criar Acesso')" ($r.Body -notmatch "Sem acesso" -and $r.Body -match "Editar Acesso")
+
+    # Âncora em "Acesso ao Cartão" (não em qualquer "dl-badge-success" — o badge "Ativo" do
+    # cadastro usa a mesma classe e aparece antes na página).
+    $loginTeste = $null
+    if ($r.Body -match 'Acesso ao Cartão[\s\S]*?dl-badge-success"[^>]*>([^<]+)<') { $loginTeste = $Matches[1].Trim() }
+    Check "Login gerado a partir do nome extraído do prontuário" ($null -ne $loginTeste)
 
     $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
-    Check "Formulário de criar acesso responde 200" ($r.StatusCode -eq 200)
-
-    $loginTeste = $nomeTeste.ToLower()
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/acesso" -Form @{ login = $loginTeste; senha = "senha123"; confirmacaoSenha = "senha123" }
-    Check "Criar acesso redireciona para o prontuário" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
-
-    $r = Invoke-CurlForm -Url $prontuarioUrl
-    Check "Prontuário mostra o login vinculado e some o botão 'Criar Acesso'" ($r.Body -match [regex]::Escape($loginTeste) -and $r.Body -notmatch "Criar Acesso")
-    Check "Prontuário mostra a mensagem de sucesso da criação de acesso" ($r.Body -match "Acesso criado")
-
-    $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
-    Check "Administrador consegue reabrir o formulário para editar o acesso existente (200)" ($r.StatusCode -eq 200)
+    Check "Administrador consegue abrir o formulário para editar o acesso já criado (200)" ($r.StatusCode -eq 200)
 
     # Confere de ponta a ponta que o login criado funciona e respeita o limite do perfil Assistido
     # (só o próprio cartão) — troca temporariamente para uma sessão HTTP separada do admin.
@@ -402,12 +403,12 @@ try {
 
     # 15. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
     # 2024-01-14 é domingo.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "14/01/2024"; funcoes = "DIRIGENTE" }
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "14/01/2024"; funcoes = "DIRIGENTE"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
     Check "Cadastro de trabalhador redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
     $trabalhadorId = $null
-    if ($r.Body -match "$([regex]::Escape($nomeTrabalhador))[\s\S]*?prontuario/(\d+)") { $trabalhadorId = $Matches[1] }
+    if ($r.Body -match "nome-assistido""[^>]*>$([regex]::Escape($nomeTrabalhador))<[\s\S]*?prontuario/(\d+)") { $trabalhadorId = $Matches[1] }
     Check "Assistido-trabalhador aparece na listagem com ID" ($null -ne $trabalhadorId)
 
     if ($trabalhadorId) {

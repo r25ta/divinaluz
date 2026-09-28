@@ -13,4 +13,5 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     boolean existsByLogin(String login);
     List<Assistido> findByLoginIsNotNullOrderByLoginAsc();
     Optional<Assistido> findByCodigoCartao(String codigoCartao);
+    Optional<Assistido> findByTokenDefinicaoSenha(String tokenDefinicaoSenha);
 }

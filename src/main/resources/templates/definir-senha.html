@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Definir Senha')}"></head>
+<body>
+<main class="dl-main d-flex align-items-center">
+    <div class="dl-container-narrow" style="max-width: 430px; width: 100%;">
+        <div class="text-center mb-4">
+            <div class="dl-brand-mark mx-auto mb-3"><i class="bi bi-brightness-high-fill"></i></div>
+            <span class="dl-eyebrow">Acesso ao cartão</span>
+            <h1 class="h3 fw-bold">N.A.E. Divina Luz</h1>
+        </div>
+        <div class="dl-card">
+            <div class="dl-card-body">
+
+                <div th:if="${expirado}">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Este link já foi usado, expirou ou é inválido. Procure a recepção para receber um novo.
+                    </div>
+                    <a th:href="@{/login}" class="btn btn-outline-teal w-100">Ir para o login</a>
+                </div>
+
+                <div th:unless="${expirado}">
+                    <p class="dl-muted">
+                        Olá, <strong th:text="${nome}"></strong>! Defina a senha de acesso ao seu cartão de assistência.
+                    </p>
+                    <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
+                    <form th:action="@{/definir-senha/{token}(token=${token})}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <div class="mb-3">
+                            <label class="form-label" for="senha">Nova senha</label>
+                            <input id="senha" name="senha" type="password" class="form-control"
+                                   autocomplete="new-password" minlength="6" required autofocus>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label" for="confirmacaoSenha">Confirmar senha</label>
+                            <input id="confirmacaoSenha" name="confirmacaoSenha" type="password" class="form-control"
+                                   autocomplete="new-password" minlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-teal text-white w-100">
+                            <i class="bi bi-check-lg"></i> Definir senha
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

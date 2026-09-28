@@ -21,6 +21,7 @@ import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import br.com.nae.divinaluz.service.AcessoService;
 import br.com.nae.divinaluz.service.CheckinService;
 import br.com.nae.divinaluz.service.QrCodeService;
 import br.com.nae.divinaluz.service.TratamentoService;
@@ -79,13 +80,15 @@ public class ProntuarioController {
 
     private final PasswordEncoder passwordEncoder;
 
+    private final AcessoService acessoService;
+
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
             EntrevistaRepository entrevistaRepository,
             CheckinService checkinService, QrCodeService qrCodeService,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, AcessoService acessoService) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -97,6 +100,7 @@ public class ProntuarioController {
         this.checkinService = checkinService;
         this.qrCodeService = qrCodeService;
         this.passwordEncoder = passwordEncoder;
+        this.acessoService = acessoService;
     }
 
     @GetMapping
@@ -156,16 +160,34 @@ public class ProntuarioController {
     @PostMapping("/salvar")
     public String salvar(@ModelAttribute Assistido assistido, @RequestParam(required = false) List<TipoTrabalhador> funcoes,
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
+            @RequestParam(required = false) String senhaAcesso, @RequestParam(required = false) String confirmacaoSenhaAcesso,
             RedirectAttributes redirectAttributes) {
         if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
             redirectAttributes.addFlashAttribute("erro", "Informe uma data de assistência que seja Domingo ou Terça-feira.");
             return "redirect:/novo";
         }
 
+        // Cadastro de assistido cria o acesso automaticamente (perfil ASSISTIDO — ver
+        // AcessoService): com e-mail, o próprio assistido define a senha por um link enviado por
+        // e-mail; sem e-mail, a recepção precisa informar a senha aqui.
+        boolean temEmail = assistido.getEmail() != null && !assistido.getEmail().isBlank();
+        String senhaLimpa = senhaAcesso == null ? "" : senhaAcesso.trim();
+        if (!temEmail) {
+            if (senhaLimpa.length() < 6) {
+                redirectAttributes.addFlashAttribute("erro",
+                        "Informe um e-mail (para o assistido definir a própria senha) ou uma senha de acesso com pelo menos 6 caracteres.");
+                return "redirect:/novo";
+            }
+            if (!senhaLimpa.equals(confirmacaoSenhaAcesso)) {
+                redirectAttributes.addFlashAttribute("erro", "A confirmação da senha de acesso não confere.");
+                return "redirect:/novo";
+            }
+        }
+
         TipoTratamento tratamentoInicial = tipoTratamentoRepository.findByCodigo("P2")
                 .orElseThrow(() -> new IllegalStateException("Tratamento padrão P2 não encontrado no catálogo."));
         assistido.setTratamentoAtual(null);
-        // Acesso só é definido pela rota /acesso (senha passa por BCrypt lá); nunca via bind do form.
+        // Acesso é criado logo abaixo pelo AcessoService (nunca via bind direto do form).
         assistido.setLogin(null);
         assistido.setSenha(null);
         assistido.setPerfilAcesso(null);
@@ -182,6 +204,18 @@ public class ProntuarioController {
         } catch (RegraNegocioException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             return "redirect:/prontuario/" + assistido.getId() + "/editar";
+        }
+
+        AcessoService.ResultadoAcesso resultadoAcesso = acessoService.criarAcessoAutomatico(assistido, senhaLimpa);
+        if (resultadoAcesso.aviso() != null) {
+            redirectAttributes.addFlashAttribute("aviso", resultadoAcesso.aviso());
+        } else if (temEmail) {
+            redirectAttributes.addFlashAttribute("sucesso",
+                    assistido.getNome() + " cadastrado(a). Um e-mail foi enviado para \"" + assistido.getEmail()
+                            + "\" com o link de definição de senha.");
+        } else {
+            redirectAttributes.addFlashAttribute("sucesso",
+                    assistido.getNome() + " cadastrado(a). Login de acesso: \"" + assistido.getLogin() + "\".");
         }
 
         return "redirect:/";

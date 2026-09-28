@@ -7,6 +7,7 @@ import lombok.ToString;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 
 @ToString
@@ -84,6 +85,15 @@ public class Assistido {
 
     @Column(name = "acesso_ativo", nullable = false)
     private boolean acessoAtivo = true;
+
+    // Token de definição de senha enviado por e-mail no cadastro (ver AcessoService). Some quando
+    // a senha é definida (ou o link expira/é reemitido); nunca é bindado do form de cadastro.
+    @ToString.Exclude
+    @Column(name = "token_definicao_senha", unique = true, length = 64)
+    private String tokenDefinicaoSenha;
+
+    @Column(name = "token_definicao_senha_expira_em")
+    private LocalDateTime tokenDefinicaoSenhaExpiraEm;
 
     @Transient
     public Integer getIdade() {

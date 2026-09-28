@@ -153,6 +153,27 @@
                         </div>
 
                         <div class="dl-form-section" th:unless="${modoEdicao}">
+                            <div class="dl-form-section-title">Acesso ao Sistema</div>
+                            <div class="form-text mb-2">
+                                O cadastro já cria o acesso do assistido (visão do próprio cartão). Com e-mail
+                                informado acima, enviaremos um link para o assistido definir a própria senha.
+                                Sem e-mail, informe abaixo a senha de acesso — o login será gerado a partir do nome.
+                            </div>
+                            <div id="camposSenhaAcesso" class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label" for="senhaAcesso">Senha de Acesso</label>
+                                    <input type="password" class="form-control" id="senhaAcesso" name="senhaAcesso"
+                                           autocomplete="new-password" minlength="6" placeholder="mín. 6 caracteres">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="confirmacaoSenhaAcesso">Confirmar Senha</label>
+                                    <input type="password" class="form-control" id="confirmacaoSenhaAcesso"
+                                           name="confirmacaoSenhaAcesso" autocomplete="new-password" minlength="6">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dl-form-section" th:unless="${modoEdicao}">
                             <div class="dl-form-section-title">Primeira Assistência</div>
                             <label class="form-label" for="dataPrimeiraSessao">Data da Assistência</label>
                             <input type="text" class="form-control dl-data" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
@@ -202,6 +223,20 @@
         if (tratamentoSelect) {
             tratamentoSelect.addEventListener('change', atualizarDataPrimeiraSessao);
             atualizarDataPrimeiraSessao();
+        }
+
+        var emailInput = document.getElementById('email');
+        var senhaAcessoInput = document.getElementById('senhaAcesso');
+        var confirmacaoSenhaAcessoInput = document.getElementById('confirmacaoSenhaAcesso');
+        function atualizarSenhaAcessoObrigatoria() {
+            if (!emailInput || !senhaAcessoInput) return;
+            var obrigatoria = emailInput.value.trim() === '';
+            senhaAcessoInput.required = obrigatoria;
+            if (confirmacaoSenhaAcessoInput) { confirmacaoSenhaAcessoInput.required = obrigatoria; }
+        }
+        if (emailInput) {
+            emailInput.addEventListener('input', atualizarSenhaAcessoObrigatoria);
+            atualizarSenhaAcessoObrigatoria();
         }
 
         var cepInput = document.getElementById('cep');

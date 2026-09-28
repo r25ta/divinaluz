@@ -27,6 +27,13 @@
                 </div>
             </div>
 
+            <div class="alert alert-success" th:if="${sucesso}">
+                <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
+            </div>
+            <div class="alert alert-warning" th:if="${aviso}">
+                <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
+            </div>
+
             <div class="dl-card">
                 <div class="dl-card-body-flush">
                     <table class="dl-table" id="tabelaAssistidos" th:if="${not #lists.isEmpty(assistidos)}">

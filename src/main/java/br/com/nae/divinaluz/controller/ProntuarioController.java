@@ -155,7 +155,7 @@ public class ProntuarioController {
     // Trabalhador (item 2).
     @PostMapping("/salvar")
     public String salvar(@ModelAttribute Assistido assistido, @RequestParam(required = false) List<TipoTrabalhador> funcoes,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataPrimeiraSessao,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
         if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
             redirectAttributes.addFlashAttribute("erro", "Informe uma data de assistência que seja Domingo ou Terça-feira.");
@@ -217,7 +217,7 @@ public class ProntuarioController {
     @PostMapping("/prontuario/{assistidoId}/editar")
     public String salvarEdicaoAssistido(@PathVariable Long assistidoId, @ModelAttribute Assistido dadosForm,
             @RequestParam(required = false) List<TipoTrabalhador> funcoes,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataPrimeiraSessao,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
@@ -504,7 +504,7 @@ public class ProntuarioController {
     // valor realmente muda (ver TratamentoService.definirTratamento).
     @PostMapping("/prontuario/{id}/tratamento")
     public String atualizarTratamento(@PathVariable Long id, @RequestParam(required = false) Long tratamentoAtualId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataPrimeiraSessao,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));

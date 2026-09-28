@@ -50,7 +50,7 @@ public class SessaoController {
 
     /** Abre (ou cria, se ainda não existe) a sessão da data e leva ao painel dela. */
     @PostMapping("/sessao")
-    public String abrirSessao(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data,
+    public String abrirSessao(@RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate data,
             RedirectAttributes redirectAttributes) {
         try {
             SessaoAssistencia sessao = sessaoService.garantirSessao(data);
@@ -187,7 +187,7 @@ public class SessaoController {
 
     @PostMapping("/sessao/{sessaoId}/cadastro-rapido")
     public String cadastroRapido(@PathVariable Long sessaoId, @RequestParam(required = false) String nome,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataNascimento,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataNascimento,
             @RequestParam(required = false) String sexo,
             @RequestParam(defaultValue = "false") boolean confirmarHomonimo,
             RedirectAttributes redirectAttributes) {

@@ -30,7 +30,9 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label" for="dataApresentacao">Data da apresentação</label>
-                                <input id="dataApresentacao" type="date" class="form-control" th:field="*{dataApresentacao}" required>
+                                <input id="dataApresentacao" type="text" class="form-control dl-data" th:field="*{dataApresentacao}" required
+                                       placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                       pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 <div class="form-text">Aceita somente terça-feira ou domingo.</div>
                             </div>
 

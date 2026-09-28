@@ -50,8 +50,10 @@
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                         <div>
                             <label for="data" class="form-label">Data da sessão</label>
-                            <input type="date" id="data" name="data" class="form-control" required
-                                   th:value="${proximaData}">
+                            <input type="text" id="data" name="data" class="form-control dl-data" required
+                                   th:value="${#temporals.format(proximaData, 'dd/MM/yyyy')}"
+                                   placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                   pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                         </div>
                         <button type="submit" class="btn btn-teal text-white">
                             <i class="bi bi-box-arrow-in-right"></i>

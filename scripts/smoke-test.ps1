@@ -130,7 +130,7 @@ try {
 
     # 2. Cadastro: 1ª sessão obrigatória em Domingo/Terça (item 4). 2024-01-07 é domingo ->
     # define diaFrequencia=DOMINGO_08H, entra em P2, cria a 1ª sessão automaticamente.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; vinculo = "ASSISTIDO"; dataPrimeiraSessao = "2024-01-07" }
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; vinculo = "ASSISTIDO"; dataPrimeiraSessao = "07/01/2024" }
     Check "Cadastro redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -165,7 +165,7 @@ try {
     # 5. Regra semanal de presença: uma 2ª chegada na MESMA semana de assistência vira ouvinte e
     # não bloqueia nem avança o ciclo — 09/01/2024 é terça (já bate com o novo dia) e cai na mesma
     # semana dom-sáb da sessão de 07/01.
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-01-09" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "09/01/2024" }
     Check "2ª chegada na mesma semana é aceita como ouvinte (não bloqueia)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
 
     $ouvinteRow = Invoke-Sql "SELECT ouvinte::text || '|' || COALESCE(numero_serie::text, 'NULL') FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = '2024-01-09';"
@@ -175,22 +175,22 @@ try {
     Check "Cartão mostra 2 sessões (1 efetiva + 1 ouvinte)" ($r.Body -match "Ouvinte" -and $r.Body -match "Presença efetiva")
 
     # 6-8. Sessões 2ª, 3ª e 4ª do ciclo, agora sempre nas terças (dia de assistência atual)
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-01-16" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "16/01/2024" }
     Check "2ª sessão efetiva registrada" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-01-23" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "23/01/2024" }
     Check "3ª sessão efetiva registrada" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-01-30" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "30/01/2024" }
     Check "4ª sessão efetiva registrada" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
 
     $statusPos4 = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
     Check "Status do cartão vira 'Aguardando Avaliação' após a 4ª sessão" ($statusPos4 -eq "AGUARDANDO_AVALIACAO")
 
     # 9. Regra das 4 sessões: 5ª sessão bloqueada pelo status do cartão até Avaliação + Entrevista
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-02-06" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão bloqueada com cartão 'Aguardando Avaliação'" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
     # 10a. Avaliação (diagnóstico) — data livre, não muda tratamento nem destrava sessão sozinha
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "2024-02-06"; evolucao = "MELHOR"; historico = "Historico de teste"; observacoes = "Observacoes de teste" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR"; historico = "Historico de teste"; observacoes = "Observacoes de teste" }
     Check "Avaliação registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
@@ -202,13 +202,13 @@ try {
     $avaliacaoId = Invoke-SqlScalar "SELECT id FROM avaliacao WHERE assistido_id = $assistidoId ORDER BY id DESC LIMIT 1;"
     Check "ID da avaliação obtido para a entrevista" ([bool]$avaliacaoId)
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-02-06" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão continua bloqueada só com a Avaliação (falta a Entrevista)" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
     # 10b. Entrevista vinculada à avaliação, indicando novo tratamento (P3E): destrava o ciclo,
     # atualiza o tratamento atual e já registra automaticamente a 1ª sessão do novo ciclo.
     if ($avaliacaoId) {
-        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "2024-02-06"; entrevistador = "Smoke Test"; tratamentoIndicado = $p3eId }
+        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "06/02/2024"; entrevistador = "Smoke Test"; tratamentoIndicado = $p3eId }
         Check "Entrevista registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
     }
 
@@ -223,13 +223,13 @@ try {
 
     # 11. Cartão expirado por ausência de 21+ dias: a sessão (27/02, terça) é barrada, o cartão vira
     # INCOMPLETO_POR_TEMPO e só a confirmação da recepção (reiniciarP2=true) reinicia em P2.
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-02-27" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "27/02/2024" }
     Check "Sessão após 21+ dias sem confirmação é barrada" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
     $statusExpirado = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
     Check "Cartão fica 'Incompleto por Tempo'" ($statusExpirado -eq "INCOMPLETO_POR_TEMPO")
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao?reiniciarP2=true" -Form @{ dataConsulta = "2024-02-27" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao?reiniciarP2=true" -Form @{ dataConsulta = "27/02/2024" }
     Check "Recepção confirma o reinício em P2 e a sessão é aceita" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
 
     $statusReiniciado = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
@@ -268,17 +268,17 @@ try {
     Check "Tratamento não mudou sem a data (continua P2)" ($r.Body -match ">P2<")
 
     # Assistido agora frequenta às terças; 05/03/2024 é terça.
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/tratamento" -Form @{ tratamentoAtualId = $p3eId; dataPrimeiraSessao = "2024-03-05" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/tratamento" -Form @{ tratamentoAtualId = $p3eId; dataPrimeiraSessao = "05/03/2024" }
     Check "Alterar tratamento com data no dia certo funciona" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Tratamento atualizado para P3E" ($r.Body -match ">P3E<")
 
     # 12c. Consistência de dia da semana (item 3): sessão fora do dia de assistência é bloqueada
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-03-06" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/03/2024" }
     Check "Sessão numa quarta-feira é bloqueada (assistido é de terça)" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "2024-03-12" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "12/03/2024" }
     Check "Sessão na terça seguinte é aceita" ($r.StatusCode -eq 302 -and $r.Location -notmatch "nova-sessao")
 
     # 13. Exclusão lógica do prontuário (item 1): desativar/reativar e filtro na listagem
@@ -349,7 +349,7 @@ try {
 
         $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
         Check "Assistido não acessa o formulário de nova preleção (403)" ($r.StatusCode -eq 403)
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/salvar" -Form @{ tema = "x"; dataApresentacao = "2024-01-07" }
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/salvar" -Form @{ tema = "x"; dataApresentacao = "07/01/2024" }
         Check "Assistido não consegue incluir preleção (403)" ($r.StatusCode -eq 403)
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/1/excluir"
         Check "Assistido não consegue excluir preleção (403)" ($r.StatusCode -eq 403)
@@ -402,7 +402,7 @@ try {
 
     # 15. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
     # 2024-01-14 é domingo.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "2024-01-14"; funcoes = "DIRIGENTE" }
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "14/01/2024"; funcoes = "DIRIGENTE" }
     Check "Cadastro de trabalhador redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -461,7 +461,7 @@ try {
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/qr-que-nao-existe"
         Check "QR desconhecido não resolve nenhum cartão" ($r.Body -match "não corresponde a nenhum cartão")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = "2024-01-08" }
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = "08/01/2024" }
         Check "Segunda-feira não vira sessão (volta para a lista)" ($r.StatusCode -eq 302 -and $r.Location -match "sessao$")
 
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoAntigaId/checkin/abrir"

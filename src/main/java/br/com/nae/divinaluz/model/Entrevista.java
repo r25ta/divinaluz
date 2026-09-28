@@ -29,7 +29,7 @@ public class Entrevista {
     @ToString.Exclude
     private Assistido assistido;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate data;
 
     private String entrevistador;

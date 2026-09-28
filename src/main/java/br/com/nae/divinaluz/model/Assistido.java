@@ -29,7 +29,7 @@ public class Assistido {
     @Enumerated(EnumType.STRING)
     private CartaoStatus statusCartao = CartaoStatus.EM_TRATAMENTO;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate dataNascimento;
 
     private String estadoCivil;
@@ -51,7 +51,7 @@ public class Assistido {
     // Data de início do ciclo de tratamento atual. Reinicia sempre que o assistido fica
     // 3 semanas (21 dias) sem comparecer, o que também zera a contagem de sessões/avaliações
     // usada para disparar a regra das 4 sessões (ver TratamentoService).
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate cicloIniciadoEm;
 
     // Exclusão lógica: o assistido pode querer retomar tratamento futuramente, então o

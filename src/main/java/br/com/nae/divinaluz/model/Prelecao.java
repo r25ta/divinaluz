@@ -18,7 +18,7 @@ public class Prelecao {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     @Column(name = "data_apresentacao", nullable = false)
     private LocalDate dataApresentacao;
 

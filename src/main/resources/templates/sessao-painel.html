@@ -296,8 +296,10 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label for="nascimentoRapido" class="form-label">Nascimento</label>
-                                        <input type="date" id="nascimentoRapido" name="dataNascimento" class="form-control"
-                                               th:value="${homonimoNascimento}">
+                                        <input type="text" id="nascimentoRapido" name="dataNascimento" class="form-control dl-data"
+                                               th:value="${homonimoNascimento != null ? #temporals.format(homonimoNascimento, 'dd/MM/yyyy') : ''}"
+                                               placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                               pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                     </div>
                                     <div class="col-md-3">
                                         <label for="sexoRapido" class="form-label">Sexo</label>

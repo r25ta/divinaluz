@@ -37,7 +37,9 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Data da Consulta</label>
-                                    <input type="date" class="form-control" th:field="*{dataConsulta}" required>
+                                    <input type="text" class="form-control dl-data" th:field="*{dataConsulta}" required
+                                           placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                           pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 </div>
                             </div>
                         </div>

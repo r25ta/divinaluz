@@ -26,7 +26,7 @@ public class Avaliacao {
     // Data da avaliação em si (livre — não precisa cair no dia de assistência do assistido).
     // A entrevista que comunica o tratamento decidido é um registro separado (ver Entrevista),
     // essa sim amarrada ao dia de assistência.
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate data;
 
     @Column(columnDefinition = "TEXT")

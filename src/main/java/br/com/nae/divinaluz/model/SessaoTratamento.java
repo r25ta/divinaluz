@@ -25,7 +25,7 @@ public class SessaoTratamento {
 
     private boolean ouvinte;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate dataConsulta;
 
     @ManyToOne(fetch = FetchType.LAZY)

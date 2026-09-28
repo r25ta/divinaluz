@@ -28,7 +28,7 @@ param(
     [string]$DbUser = "postgres",
     [string]$DbPassword = "admin",
     [string]$AdminLogin = "admin",
-    [string]$AdminSenha = "password"
+    [string]$AdminSenha = "JesusCristo"
 )
 
 $ErrorActionPreference = "Stop"

@@ -12,8 +12,6 @@ import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
-import br.com.nae.divinaluz.model.TipoTrabalhador;
-import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.CartaoEncerradoRepository;
@@ -25,6 +23,7 @@ import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import br.com.nae.divinaluz.service.AcessoService;
 import br.com.nae.divinaluz.service.CheckinService;
 import br.com.nae.divinaluz.service.QrCodeService;
+import br.com.nae.divinaluz.service.TrabalhadorService;
 import br.com.nae.divinaluz.service.TratamentoService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
@@ -45,7 +44,6 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -152,8 +150,6 @@ public class ProntuarioController {
     public String novo(Model model) {
         model.addAttribute("assistido", new Assistido());
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
-        model.addAttribute("funcoes", TipoTrabalhador.values());
-        model.addAttribute("funcoesSelecionadas", Set.of());
         model.addAttribute("modoEdicao", false);
         return "form";
     }
@@ -163,7 +159,7 @@ public class ProntuarioController {
     // tratamento) para existir um ID antes de aplicar a regra e, se necessário, criar o Perfil de
     // Trabalhador (item 2).
     @PostMapping("/salvar")
-    public String salvar(@ModelAttribute Assistido assistido, @RequestParam(required = false) List<TipoTrabalhador> funcoes,
+    public String salvar(@ModelAttribute Assistido assistido,
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             @RequestParam(required = false) String senhaAcesso, @RequestParam(required = false) String confirmacaoSenhaAcesso,
             RedirectAttributes redirectAttributes) {
@@ -197,12 +193,11 @@ public class ProntuarioController {
         assistido.setSenha(null);
         assistido.setPerfilAcesso(null);
         assistido.setDiaFrequencia(diaFrequenciaDaData(dataPrimeiraSessao));
+        // Todo cadastro entra como assistido: virar trabalhador é um passo à parte, no módulo
+        // "Cadastrar Trabalhador" (/trabalhadores), que é quem atribui os perfis de trabalho.
+        assistido.setVinculo(TrabalhadorService.VINCULO_ASSISTIDO);
         atualizarResidenciaLegada(assistido);
         assistidoRepository.save(assistido);
-
-        if ("TRABALHADOR".equals(assistido.getVinculo())) {
-            atualizarFuncoesTrabalhador(assistido, funcoes);
-        }
 
         try {
             tratamentoService.iniciarTratamentoInicial(assistido, tratamentoInicial, dataPrimeiraSessao);
@@ -241,9 +236,6 @@ public class ProntuarioController {
 
         model.addAttribute("assistido", assistido);
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
-        model.addAttribute("funcoes", TipoTrabalhador.values());
-        model.addAttribute("funcoesSelecionadas",
-            trabalhadorRepository.findByAssistidoId(id).map(trabalhador -> trabalhador.getFuncoes()).orElse(Set.of()));
         model.addAttribute("modoEdicao", true);
         return "form";
     }
@@ -255,7 +247,6 @@ public class ProntuarioController {
     // do item 4: só exige data da 1ª sessão se o tratamento realmente mudou.
     @PostMapping("/prontuario/{assistidoId}/editar")
     public String salvarEdicaoAssistido(@PathVariable Long assistidoId, @ModelAttribute Assistido dadosForm,
-            @RequestParam(required = false) List<TipoTrabalhador> funcoes,
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
@@ -275,12 +266,10 @@ public class ProntuarioController {
         assistido.setEstadoCivil(dadosForm.getEstadoCivil());
         assistido.setSexo(dadosForm.getSexo());
         assistido.setEmail(dadosForm.getEmail());
-        assistido.setVinculo(dadosForm.getVinculo());
+        // O vínculo NÃO vem mais do formulário (a categoria Trabalhador saiu daqui e virou o
+        // módulo /trabalhadores): preservá-lo é essencial, senão editar os dados de um
+        // trabalhador o rebaixaria a assistido sem querer.
         assistidoRepository.save(assistido);
-
-        if ("TRABALHADOR".equals(assistido.getVinculo())) {
-            atualizarFuncoesTrabalhador(assistido, funcoes);
-        }
 
         try {
             tratamentoService.definirTratamento(assistido, dadosForm.getTratamentoAtual(), dataPrimeiraSessao);
@@ -324,20 +313,6 @@ public class ProntuarioController {
         assistido.setAtivo(true);
         assistidoRepository.save(assistido);
         return "redirect:/prontuario/" + assistidoId;
-    }
-
-    // Item 2: reaproveitado pelo cadastro/edição (quando Vínculo = TRABALHADOR) e pela tela
-    // dedicada de Perfil de Trabalhador. "funcoes == null" vira conjunto vazio (limpa o perfil),
-    // igual ao comportamento já existente da tela dedicada.
-    private void atualizarFuncoesTrabalhador(Assistido assistido, List<TipoTrabalhador> funcoes) {
-        Trabalhador trabalhador = trabalhadorRepository.findByAssistidoId(assistido.getId())
-                .orElseGet(() -> {
-                    Trabalhador novo = new Trabalhador();
-                    novo.setAssistido(assistido);
-                    return novo;
-                });
-        trabalhador.setFuncoes(funcoes == null ? new LinkedHashSet<>() : new LinkedHashSet<>(funcoes));
-        trabalhadorRepository.save(trabalhador);
     }
 
     // --- NOVO MÉTODO ADICIONADO AQUI ---
@@ -466,6 +441,24 @@ public class ProntuarioController {
                 .orElseThrow(() -> new AccessDeniedException("Usuário não encontrado."));
     }
 
+    /**
+     * Item 3 dos perfis: o trabalhador tem os poderes do perfil dele sobre todos, menos sobre si
+     * mesmo — o entrevistador não entrevista a si próprio, quem o atende é outro entrevistador.
+     * Diferente de {@code exigirAcessoAoCartao}, aqui não é 403: é uma regra de atendimento, então
+     * a tela volta ao prontuário com o aviso.
+     */
+    private boolean ehOProprioRegistro(Long assistidoId, UserDetails usuarioLogado) {
+        if (usuarioLogado == null) {
+            return false;
+        }
+        return assistidoRepository.findByLoginAndAcessoAtivoTrue(usuarioLogado.getUsername())
+                .map(logado -> assistidoId.equals(logado.getId()))
+                .orElse(false);
+    }
+
+    private static final String ERRO_ATENDER_A_SI =
+            "Ninguém conduz o próprio tratamento: outro trabalhador precisa registrar esta avaliação/entrevista.";
+
     // O assistido só alcança o próprio cartão (e o próprio QR); o staff alcança qualquer um.
     private Assistido exigirAcessoAoCartao(Long id, Assistido logado) {
         if (logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO && !id.equals(logado.getId())) {
@@ -483,9 +476,12 @@ public class ProntuarioController {
 
         // Regra 4 do cartão: enquanto o cartão está retido (Aguardando Avaliação / Aguardando
         // Entrevista) o assistido não tem visibilidade do conteúdo — vê apenas os próprios dados e
-        // o status. O staff (recepção/entrevistador) continua com visibilidade total (regra 5).
+        // o status. O staff (recepção/entrevistador) continua com visibilidade total (regra 5) —
+        // exceto sobre o PRÓPRIO cartão: diante do próprio tratamento, todo trabalhador é um
+        // assistido como qualquer outro (ninguém conduz o próprio tratamento).
         CartaoStatus status = assistido.getStatusCartao();
-        boolean cartaoRetido = logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO
+        boolean proprioCartao = id.equals(logado.getId());
+        boolean cartaoRetido = (logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO || proprioCartao)
                 && (status == CartaoStatus.AGUARDANDO_AVALIACAO || status == CartaoStatus.AGUARDANDO_ENTREVISTA);
 
         List<SessaoTratamento> sessoes = cartaoRetido
@@ -565,32 +561,11 @@ public class ProntuarioController {
         return "redirect:/prontuario/" + id;
     }
 
+    // O perfil de trabalho do assistido é editado no módulo "Cadastrar Trabalhador"
+    // (TrabalhadorController, /trabalhadores/{id}); o prontuário apenas aponta para lá.
     @GetMapping("/prontuario/{id}/trabalhador")
-    public String cadastroTrabalhador(@PathVariable Long id, Model model) {
-        Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
-
-        Trabalhador trabalhador = trabalhadorRepository.findByAssistidoId(id).orElseGet(Trabalhador::new);
-
-        model.addAttribute("assistido", assistido);
-        model.addAttribute("trabalhador", trabalhador);
-        model.addAttribute("funcoes", TipoTrabalhador.values());
-        return "trabalhador-form";
-    }
-
-    // Mesmo cuidado dos outros endpoints de POST com @PathVariable + entidade: aqui optamos
-    // por @RequestParam em vez de @ModelAttribute Trabalhador, então nem existe o risco de
-    // colisão do "id" do path com o "id" da entidade — mas mantém-se o nome "assistidoId" por
-    // consistência com o restante do controller.
-    @PostMapping("/prontuario/{assistidoId}/trabalhador")
-    public String salvarTrabalhador(@PathVariable Long assistidoId,
-            @RequestParam(required = false) List<TipoTrabalhador> funcoes) {
-        Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
-
-        atualizarFuncoesTrabalhador(assistido, funcoes);
-
-        return "redirect:/prontuario/" + assistidoId;
+    public String cadastroTrabalhador(@PathVariable Long id) {
+        return "redirect:/trabalhadores/" + id;
     }
 
     @GetMapping("/prontuario/{id}/nova-sessao")
@@ -641,7 +616,12 @@ public class ProntuarioController {
     }
 
     @GetMapping("/prontuario/{id}/nova-avaliacao")
-    public String novaAvaliacao(@PathVariable Long id, Model model) {
+    public String novaAvaliacao(@PathVariable Long id, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(id, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + id;
+        }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
 
@@ -655,7 +635,12 @@ public class ProntuarioController {
     // Avaliacao também tem um campo "id". A Avaliação só registra o diagnóstico (histórico,
     // observações, evolução) — quem decide/comunica o tratamento é a Entrevista (ver abaixo).
     @PostMapping("/prontuario/{assistidoId}/avaliacao")
-    public String salvarAvaliacao(@PathVariable Long assistidoId, @ModelAttribute Avaliacao avaliacao) {
+    public String salvarAvaliacao(@PathVariable Long assistidoId, @ModelAttribute Avaliacao avaliacao,
+            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + assistidoId;
+        }
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
         avaliacao.setAssistido(assistido);
@@ -669,7 +654,12 @@ public class ProntuarioController {
     // data precisa cair no dia de assistência do assistido — diferente da Avaliação, cuja data é
     // livre.
     @GetMapping("/prontuario/{id}/nova-entrevista")
-    public String novaEntrevista(@PathVariable Long id, @RequestParam Long avaliacaoId, Model model) {
+    public String novaEntrevista(@PathVariable Long id, @RequestParam Long avaliacaoId, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(id, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + id;
+        }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)
@@ -687,7 +677,12 @@ public class ProntuarioController {
 
     @PostMapping("/prontuario/{assistidoId}/entrevista")
     public String salvarEntrevista(@PathVariable Long assistidoId, @RequestParam Long avaliacaoId,
-            @ModelAttribute Entrevista entrevista, RedirectAttributes redirectAttributes) {
+            @ModelAttribute Entrevista entrevista, @AuthenticationPrincipal UserDetails usuarioLogado,
+            RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + assistidoId;
+        }
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)

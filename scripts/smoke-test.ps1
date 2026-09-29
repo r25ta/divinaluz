@@ -131,7 +131,7 @@ try {
     # 2. Cadastro: 1ª sessão obrigatória em Domingo/Terça (item 4). 2024-01-07 é domingo ->
     # define diaFrequencia=DOMINGO_08H, entra em P2, cria a 1ª sessão automaticamente. Sem e-mail,
     # o cadastro exige a senha de acesso (o acesso ASSISTIDO agora é criado automaticamente).
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; vinculo = "ASSISTIDO"; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
     Check "Cadastro redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -273,7 +273,7 @@ try {
 
     # tratamentoAtual precisa ir junto (resubmissão do mesmo P2), senão a edição apagaria o
     # tratamento atual (campo ausente vira null) — mesmo cuidado documentado no item 4.
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/editar" -Form @{ nome = $nomeEditado; vinculo = "ASSISTIDO"; bairro = "Bairro Editado"; cidade = "Cidade Editada"; tratamentoAtual = $p2Id }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/editar" -Form @{ nome = $nomeEditado; bairro = "Bairro Editado"; cidade = "Cidade Editada"; tratamentoAtual = $p2Id }
     Check "Edição salva (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
@@ -362,7 +362,7 @@ try {
         # Perfil Assistido é somente consulta: cartão + escala de preleções, sem incluir/alterar/excluir.
         $r = Invoke-CurlForm -Url $cartaoUrl
         $script:CsrfToken = Extract-Csrf $r.Body
-        Check "Cartão do assistido não oferece botões de staff (Usuários/Novo Cadastro)" ($r.Body -notmatch "Novo Cadastro" -and $r.Body -notmatch "bi-people")
+        Check "Cartão do assistido não oferece botões de staff (Trabalhadores/Novo Cadastro)" ($r.Body -notmatch "Novo Cadastro" -and $r.Body -notmatch "bi-people")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
         Check "Assistido consegue consultar a escala de preleções (200)" ($r.StatusCode -eq 200)
@@ -421,30 +421,76 @@ try {
     Check "Staff vê o tratamento atual mesmo com o cartão retido" ($r.Body -match "Tratamento atual")
     Invoke-Sql "UPDATE assistido SET status_cartao = 'EM_TRATAMENTO' WHERE id = $assistidoId;" | Out-Null
 
-    # 15. Perfil de Trabalhador (item 2): cadastro agora também exige a 1ª data de assistência.
-    # 2024-01-14 é domingo.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; vinculo = "TRABALHADOR"; dataPrimeiraSessao = "14/01/2024"; funcoes = "DIRIGENTE"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
-    Check "Cadastro de trabalhador redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
+    # 15. Módulo "Cadastrar Trabalhador" (/trabalhadores): todo trabalhador é antes um assistido,
+    # então o cadastro nasce como ASSISTIDO (a categoria Trabalhador saiu do form) e a promoção é
+    # um passo à parte, dando perfis de trabalho. 2024-01-14 é domingo.
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; dataPrimeiraSessao = "14/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    Check "Cadastro redireciona para / (futuro trabalhador)" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
     $trabalhadorId = $null
     if ($r.Body -match "nome-assistido""[^>]*>$([regex]::Escape($nomeTrabalhador))<[\s\S]*?prontuario/(\d+)") { $trabalhadorId = $Matches[1] }
-    Check "Assistido-trabalhador aparece na listagem com ID" ($null -ne $trabalhadorId)
+    Check "Assistido aparece na listagem com ID" ($null -ne $trabalhadorId)
 
     if ($trabalhadorId) {
-        $trabalhadorUrl = "$BaseUrl/prontuario/$trabalhadorId"
+        $vinculoInicial = Invoke-SqlScalar "SELECT vinculo FROM assistido WHERE id = $trabalhadorId;"
+        Check "Cadastro nasce como ASSISTIDO (categoria Trabalhador saiu do formulário)" ($vinculoInicial -eq "ASSISTIDO")
 
-        $funcaoInicial = Invoke-SqlScalar "SELECT tf.funcao FROM trabalhador_funcao tf JOIN trabalhador t ON t.id = tf.trabalhador_id WHERE t.assistido_id = $trabalhadorId;"
-        Check "Função definida já no cadastro (Dirigente)" ($funcaoInicial -eq "DIRIGENTE")
+        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+        Check "Módulo 'Cadastrar Trabalhador' responde 200" ($r.StatusCode -eq 200 -and $r.Body -match "Cadastrar Trabalhador")
 
-        $r = Invoke-CurlForm -Url "$trabalhadorUrl/trabalhador"
-        Check "Formulário de perfil de trabalhador responde 200" ($r.StatusCode -eq 200)
+        $r = Invoke-CurlForm -Url "$BaseUrl/usuarios"
+        Check "Rota antiga /usuarios redireciona para o novo módulo" ($r.StatusCode -eq 302 -and $r.Location -match "trabalhadores$")
 
-        $r = Invoke-CurlForm -Method POST -Url "$trabalhadorUrl/trabalhador" -Form @{ funcoes = "PASSISTA" }
-        Check "Perfil de trabalhador atualizado pela tela dedicada" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId$")
+        # A busca só retorna assistidos já cadastrados — é por ela que se escolhe quem promover.
+        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores?busca=SMOKE_TEST_TRAB"
+        Check "Busca do módulo encontra o assistido para promover" ($r.Body -match [regex]::Escape($nomeTrabalhador) -and $r.Body -match "Tornar Trabalhador")
 
+        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$trabalhadorId"
+        Check "Formulário de perfis de trabalho responde 200" ($r.StatusCode -eq 200 -and $r.Body -match "Perfis de Trabalho")
+        Check "Formulário oferece os perfis novos (Recepcionista/Entrevistador/Secretária)" ($r.Body -match "func-RECEPCIONISTA" -and $r.Body -match "func-ENTREVISTADOR" -and $r.Body -match "func-SECRETARIA")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "ENTREVISTADOR" }
+        Check "Promover a trabalhador redireciona para o módulo" ($r.StatusCode -eq 302 -and $r.Location -match "trabalhadores$")
+
+        $perfilPromovido = Invoke-SqlScalar "SELECT a.vinculo || '|' || tf.funcao FROM assistido a JOIN trabalhador t ON t.assistido_id = a.id JOIN trabalhador_funcao tf ON tf.trabalhador_id = t.id WHERE a.id = $trabalhadorId;"
+        Check "Assistido evoluiu para TRABALHADOR com o perfil Entrevistador" ($perfilPromovido -eq "TRABALHADOR|ENTREVISTADOR")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+        Check "Trabalhador aparece na lista do módulo com o perfil" ($r.Body -match [regex]::Escape($nomeTrabalhador) -and $r.Body -match "Entrevistador")
+
+        # Editar os dados cadastrais não pode rebaixar quem já é trabalhador (o vínculo não vem
+        # mais do formulário).
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$trabalhadorId/editar" -Form @{ nome = $nomeTrabalhador; bairro = "Bairro X" }
+        $vinculoPosEdicao = Invoke-SqlScalar "SELECT vinculo FROM assistido WHERE id = $trabalhadorId;"
+        Check "Editar o cadastro não rebaixa o trabalhador para assistido" ($vinculoPosEdicao -eq "TRABALHADOR")
+
+        # Despromover: sem nenhum perfil marcado ele volta a ser só assistido.
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{}
+        $vinculoDespromovido = Invoke-SqlScalar "SELECT vinculo FROM assistido WHERE id = $trabalhadorId;"
+        Check "Sem nenhum perfil marcado, volta a ser somente assistido" ($vinculoDespromovido -eq "ASSISTIDO")
+
+        # ...e volta a ser trabalhador (Passista) para o teste do preletor da sessão, adiante.
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "PASSISTA" }
         $funcaoAtualizada = Invoke-SqlScalar "SELECT tf.funcao FROM trabalhador_funcao tf JOIN trabalhador t ON t.id = tf.trabalhador_id WHERE t.assistido_id = $trabalhadorId;"
-        Check "Função atualizada para Passista (Dirigente removida)" ($funcaoAtualizada -eq "PASSISTA")
+        Check "Perfil atualizado para Passista (Entrevistador removido)" ($funcaoAtualizada -eq "PASSISTA")
+    }
+
+    # 15b. Item 3 dos perfis: ninguém conduz o próprio tratamento — o admin (que também é um
+    # assistido, id do login) não registra a própria avaliação/entrevista.
+    $meuId = Invoke-SqlScalar "SELECT id FROM assistido WHERE login = '$AdminLogin';"
+    if ($meuId) {
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId/nova-avaliacao"
+        Check "Trabalhador não abre a própria avaliação (volta ao prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$meuId$")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$meuId/avaliacao" -Form @{ data = "07/01/2024"; evolucao = "BOM" }
+        Check "Trabalhador não registra a própria avaliação" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$meuId$")
+
+        $avaliacoesProprias = Invoke-SqlScalar "SELECT count(*) FROM avaliacao WHERE assistido_id = $meuId;"
+        Check "Nenhuma avaliação própria foi gravada" ($avaliacoesProprias -eq "0")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId"
+        Check "Prontuário avisa que outro trabalhador precisa fazer o atendimento" ($r.Body -match "Ninguém conduz o próprio tratamento")
     }
 
     # 16. Check-in por QR code (CLAUDE.md 3.12) e Módulo Sessão (3.13): o QR fica no cartão do

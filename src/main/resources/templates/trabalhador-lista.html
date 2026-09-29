@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Cadastrar Trabalhador')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Trabalhadores</span>
+                    <h1>Cadastrar Trabalhador</h1>
+                </div>
+            </div>
+
+            <div class="alert alert-success" th:if="${sucesso}">
+                <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
+            </div>
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${erro}"></span>
+            </div>
+
+            <!--/* Todo trabalhador é antes um assistido: não há cadastro de trabalhador do zero,
+                   só a promoção de alguém que já está no prontuário. */-->
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-person-plus"></i></span>
+                        <h2>Promover um Assistido</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body">
+                    <p class="dl-muted">
+                        Todo trabalhador é antes um assistido — busque quem já está cadastrado para dar a ele
+                        um perfil de trabalho. Quem ainda não tem cadastro precisa passar primeiro por
+                        <a th:href="@{/novo}">Novo Cadastro</a>.
+                    </p>
+                    <form th:action="@{/trabalhadores}" method="get" class="d-flex flex-wrap gap-2">
+                        <div class="dl-search" style="flex: 1 1 280px;">
+                            <i class="bi bi-search"></i>
+                            <input type="search" name="busca" class="form-control" th:value="${busca}"
+                                   placeholder="Buscar assistido por nome..." autofocus>
+                        </div>
+                        <button type="submit" class="btn btn-teal text-white">Buscar</button>
+                    </form>
+
+                    <div class="table-responsive mt-3" th:if="${not #lists.isEmpty(resultados)}">
+                        <table class="dl-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Vínculo</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="a : ${resultados}">
+                                    <td class="fw-semibold" th:text="${a.nome}"></td>
+                                    <td>
+                                        <span class="dl-badge"
+                                              th:classappend="${a.vinculo == 'TRABALHADOR'} ? 'dl-badge-success' : 'dl-badge-neutral'"
+                                              th:text="${a.vinculo == 'TRABALHADOR'} ? 'Trabalhador' : 'Assistido'"></span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a th:href="@{/trabalhadores/{id}(id=${a.id})}" class="btn btn-teal btn-sm text-white">
+                                            <i class="bi bi-person-badge"></i>
+                                            <span th:text="${a.vinculo == 'TRABALHADOR'} ? 'Editar perfis' : 'Tornar Trabalhador'"></span>
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="dl-table-empty mt-3" th:if="${buscou and #lists.isEmpty(resultados)}">
+                        <i class="bi bi-search"></i>
+                        <p class="mb-0">Nenhum assistido encontrado. Informe ao menos 2 letras do nome.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-people"></i></span>
+                        <h2>Trabalhadores da Casa</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body-flush">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(trabalhadores)}">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Perfis de Trabalho</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="t : ${trabalhadores}">
+                                    <td class="fw-semibold" th:text="${t.assistido.nome}"></td>
+                                    <td>
+                                        <span th:each="f : ${t.funcoes}" class="dl-badge dl-badge-info me-1"
+                                              th:text="${f.label}"></span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a th:href="@{/prontuario/{id}(id=${t.assistido.id})}" class="btn btn-outline-teal btn-sm">
+                                            Prontuário
+                                        </a>
+                                        <a th:href="@{/trabalhadores/{id}(id=${t.assistido.id})}" class="btn btn-outline-teal btn-sm">
+                                            <i class="bi bi-pencil"></i> Perfis
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(trabalhadores)}">
+                        <i class="bi bi-people"></i>
+                        <p class="mb-0">Nenhum trabalhador cadastrado ainda.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

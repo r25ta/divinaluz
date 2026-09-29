@@ -23,7 +23,10 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/definir-senha/**", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
-                        .requestMatchers("/usuarios/**").hasRole("ADMINISTRADOR")
+                        // "Cadastrar Trabalhador" substituiu a antiga tela de usuários: fica no
+                        // nível de staff (como já era a edição de funções pelo prontuário), não só
+                        // do administrador. Criar/editar ACESSO continua em /prontuario/*/acesso.
+                        .requestMatchers("/trabalhadores/**").hasAnyRole("ADMINISTRADOR", "TRABALHADOR")
                         .requestMatchers("/prontuario/*/cartao").authenticated()
                         // O QR do próprio cartão precisa carregar para o assistido; a posse é
                         // checada no ProntuarioController (exigirAcessoAoCartao).

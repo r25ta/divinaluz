@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: pageHead('Perfil de Trabalhador')}"></head>
+<head th:replace="~{fragments/layout :: pageHead('Cadastrar Trabalhador')}"></head>
 <body>
 <div class="dl-app">
     <nav th:replace="~{fragments/layout :: navbar}"></nav>
@@ -11,29 +11,31 @@
             <div class="dl-page-header">
                 <div>
                     <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
-                    <h1>Perfil de Trabalhador</h1>
+                    <h1>Perfil de Trabalho</h1>
                 </div>
-                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
-                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                <a th:href="@{/trabalhadores}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar
                 </a>
             </div>
 
             <div class="dl-card">
                 <div class="dl-card-body">
 
-                    <form th:action="@{/prontuario/{id}/trabalhador(id=${assistido.id})}" method="post">
+                    <form th:action="@{/trabalhadores/{id}(id=${assistido.id})}" method="post">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
                         <div class="dl-form-section">
-                            <div class="dl-form-section-title">Função(ões) na Casa Espírita</div>
+                            <div class="dl-form-section-title">Perfis de Trabalho na Casa Espírita</div>
                             <p class="dl-muted" style="margin-top:-0.4rem; margin-bottom:1rem;">
-                                Selecione uma ou mais funções exercidas por este trabalhador.
+                                Selecione um ou mais perfis. Com pelo menos um perfil marcado, este assistido
+                                passa a ser também trabalhador; desmarcando todos, ele volta a ser somente assistido
+                                (o histórico de preleções e escalas é preservado).
                             </p>
                             <div class="dl-role-list">
                                 <th:block th:each="f : ${funcoes}">
                                     <input class="dl-role-check" type="checkbox" th:id="${'func-' + f.name()}"
                                            name="funcoes" th:value="${f.name()}"
-                                           th:checked="${trabalhador.funcoes.contains(f)}">
+                                           th:checked="${funcoesSelecionadas.contains(f)}">
                                     <label class="dl-role-option" th:for="${'func-' + f.name()}">
                                         <span class="dl-role-mark"><i class="bi bi-check-lg"></i></span>
                                         <span>
@@ -46,9 +48,9 @@
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
-                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <a th:href="@{/trabalhadores}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
-                                <i class="bi bi-check-lg"></i> Salvar Perfil de Trabalhador
+                                <i class="bi bi-check-lg"></i> Salvar Perfil de Trabalho
                             </button>
                         </div>
                     </form>

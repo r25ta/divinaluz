@@ -102,35 +102,9 @@
                             </div>
                         </div>
 
-                        <div class="dl-form-section">
-                            <div class="dl-form-section-title">Categoria</div>
-                            <div class="dl-chip-group">
-                                <input class="dl-chip-check" type="radio" id="vinc-assistido" th:field="*{vinculo}" value="ASSISTIDO" required>
-                                <label class="dl-chip-label" for="vinc-assistido"><span class="dl-chip-dot"></span> Assistido</label>
-
-                                <input class="dl-chip-check" type="radio" id="vinc-trabalhador" th:field="*{vinculo}" value="TRABALHADOR">
-                                <label class="dl-chip-label" for="vinc-trabalhador"><span class="dl-chip-dot"></span> Trabalhador</label>
-
-                            </div>
-                        </div>
-
-                        <div class="dl-form-section" id="secaoFuncoes" style="display:none;">
-                            <div class="dl-form-section-title">Função(ões) na Casa Espírita</div>
-                            <div class="dl-role-list">
-                                <th:block th:each="f : ${funcoes}">
-                                    <input class="dl-role-check" type="checkbox" th:id="${'func-' + f.name()}"
-                                           name="funcoes" th:value="${f.name()}"
-                                           th:checked="${funcoesSelecionadas.contains(f)}">
-                                    <label class="dl-role-option" th:for="${'func-' + f.name()}">
-                                        <span class="dl-role-mark"><i class="bi bi-check-lg"></i></span>
-                                        <span>
-                                            <span class="dl-role-title d-block" th:text="${f.label}"></span>
-                                            <span class="dl-role-desc d-block" th:text="${f.descricao}"></span>
-                                        </span>
-                                    </label>
-                                </th:block>
-                            </div>
-                        </div>
+                        <!--/* Categoria (Assistido/Trabalhador) e a lista de funções saíram daqui:
+                               todo cadastro nasce assistido e a promoção a trabalhador é feita no
+                               módulo "Cadastrar Trabalhador" (/trabalhadores). */-->
 
                         <div class="dl-form-section" th:if="${modoEdicao}">
                             <div class="dl-form-section-title">Tratamento</div>
@@ -199,17 +173,6 @@
 </div>
 <script>
     (function () {
-        var vinculoInputs = document.querySelectorAll('input[name="vinculo"]');
-        var secaoFuncoes = document.getElementById('secaoFuncoes');
-        function atualizarFuncoes() {
-            var selecionado = document.querySelector('input[name="vinculo"]:checked');
-            if (secaoFuncoes) {
-                secaoFuncoes.style.display = (selecionado && selecionado.value === 'TRABALHADOR') ? '' : 'none';
-            }
-        }
-        vinculoInputs.forEach(function (el) { el.addEventListener('change', atualizarFuncoes); });
-        atualizarFuncoes();
-
         var tratamentoSelect = document.getElementById('tratamentoAtual');
         var campoData = document.getElementById('campoDataPrimeiraSessao');
         var dataInput = campoData ? campoData.querySelector('input[name="dataPrimeiraSessao"]') : null;

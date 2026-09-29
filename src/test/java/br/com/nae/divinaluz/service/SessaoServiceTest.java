@@ -167,10 +167,14 @@ class SessaoServiceTest {
                 .collect(java.util.stream.Collectors.toMap(SessaoService.QuadroPosicao::posicao, q -> q));
 
         assertEquals(PosicaoSessao.values().length, quadro.size());
-        assertEquals(3, quadro.get(PosicaoSessao.CAMARA_PASSE).faltam());
+        // Mínimos revisados em 2026-09-28: Câmara de Passe 4 (+ 1 no Dirigente da Câmara),
+        // Secretária/Entrevistador/Dirigente da Câmara passaram de "sem mínimo" para 1.
+        assertEquals(2, quadro.get(PosicaoSessao.CAMARA_PASSE).faltam());
         assertEquals(0, quadro.get(PosicaoSessao.DIRIGENTE).faltam());
         assertEquals(2, quadro.get(PosicaoSessao.RECEPCIONISTA).faltam());
-        assertEquals(0, quadro.get(PosicaoSessao.SECRETARIA).faltam(), "posição sem mínimo nunca falta");
+        assertEquals(1, quadro.get(PosicaoSessao.SECRETARIA).faltam());
+        assertEquals(1, quadro.get(PosicaoSessao.ENTREVISTADOR).faltam());
+        assertEquals(1, quadro.get(PosicaoSessao.DIRIGENTE_CAMARA).faltam());
         assertEquals(List.of("Alaide", "Joseli"), quadro.get(PosicaoSessao.CAMARA_PASSE).escalados().stream()
                 .map(e -> e.getTrabalhador().getAssistido().getNome()).toList());
     }

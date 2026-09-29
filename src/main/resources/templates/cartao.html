@@ -223,6 +223,52 @@
                     </div>
                 </div>
             </div>
+
+            <!--/* Cartões de ciclos já encerrados. Aparece mesmo com o cartão atual retido: a regra 4
+                   esconde o cartão em andamento, não os tratamentos que já terminaram. */-->
+            <div class="dl-card" th:if="${not #lists.isEmpty(cartoesEncerrados)}">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-archive"></i></span>
+                        <h2>Tratamentos Anteriores</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table">
+                            <thead>
+                                <tr>
+                                    <th>Tratamento</th>
+                                    <th>Período</th>
+                                    <th class="text-center">Presenças</th>
+                                    <th>Como terminou</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="cartao : ${cartoesEncerrados}">
+                                    <td>
+                                        <span th:if="${cartao.tratamento != null}" class="fw-semibold"
+                                              th:text="${cartao.tratamento.codigo}"></span>
+                                        <span th:if="${cartao.tratamento == null}" class="dl-muted">—</span>
+                                    </td>
+                                    <td>
+                                        <span th:text="${cartao.iniciadoEm != null ? #temporals.format(cartao.iniciadoEm, 'dd/MM/yyyy') : '—'}"></span>
+                                        <span class="dl-muted">até</span>
+                                        <span th:text="${#temporals.format(cartao.encerradoEm, 'dd/MM/yyyy')}"></span>
+                                    </td>
+                                    <td class="text-center" th:text="${cartao.sessoesEfetivas} + ' / ' + ${sessoesPorCartao}"></td>
+                                    <td>
+                                        <span class="dl-badge" th:classappend="${cartao.statusFinal.badgeClasse}">
+                                            <i class="bi" th:classappend="${cartao.statusFinal.icone}"></i>
+                                            <span th:text="${cartao.statusFinal.label}"></span>
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 </div>

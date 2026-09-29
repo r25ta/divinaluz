@@ -5,15 +5,18 @@ import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Avaliacao;
+import br.com.nae.divinaluz.model.CartaoEncerrado;
 import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
+import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
+import br.com.nae.divinaluz.repository.CartaoEncerradoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
@@ -48,11 +51,13 @@ public class TratamentoService {
     private final TipoTratamentoRepository tipoTratamentoRepository;
     private final PrelecaoRepository prelecaoRepository;
     private final HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository;
+    private final CartaoEncerradoRepository cartaoEncerradoRepository;
 
     public TratamentoService(SessaoRepository sessaoRepository, AvaliacaoRepository avaliacaoRepository,
             EntrevistaRepository entrevistaRepository, AssistidoRepository assistidoRepository,
             TipoTratamentoRepository tipoTratamentoRepository, PrelecaoRepository prelecaoRepository,
-            HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository) {
+            HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
+            CartaoEncerradoRepository cartaoEncerradoRepository) {
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
         this.entrevistaRepository = entrevistaRepository;
@@ -60,6 +65,7 @@ public class TratamentoService {
         this.tipoTratamentoRepository = tipoTratamentoRepository;
         this.prelecaoRepository = prelecaoRepository;
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
+        this.cartaoEncerradoRepository = cartaoEncerradoRepository;
     }
 
     public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
@@ -186,6 +192,11 @@ public class TratamentoService {
 
         Entrevista entrevistaSalva = entrevistaRepository.save(novaEntrevista);
 
+        // A entrevista fecha o ciclo que estava retido (4 sessões + avaliação cumpridas) e abre o
+        // seguinte — o ciclo que termina aqui vai para o histórico como concluído, ainda com o
+        // tratamento antigo, antes de o tratamento indicado assumir.
+        encerrarCicloAtual(assistido, novaEntrevista.getData(), StatusCartaoEncerrado.CONCLUIDO);
+
         if (novaEntrevista.getTratamentoIndicado() != null) {
             assistido.setTratamentoAtual(novaEntrevista.getTratamentoIndicado());
         }
@@ -209,14 +220,18 @@ public class TratamentoService {
         Long idNovo = novoTratamento != null ? novoTratamento.getId() : null;
         boolean mudou = !Objects.equals(idAnterior, idNovo);
 
-        assistido.setTratamentoAtual(novoTratamento);
-
         if (mudou && novoTratamento != null) {
             if (dataPrimeiraSessao == null) {
                 throw new RegraNegocioException(
                         "Informe a data da 1ª sessão para iniciar o tratamento " + novoTratamento.getCodigo() + ".");
             }
             validarDiaDaSemana(assistido, dataPrimeiraSessao);
+
+            // O ciclo em andamento é cortado no meio pela troca de tratamento: vai para o
+            // histórico como interrompido, ainda com o tratamento anterior — por isso é gravado
+            // antes de setTratamentoAtual.
+            encerrarCicloAtual(assistido, dataPrimeiraSessao, StatusCartaoEncerrado.INTERROMPIDO);
+            assistido.setTratamentoAtual(novoTratamento);
 
             // Só um tratamento realmente novo justifica reabrir o cartão: fora daqui, o status é
             // preservado. Setar EM_TRATAMENTO incondicionalmente (como antes) resetava por engano
@@ -228,6 +243,7 @@ public class TratamentoService {
 
             criarPrimeiraSessao(assistido, dataPrimeiraSessao);
         } else {
+            assistido.setTratamentoAtual(novoTratamento);
             assistidoRepository.save(assistido);
         }
     }
@@ -296,10 +312,32 @@ public class TratamentoService {
     }
 
     private void reiniciarTratamento(Assistido assistido, LocalDate dataReinicio) {
+        encerrarCicloAtual(assistido, dataReinicio, StatusCartaoEncerrado.INCOMPLETO_POR_TEMPO);
         assistido.setTratamentoAtual(buscarTratamentoInicial());
         assistido.setCicloIniciadoEm(dataReinicio);
         assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
         assistidoRepository.save(assistido);
+    }
+
+    /**
+     * Fecha o ciclo em andamento e o guarda em {@link CartaoEncerrado} antes que
+     * {@code cicloIniciadoEm} avance para o ciclo seguinte — sem isso o ciclo anterior sumiria
+     * (item 7 da seção 8). Não grava nada quando não há ciclo aberto (assistido que nunca teve
+     * primeira sessão), porque aí não existe cartão a encerrar.
+     */
+    private void encerrarCicloAtual(Assistido assistido, LocalDate encerradoEm, StatusCartaoEncerrado statusFinal) {
+        LocalDate iniciadoEm = assistido.getCicloIniciadoEm();
+        if (iniciadoEm == null) {
+            return;
+        }
+        CartaoEncerrado cartao = new CartaoEncerrado();
+        cartao.setAssistido(assistido);
+        cartao.setTratamento(assistido.getTratamentoAtual());
+        cartao.setIniciadoEm(iniciadoEm);
+        cartao.setEncerradoEm(encerradoEm);
+        cartao.setStatusFinal(statusFinal);
+        cartao.setSessoesEfetivas((int) contarSessoesDoCiclo(assistido.getId(), iniciadoEm));
+        cartaoEncerradoRepository.save(cartao);
     }
 
     private TipoTratamento buscarTratamentoInicial() {

@@ -226,6 +226,14 @@ try {
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a 1ª sessão automática do novo ciclo em 06/02/2024" ($r.Body -match "06/02/2024")
 
+    # 10c. Histórico de cartões: a entrevista encerra o ciclo retido como CONCLUÍDO, guardando o
+    # tratamento ANTIGO (P2) — o P3E indicado só vale do ciclo novo em diante.
+    $cartaoConcluido = Invoke-SqlScalar "SELECT c.status_final || '|' || t.codigo || '|' || c.sessoes_efetivas FROM cartao_encerrado c LEFT JOIN tipo_tratamento t ON t.id = c.tratamento_id WHERE c.assistido_id = $assistidoId ORDER BY c.id DESC LIMIT 1;"
+    Check "Entrevista encerra o cartão anterior como 'Concluído' em P2 com 4 presenças" ($cartaoConcluido -eq "CONCLUIDO|P2|4")
+
+    $r = Invoke-CurlForm -Url $cartaoUrl
+    Check "Cartão mostra a seção 'Tratamentos Anteriores' com o ciclo concluído" ($r.Body -match "Tratamentos Anteriores" -and $r.Body -match "Tratamento Concluído")
+
     # 11. Cartão expirado por ausência de 21+ dias: a sessão (27/02, terça) é barrada, o cartão vira
     # INCOMPLETO_POR_TEMPO e só a confirmação da recepção (reiniciarP2=true) reinicia em P2.
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "27/02/2024" }
@@ -245,6 +253,16 @@ try {
 
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra nova 1ª sessão do ciclo reiniciado em 27/02/2024" ($r.Body -match "27/02/2024")
+
+    # 11b. O ciclo que expirou não some: vira um cartão encerrado como "Tratamento Incompleto"
+    # (decisão do item 1, 2026-09-28), com o tratamento que valia (P3E) e o período do ciclo.
+    $cartaoIncompleto = Invoke-SqlScalar "SELECT c.status_final || '|' || t.codigo || '|' || c.iniciado_em FROM cartao_encerrado c LEFT JOIN tipo_tratamento t ON t.id = c.tratamento_id WHERE c.assistido_id = $assistidoId ORDER BY c.id DESC LIMIT 1;"
+    Check "Reinício por tempo encerra o cartão como 'Tratamento Incompleto' em P3E" ($cartaoIncompleto -eq "INCOMPLETO_POR_TEMPO|P3E|2024-02-06")
+
+    Check "Cartão mostra o ciclo encerrado como 'Tratamento Incompleto'" ($r.Body -match "Tratamento Incompleto")
+
+    $totalEncerrados = Invoke-SqlScalar "SELECT count(*) FROM cartao_encerrado WHERE assistido_id = $assistidoId;"
+    Check "Os dois ciclos encerrados estão no histórico" ($totalEncerrados -eq "2")
 
     # 12a. Editar dados do assistido: nome e endereço mudam sem afetar o restante. Desde o
     # endereço estruturado (item V15/V16), "residencia" é sempre recalculada a partir de
@@ -335,6 +353,8 @@ try {
 
         $r = Invoke-CurlForm -Url $cartaoUrl
         Check "Assistido logado consegue ver o próprio cartão" ($r.StatusCode -eq 200)
+        # Pedido do item 1: o assistido vê o cartão atual E os tratamentos já finalizados.
+        Check "Assistido vê os próprios tratamentos anteriores no cartão" ($r.Body -match "Tratamentos Anteriores" -and $r.Body -match "Tratamento Incompleto")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/"
         Check "Assistido logado é bloqueado na listagem geral (só vê o próprio cartão)" ($r.StatusCode -eq 403)

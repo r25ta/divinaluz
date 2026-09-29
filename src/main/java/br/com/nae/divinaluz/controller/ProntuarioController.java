@@ -16,6 +16,7 @@ import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
+import br.com.nae.divinaluz.repository.CartaoEncerradoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
@@ -82,13 +83,16 @@ public class ProntuarioController {
 
     private final AcessoService acessoService;
 
+    private final CartaoEncerradoRepository cartaoEncerradoRepository;
+
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
             EntrevistaRepository entrevistaRepository,
             CheckinService checkinService, QrCodeService qrCodeService,
-            PasswordEncoder passwordEncoder, AcessoService acessoService) {
+            PasswordEncoder passwordEncoder, AcessoService acessoService,
+            CartaoEncerradoRepository cartaoEncerradoRepository) {
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -101,6 +105,7 @@ public class ProntuarioController {
         this.qrCodeService = qrCodeService;
         this.passwordEncoder = passwordEncoder;
         this.acessoService = acessoService;
+        this.cartaoEncerradoRepository = cartaoEncerradoRepository;
     }
 
     @GetMapping
@@ -512,6 +517,10 @@ public class ProntuarioController {
         model.addAttribute("sessoes", sessoes);
         model.addAttribute("statusCartao", status);
         model.addAttribute("cartaoRetido", cartaoRetido);
+        // Cartões de ciclos já encerrados (concluído / incompleto por tempo / interrompido). O
+        // assistido enxerga esse histórico mesmo com o cartão atual retido: a regra 4 esconde o
+        // cartão *em andamento*, não os tratamentos que já terminaram.
+        model.addAttribute("cartoesEncerrados", cartaoEncerradoRepository.findByAssistidoIdOrderByEncerradoEmDesc(id));
         model.addAttribute("sessaoAberta", checkinService.sessaoComCheckinAberto().orElse(null));
         model.addAttribute("presencasDoCiclo", presencasDoCiclo);
         model.addAttribute("marcacoesVazias", marcacoesVazias);

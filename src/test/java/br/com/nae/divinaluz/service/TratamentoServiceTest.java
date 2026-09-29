@@ -2,14 +2,17 @@ package br.com.nae.divinaluz.service;
 
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
+import br.com.nae.divinaluz.model.CartaoEncerrado;
 import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
+import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
+import br.com.nae.divinaluz.repository.CartaoEncerradoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
@@ -59,6 +62,9 @@ class TratamentoServiceTest {
 
     @Mock
     private HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository;
+
+    @Mock
+    private CartaoEncerradoRepository cartaoEncerradoRepository;
 
     @InjectMocks
     private TratamentoService tratamentoService;
@@ -186,6 +192,9 @@ class TratamentoServiceTest {
         when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
                 .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 1))));
         when(tipoTratamentoRepository.findByCodigo("P2")).thenReturn(Optional.of(tratamento));
+        // Contagem do ciclo antigo (vai para o cartão encerrado) e a do ciclo novo.
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 8, 1)))
+                .thenReturn(2L);
         when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 22)))
                 .thenReturn(0L);
         when(sessaoRepository.save(any(SessaoTratamento.class)))
@@ -200,6 +209,103 @@ class TratamentoServiceTest {
         assertEquals(LocalDate.of(2026, 9, 22), assistido.getCicloIniciadoEm());
         assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
         assertEquals(1, nova.getNumeroSerie());
+    }
+
+    // O ciclo que expirou por tempo não pode sumir: vira um cartão encerrado como "Tratamento
+    // Incompleto", com o tratamento e o período daquele ciclo (item 7 da seção 8).
+    @Test
+    void reinicioPorTempoGuardaCartaoEncerradoComoIncompleto() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 1));
+        assistido.setTratamentoAtual(tratamento);
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 1))));
+        when(tipoTratamentoRepository.findByCodigo("P2")).thenReturn(Optional.of(tratamento));
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 8, 1)))
+                .thenReturn(2L);
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 22)))
+                .thenReturn(0L);
+        when(sessaoRepository.save(any(SessaoTratamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 22)), true);
+
+        ArgumentCaptor<CartaoEncerrado> captor = ArgumentCaptor.forClass(CartaoEncerrado.class);
+        verify(cartaoEncerradoRepository).save(captor.capture());
+        CartaoEncerrado encerrado = captor.getValue();
+        assertEquals(StatusCartaoEncerrado.INCOMPLETO_POR_TEMPO, encerrado.getStatusFinal());
+        assertEquals(LocalDate.of(2026, 8, 1), encerrado.getIniciadoEm());
+        assertEquals(LocalDate.of(2026, 9, 22), encerrado.getEncerradoEm());
+        assertEquals(tratamento, encerrado.getTratamento());
+        assertEquals(2, encerrado.getSessoesEfetivas());
+    }
+
+    // A entrevista fecha o ciclo retido como concluído — e o cartão encerrado guarda o tratamento
+    // ANTIGO, não o indicado pela entrevista (que só vale do ciclo seguinte em diante).
+    @Test
+    void entrevistaGuardaCartaoEncerradoComoConcluidoComTratamentoAntigo() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 25));
+        assistido.setTratamentoAtual(tratamento);
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 8, 25)))
+                .thenReturn(4L);
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setId(9L);
+        when(entrevistaRepository.existsByAvaliacaoId(9L)).thenReturn(false);
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TipoTratamento indicado = new TipoTratamento();
+        indicado.setId(5L);
+        indicado.setCodigo("P3E");
+
+        br.com.nae.divinaluz.model.Entrevista e = new br.com.nae.divinaluz.model.Entrevista();
+        e.setAssistido(assistido);
+        e.setAvaliacao(av);
+        e.setData(LocalDate.of(2026, 9, 22));
+        e.setTratamentoIndicado(indicado);
+        tratamentoService.registrarEntrevista(e);
+
+        ArgumentCaptor<CartaoEncerrado> captor = ArgumentCaptor.forClass(CartaoEncerrado.class);
+        verify(cartaoEncerradoRepository).save(captor.capture());
+        CartaoEncerrado encerrado = captor.getValue();
+        assertEquals(StatusCartaoEncerrado.CONCLUIDO, encerrado.getStatusFinal());
+        assertEquals(tratamento, encerrado.getTratamento());
+        assertEquals(4, encerrado.getSessoesEfetivas());
+        // e o assistido seguiu para o tratamento indicado, no ciclo novo
+        assertEquals(indicado, assistido.getTratamentoAtual());
+    }
+
+    // Trocar o tratamento no meio do ciclo também encerra o cartão anterior — como interrompido.
+    @Test
+    void trocaDeTratamentoGuardaCartaoEncerradoComoInterrompido() {
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 1));
+        assistido.setTratamentoAtual(tratamento);
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 1)))
+                .thenReturn(3L);
+
+        TipoTratamento novoTratamento = new TipoTratamento();
+        novoTratamento.setId(5L);
+        novoTratamento.setCodigo("P3E");
+
+        tratamentoService.definirTratamento(assistido, novoTratamento, LocalDate.of(2026, 9, 22));
+
+        ArgumentCaptor<CartaoEncerrado> captor = ArgumentCaptor.forClass(CartaoEncerrado.class);
+        verify(cartaoEncerradoRepository).save(captor.capture());
+        CartaoEncerrado encerrado = captor.getValue();
+        assertEquals(StatusCartaoEncerrado.INTERROMPIDO, encerrado.getStatusFinal());
+        assertEquals(tratamento, encerrado.getTratamento());
+        assertEquals(3, encerrado.getSessoesEfetivas());
+    }
+
+    // Assistido sem ciclo aberto (nunca teve 1ª sessão) não gera cartão encerrado vazio.
+    @Test
+    void semCicloAbertoNaoGuardaCartaoEncerrado() {
+        assistido.setCicloIniciadoEm(null);
+        assistido.setTratamentoAtual(null);
+
+        tratamentoService.definirTratamento(assistido, tratamento, LocalDate.of(2026, 9, 22));
+
+        verify(cartaoEncerradoRepository, never()).save(any(CartaoEncerrado.class));
     }
 
     @Test

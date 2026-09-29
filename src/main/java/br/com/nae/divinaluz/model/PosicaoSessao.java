@@ -10,11 +10,13 @@ public enum PosicaoSessao {
 
     DIRIGENTE("Dirigente", 1, "bi-person-badge", "Responsável pela gestão da sessão."),
     RECEPCIONISTA("Recepcionista", 2, "bi-door-open", "Recebe os assistidos e encaminha para entrevista."),
-    SECRETARIA("Secretária", 0, "bi-journal-text", "Apoio de secretaria da sessão."),
-    ENTREVISTADOR("Entrevistador", 0, "bi-chat-left-text", "Entrevista assistidos novos e os que passaram por avaliação."),
+    SECRETARIA("Secretária", 1, "bi-journal-text", "Apoio de secretaria da sessão."),
+    ENTREVISTADOR("Entrevistador", 1, "bi-chat-left-text", "Entrevista assistidos novos e os que passaram por avaliação."),
     PASSE_LIMPEZA("Passe de Limpeza", 1, "bi-droplet", "Passistas do passe de limpeza."),
-    CAMARA_PASSE("Câmara de Passe", 5, "bi-stars", "Passistas dos tratamentos P1, CH e P2."),
-    DIRIGENTE_CAMARA("Dirigente da Câmara de Passe", 0, "bi-person-gear", "Conduz a câmara de passe."),
+    // A câmara de passe reúne 5 pessoas no mínimo: 1 dirigente + 4 passistas (decisão de
+    // 2026-09-28 — antes o mínimo de 5 estava todo em CAMARA_PASSE, com o dirigente sem mínimo).
+    CAMARA_PASSE("Câmara de Passe", 4, "bi-stars", "Passistas dos tratamentos P1, CH e P2."),
+    DIRIGENTE_CAMARA("Dirigente da Câmara de Passe", 1, "bi-person-gear", "Conduz a câmara de passe."),
     P3B("P3B", 3, "bi-heart-pulse", "Passistas do tratamento P3B.");
 
     private final String label;

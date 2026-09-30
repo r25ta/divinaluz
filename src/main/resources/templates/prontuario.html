@@ -133,6 +133,36 @@
                             </div>
                         </div>
                         <div class="dl-card-body">
+                            <div class="mb-3" th:if="${statusCartao != null}">
+                                <span class="dl-badge" th:classappend="${statusCartao.badgeClasse}">
+                                    <i class="bi" th:classappend="${statusCartao.icone}"></i>
+                                    <span th:text="${statusCartao.label}"></span>
+                                </span>
+                            </div>
+
+                            <!-- Cartão retido: aponta direto para o Módulo de Entrevista (o
+                                 bloqueio de "ninguém conduz o próprio tratamento" é aplicado no
+                                 GET de destino, não repetido aqui). -->
+                            <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mb-3"
+                                 th:if="${statusCartao != null and (statusCartao.name() == 'AGUARDANDO_AVALIACAO' or statusCartao.name() == 'AGUARDANDO_ENTREVISTA')}">
+                                <i class="bi bi-signpost-split-fill"></i>
+                                <span class="flex-grow-1">
+                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">Cartão completo: encaminhe para a avaliação espiritual.</span>
+                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">Avaliação concluída: encaminhe para a entrevista.</span>
+                                </span>
+                                <span th:if="${proprioRegistro}" class="dl-muted small">
+                                    <i class="bi bi-person-x"></i> Ninguém conduz o próprio tratamento — outro trabalhador precisa atender.
+                                </span>
+                                <a th:if="${!proprioRegistro and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
+                                   th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-warning btn-sm">
+                                    <i class="bi bi-clipboard2-pulse"></i> Registrar Avaliação
+                                </a>
+                                <a th:if="${!proprioRegistro and statusCartao.name() == 'AGUARDANDO_ENTREVISTA' and avaliacaoPendenteEntrevista != null}"
+                                   th:href="@{/prontuario/{id}/nova-entrevista(id=${assistido.id}, avaliacaoId=${avaliacaoPendenteEntrevista.id})}" class="btn btn-warning btn-sm">
+                                    <i class="bi bi-chat-left-text"></i> Registrar Entrevista
+                                </a>
+                            </div>
+
                             <div th:if="${assistido.tratamentoAtual != null}" class="d-flex align-items-start gap-3 flex-wrap mb-3">
                                 <span class="dl-badge dl-badge-teal" style="font-size:0.95rem; padding:0.5rem 1rem;"
                                       th:text="${assistido.tratamentoAtual.codigo}"></span>

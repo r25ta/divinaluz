@@ -190,6 +190,15 @@ try {
     $statusPos4 = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
     Check "Status do cartão vira 'Aguardando Avaliação' após a 4ª sessão" ($statusPos4 -eq "AGUARDANDO_AVALIACAO")
 
+    # 8b. Módulo de Entrevista (item 4): a fila /entrevistas reúne quem está com o cartão retido e
+    # aponta pro mesmo formulário de sempre; o prontuário ganha o mesmo atalho.
+    $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+    Check "Fila de Entrevista lista o assistido em Aguardando Avaliação" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+    Check "Navbar tem o link do Módulo de Entrevista" ($r.Body -match "bi-chat-square-text")
+
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário mostra o status 'Aguardando Avaliação' e o botão de registrar" ($r.Body -match "Aguardando Avaliação" -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+
     # 9. Regra das 4 sessões: 5ª sessão bloqueada pelo status do cartão até Avaliação + Entrevista
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão bloqueada com cartão 'Aguardando Avaliação'" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
@@ -210,6 +219,21 @@ try {
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão continua bloqueada só com a Avaliação (falta a Entrevista)" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
+    # Módulo de Entrevista: agora a fila e o prontuário devem apontar para a entrevista, com o
+    # avaliacaoId certo — a mesma avaliação recém-registrada. O check-in também oferece o atalho
+    # (a recepção pode encaminhar direto da tela do scan, mesmo sem sessão aberta no momento).
+    $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+    Check "Fila de Entrevista lista o assistido em Aguardando Entrevista com o link certo" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
+
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário mostra o botão de Registrar Entrevista com o avaliacaoId certo" ($r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
+
+    $codigoCartaoEntrevista = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
+    if ($codigoCartaoEntrevista) {
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartaoEntrevista"
+        Check "Tela de check-in oferece Registrar Entrevista com o avaliacaoId certo" ($r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
+    }
+
     # 10b. Entrevista vinculada à avaliação, indicando novo tratamento (P3E): destrava o ciclo,
     # atualiza o tratamento atual e já registra automaticamente a 1ª sessão do novo ciclo.
     if ($avaliacaoId) {
@@ -222,6 +246,9 @@ try {
 
     $statusPosEntrevista = Invoke-SqlScalar "SELECT status_cartao || '|' || ciclo_iniciado_em FROM assistido WHERE id = $assistidoId;"
     Check "Status volta para 'Em Tratamento' e ciclo reinicia em 06/02/2024" ($statusPosEntrevista -eq "EM_TRATAMENTO|2024-02-06")
+
+    $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+    Check "Fila de Entrevista não lista mais o assistido após a entrevista" ($r.Body -notmatch "prontuario/$assistidoId/nova-avaliacao" -and $r.Body -notmatch "prontuario/$assistidoId/nova-entrevista")
 
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a 1ª sessão automática do novo ciclo em 06/02/2024" ($r.Body -match "06/02/2024")
@@ -419,6 +446,17 @@ try {
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Staff vê marcações e histórico mesmo com o cartão 'Aguardando Entrevista'" ($r.Body -match "dl-marcacao" -and $r.Body -match "Histórico de Presenças")
     Check "Staff vê o tratamento atual mesmo com o cartão retido" ($r.Body -match "Tratamento atual")
+
+    # Sem avaliação pendente (a única já tem entrevista, registrada acima), o atalho "Registrar
+    # Entrevista" some — evita apontar para um avaliacaoId que não existe.
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário não oferece 'Registrar Entrevista' sem avaliação pendente" ($r.Body -notmatch "Registrar Entrevista")
+    $codigoCartaoStaff = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
+    if ($codigoCartaoStaff) {
+        $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartaoStaff"
+        Check "Check-in não oferece 'Registrar Entrevista' sem avaliação pendente" ($r.Body -notmatch "Registrar Entrevista")
+    }
+
     Invoke-Sql "UPDATE assistido SET status_cartao = 'EM_TRATAMENTO' WHERE id = $assistidoId;" | Out-Null
 
     # 15. Módulo "Cadastrar Trabalhador" (/trabalhadores): todo trabalhador é antes um assistido,

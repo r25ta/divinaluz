@@ -5,6 +5,7 @@ import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
+import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.service.CheckinService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -23,21 +24,31 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class CheckinController {
 
     private final CheckinService checkinService;
+    private final AvaliacaoRepository avaliacaoRepository;
 
-    public CheckinController(CheckinService checkinService) {
+    public CheckinController(CheckinService checkinService, AvaliacaoRepository avaliacaoRepository) {
         this.checkinService = checkinService;
+        this.avaliacaoRepository = avaliacaoRepository;
     }
 
     /** Tela que abre quando a recepção escaneia o QR do cartão: mostra quem é e o que fazer. */
     @GetMapping("/checkin/{codigoCartao}")
     public String confirmarCheckin(@PathVariable String codigoCartao, Model model) {
+        Assistido assistido;
         try {
-            Assistido assistido = checkinService.buscarPorCodigoCartao(codigoCartao);
+            assistido = checkinService.buscarPorCodigoCartao(codigoCartao);
             model.addAttribute("assistido", assistido);
             model.addAttribute("codigoCartao", codigoCartao);
         } catch (RegraNegocioException e) {
             model.addAttribute("erro", e.getMessage());
             return "checkin-confirmar";
+        }
+
+        // Cartão retido em Aguardando Entrevista: a recepção encaminha para o entrevistador, que
+        // precisa saber a qual avaliação essa entrevista se refere (ver Módulo de Entrevista).
+        if (assistido.getStatusCartao() == CartaoStatus.AGUARDANDO_ENTREVISTA) {
+            avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(assistido.getId())
+                    .ifPresent(avaliacao -> model.addAttribute("avaliacaoPendenteId", avaliacao.getId()));
         }
 
         SessaoAssistencia sessao = checkinService.sessaoComCheckinAberto().orElse(null);

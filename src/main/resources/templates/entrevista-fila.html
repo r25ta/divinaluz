@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Entrevistas')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container">
+
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Módulo de Entrevista</span>
+                    <h1>Fila de Avaliação e Entrevista</h1>
+                </div>
+                <a th:href="@{/}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar para Lista
+                </a>
+            </div>
+
+            <p class="dl-muted">
+                Assistidos com o cartão retido, aguardando a avaliação espiritual (regra das 4 sessões) ou a
+                entrevista que comunica o tratamento seguinte. Diagnóstico e triagem seguem os mesmos
+                formulários de sempre — esta tela só reúne quem está represado, para não precisar procurar
+                prontuário por prontuário.
+            </p>
+
+            <!-- Aguardando Avaliação -->
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-clipboard2-pulse"></i></span>
+                        <h2>Aguardando Avaliação</h2>
+                    </div>
+                    <span class="dl-badge dl-badge-warning" th:text="${#lists.size(aguardandoAvaliacao)}">0</span>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(aguardandoAvaliacao)}">
+                            <thead>
+                                <tr>
+                                    <th>Assistido</th>
+                                    <th>Tratamento Atual</th>
+                                    <th>Dia de Assistência</th>
+                                    <th class="text-end">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="assistido : ${aguardandoAvaliacao}">
+                                    <td>
+                                        <a th:href="@{/prontuario/{id}(id=${assistido.id})}" th:text="${assistido.nome}"></a>
+                                    </td>
+                                    <td>
+                                        <span th:if="${assistido.tratamentoAtual != null}" class="dl-badge dl-badge-teal"
+                                              th:text="${assistido.tratamentoAtual.codigo}"></span>
+                                        <span th:if="${assistido.tratamentoAtual == null}" class="dl-muted">—</span>
+                                    </td>
+                                    <td th:text="${assistido.diaFrequencia != null ? assistido.diaFrequencia.label : '—'}"></td>
+                                    <td class="text-end">
+                                        <span th:if="${meuId != null and meuId == assistido.id}" class="dl-muted small">
+                                            <i class="bi bi-person-x"></i> É você — outro trabalhador precisa atender
+                                        </span>
+                                        <a th:unless="${meuId != null and meuId == assistido.id}"
+                                           th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}"
+                                           class="btn btn-teal btn-sm text-white">
+                                            <i class="bi bi-plus-lg"></i> Registrar Avaliação
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(aguardandoAvaliacao)}">
+                        <i class="bi bi-check-circle"></i>
+                        <p class="mb-0">Ninguém aguardando avaliação no momento.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aguardando Entrevista -->
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-chat-left-text"></i></span>
+                        <h2>Aguardando Entrevista</h2>
+                    </div>
+                    <span class="dl-badge dl-badge-info" th:text="${#lists.size(aguardandoEntrevista)}">0</span>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(aguardandoEntrevista)}">
+                            <thead>
+                                <tr>
+                                    <th>Assistido</th>
+                                    <th>Avaliação</th>
+                                    <th>Dia de Assistência</th>
+                                    <th class="text-end">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="item : ${aguardandoEntrevista}">
+                                    <td>
+                                        <a th:href="@{/prontuario/{id}(id=${item.assistido.id})}" th:text="${item.assistido.nome}"></a>
+                                    </td>
+                                    <td>
+                                        <div th:if="${item.avaliacaoPendente != null}">
+                                            <span th:text="${item.avaliacaoPendente.numeroVez} + 'ª VEZ'"></span>
+                                            <span class="dl-muted small d-block"
+                                                  th:text="${#temporals.format(item.avaliacaoPendente.data, 'dd/MM/yyyy')}
+                                                        + (${item.avaliacaoPendente.evolucao != null} ? ' · ' + ${item.avaliacaoPendente.evolucao} : '')"></span>
+                                        </div>
+                                        <span th:if="${item.avaliacaoPendente == null}" class="dl-muted">—</span>
+                                    </td>
+                                    <td th:text="${item.assistido.diaFrequencia != null ? item.assistido.diaFrequencia.label : '—'}"></td>
+                                    <td class="text-end">
+                                        <span th:if="${meuId != null and meuId == item.assistido.id}" class="dl-muted small">
+                                            <i class="bi bi-person-x"></i> É você — outro trabalhador precisa atender
+                                        </span>
+                                        <a th:if="${(meuId == null or meuId != item.assistido.id) and item.avaliacaoPendente != null}"
+                                           th:href="@{/prontuario/{id}/nova-entrevista(id=${item.assistido.id}, avaliacaoId=${item.avaliacaoPendente.id})}"
+                                           class="btn btn-teal btn-sm text-white">
+                                            <i class="bi bi-plus-lg"></i> Registrar Entrevista
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(aguardandoEntrevista)}">
+                        <i class="bi bi-check-circle"></i>
+                        <p class="mb-0">Ninguém aguardando entrevista no momento.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

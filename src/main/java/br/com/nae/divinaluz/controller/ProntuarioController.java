@@ -317,11 +317,12 @@ public class ProntuarioController {
 
     // --- NOVO MÉTODO ADICIONADO AQUI ---
     @GetMapping("/prontuario/{id}")
-    public String verProntuario(@PathVariable Long id, Model model) {
+    public String verProntuario(@PathVariable Long id, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado) {
         // Busca o assistido pelo ID
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
-        
+
         // Busca o histórico de sessões ordenado pela data
         List<SessaoTratamento> sessoes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id);
 
@@ -342,6 +343,13 @@ public class ProntuarioController {
         model.addAttribute("proximaEntrevistaPrevista", proximaEntrevistaPrevista);
         model.addAttribute("diasFrequencia", DiaFrequencia.values());
         model.addAttribute("historicoDiaFrequencia", historicoDiaFrequenciaRepository.findByAssistidoIdOrderByDataHoraDesc(id));
+
+        // Cartão retido (Aguardando Avaliação/Entrevista): mostra o status e um atalho direto para
+        // o Módulo de Entrevista, para quem já está no prontuário não precisar ir até /entrevistas.
+        model.addAttribute("statusCartao", assistido.getStatusCartao());
+        model.addAttribute("avaliacaoPendenteEntrevista",
+                avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(id).orElse(null));
+        model.addAttribute("proprioRegistro", ehOProprioRegistro(id, usuarioLogado));
 
         return "prontuario"; // Nome do novo arquivo HTML
     }

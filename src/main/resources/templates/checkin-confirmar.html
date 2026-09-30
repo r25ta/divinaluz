@@ -64,7 +64,9 @@
                         </div>
                     </div>
 
-                    <!-- Cartão retido: a recepção não marca presença, encaminha (regra 5). -->
+                    <!-- Cartão retido: a recepção não marca presença, encaminha (regra 5). Os botões
+                         levam direto ao formulário do Módulo de Entrevista (mesmas regras/bloqueio
+                         de "ninguém conduz o próprio tratamento" aplicadas lá). -->
                     <div class="alert alert-warning"
                          th:if="${assistido.statusCartao != null and (assistido.statusCartao.name() == 'AGUARDANDO_AVALIACAO' or assistido.statusCartao.name() == 'AGUARDANDO_ENTREVISTA')}">
                         <i class="bi bi-signpost-split-fill"></i>
@@ -76,6 +78,16 @@
                             Avaliação concluída: encaminhe para os <strong>entrevistadores</strong>.
                             A presença da próxima sessão é registrada pela entrevista.
                         </span>
+                        <div class="mt-2">
+                            <a th:if="${assistido.statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
+                               th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-warning btn-sm">
+                                <i class="bi bi-clipboard2-pulse"></i> Registrar Avaliação
+                            </a>
+                            <a th:if="${assistido.statusCartao.name() == 'AGUARDANDO_ENTREVISTA' and avaliacaoPendenteId != null}"
+                               th:href="@{/prontuario/{id}/nova-entrevista(id=${assistido.id}, avaliacaoId=${avaliacaoPendenteId})}" class="btn btn-warning btn-sm">
+                                <i class="bi bi-chat-left-text"></i> Registrar Entrevista
+                            </a>
+                        </div>
                     </div>
 
                     <!-- Cartão expirado (21 dias): a recepção decide reiniciar em P2. -->

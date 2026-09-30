@@ -118,6 +118,23 @@ a {
   color: #fff;
 }
 
+/* Contagem da fila de Entrevista sobre o botão da navbar (ver PerfilAdvice.filaEntrevistas) */
+.dl-nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--dl-danger);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
 /* ---------- Layout shell ---------- */
 
 .dl-main {

@@ -14,10 +14,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Aceita o banco no formato que os provedores gratuitos mostram (Neon, Render, Railway):
- * {@code DATABASE_URL=postgresql://usuario:senha@host/banco?sslmode=require}. Assim a demo na
- * nuvem pede uma única variável, copiada e colada, em vez de separar URL JDBC, usuário e senha à
- * mão (ver DEPLOY-DEMO.md). Sem {@code DATABASE_URL} vale o {@code spring.datasource.*} de sempre.
+ * Aceita o banco no formato que as plataformas de hospedagem mostram (Neon, Render, Railway):
+ * {@code DATABASE_URL=postgresql://usuario:senha@host/banco?sslmode=require}. Assim um deploy pede
+ * uma única variável, copiada e colada, em vez de separar URL JDBC, usuário e senha à mão. Sem
+ * {@code DATABASE_URL} vale o {@code spring.datasource.*} de sempre, que é o caso do dev.
  */
 @Configuration
 @ConditionalOnProperty(name = "DATABASE_URL")

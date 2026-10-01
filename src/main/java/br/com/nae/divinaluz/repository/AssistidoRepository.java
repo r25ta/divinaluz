@@ -12,6 +12,9 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     List<Assistido> findByAtivo(boolean ativo);
     List<Assistido> findAllByOrderByNomeAsc();
     Optional<Assistido> findByLoginAndAcessoAtivoTrue(String login);
+    // Sem o filtro de acesso ativo: a redefinição de senha do admin (ver SenhaAdminInicial) é
+    // justamente a saída para quando o acesso dele foi desativado por engano.
+    Optional<Assistido> findByLogin(String login);
     boolean existsByLogin(String login);
     List<Assistido> findByLoginIsNotNullOrderByLoginAsc();
     Optional<Assistido> findByCodigoCartao(String codigoCartao);

@@ -1,0 +1,24 @@
+# Blueprint do Render para o sistema da casa na nuvem (ver DEPLOY-NUVEM.md).
+# O banco fica no Neon (PostgreSQL gratuito). As variáveis com sync: false são pedidas pelo painel do
+# Render na criação e nunca ficam no repositório:
+#   DATABASE_URL           a connection string do Neon, colada inteira (postgresql://...)
+#   APP_BASE_URL           o endereço público do serviço, sem barra no fim
+#   ADMIN_SENHA_REDEFINIR  a senha do admin, só no primeiro deploy — depois apague a variável
+# O e-mail de definição de senha é opcional: sem as variáveis MAIL_*, o sistema segue funcionando com
+# a recepção digitando a senha no cadastro (ver DEPLOY-NUVEM.md, "E-mail").
+services:
+  - type: web
+    name: divinaluz
+    runtime: docker
+    plan: free
+    branch: main
+    healthCheckPath: /login
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: ADMIN_SENHA_REDEFINIR
+        sync: false

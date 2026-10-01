@@ -48,6 +48,10 @@ import java.util.UUID;
  * assistidos — reiniciar a aplicação não duplica nada. As datas são relativas a hoje, para a demo
  * sempre abrir com um histórico recente, a próxima sessão escalada e casos de todos os status.
  * Nenhum nome é de pessoa real.
+ *
+ * <p>Além do {@code admin}, cadastra um login por ponta da matriz de permissões (3.17) — todos de
+ * perfil {@code TRABALHADOR}, para a demo mostrar que é a <em>função</em> que decide os módulos que
+ * a pessoa alcança — e o {@code assistido}, para a visão de somente consulta.
  */
 @Component
 @Profile("demo")
@@ -135,10 +139,11 @@ public class DemoDataLoader implements ApplicationRunner {
                 Set.of(TipoTrabalhador.PASSISTA), dom2, dom1);
         Trabalhador wando = trabalhador("Wando Teixeira", DiaFrequencia.TERCA_19H, "P2",
                 Set.of(TipoTrabalhador.PASSISTA), ter1);
+        // Os dois acumulam funções, para a demo mostrar que as permissões se somam (ver Permissao.de).
         Trabalhador ronaldo = trabalhador("Ronaldo Lima", DiaFrequencia.DOMINGO_08H, "P2",
-                Set.of(TipoTrabalhador.FACILITADOR), dom1);
+                Set.of(TipoTrabalhador.RECEPCIONISTA, TipoTrabalhador.FACILITADOR), dom1);
         Trabalhador tiana = trabalhador("Tiana Rocha", DiaFrequencia.DOMINGO_08H, "P1",
-                Set.of(TipoTrabalhador.FACILITADOR), dom2, dom1);
+                Set.of(TipoTrabalhador.ENTREVISTADOR, TipoTrabalhador.FACILITADOR), dom2, dom1);
 
         // Assistidos cobrindo cada situação do cartão.
         Assistido maria = assistido("Maria Aparecida Souza", DiaFrequencia.DOMINGO_08H, "P2",
@@ -172,10 +177,16 @@ public class DemoDataLoader implements ApplicationRunner {
         avaliacaoRepository.save(avaliacao);
 
         // Acesso de consulta para mostrar a visão do assistido (o próprio cartão e a escala).
-        maria.setLogin(LOGIN_ASSISTIDO_DEMO);
-        maria.setSenha(passwordEncoder.encode(senhaAdmin));
-        maria.setPerfilAcesso(PerfilAcesso.ASSISTIDO);
-        assistidoRepository.save(maria);
+        acesso(maria, LOGIN_ASSISTIDO_DEMO, PerfilAcesso.ASSISTIDO);
+
+        // Um login por ponta da matriz de permissões (ver 3.17): sem isso a visibilidade por perfil
+        // de trabalho ficaria invisível na demo, porque só o admin (que recebe tudo) teria acesso.
+        // Todos são perfil TRABALHADOR — o que cada um alcança vem da FUNÇÃO, não do perfil.
+        acesso(paulo.getAssistido(), "dirigente", PerfilAcesso.TRABALHADOR);       // alcança tudo
+        acesso(ronaldo.getAssistido(), "recepcionista", PerfilAcesso.TRABALHADOR); // consulta/cadastro/sessão
+        acesso(tiana.getAssistido(), "entrevistador", PerfilAcesso.TRABALHADOR);   // + entrevista, sem cadastro
+        acesso(lucia.getAssistido(), "preletor", PerfilAcesso.TRABALHADOR);        // só a escala de preleções
+        acesso(joseli.getAssistido(), "passista", PerfilAcesso.TRABALHADOR);       // só consulta
 
         // Escala de preleções: as duas últimas sessões e as próximas quatro.
         String[] temas = {"Evangelho no Lar", "Amar e Perdoar", "A Prece", "Caridade e Humildade",
@@ -215,6 +226,17 @@ public class DemoDataLoader implements ApplicationRunner {
         passada.setCheckinFechadoEm(dom1.atTime(10, 5));
         sessaoAssistenciaRepository.save(passada);
         sessao(proxima, escala);
+    }
+
+    /**
+     * Login de exemplo da demo. A senha é sempre a {@code DEMO_ADMIN_SENHA} — é uma demonstração com
+     * dados fictícios, e uma senha por login só daria trabalho a quem apresenta.
+     */
+    private void acesso(Assistido assistido, String login, PerfilAcesso perfil) {
+        assistido.setLogin(login);
+        assistido.setSenha(passwordEncoder.encode(senhaAdmin));
+        assistido.setPerfilAcesso(perfil);
+        assistidoRepository.save(assistido);
     }
 
     private Trabalhador trabalhador(String nome, DiaFrequencia dia, String tratamento, Set<TipoTrabalhador> funcoes,

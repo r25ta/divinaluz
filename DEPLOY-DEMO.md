@@ -78,7 +78,7 @@ O repositório tem um arquivo `render.yaml` que já descreve tudo: servidor grat
 | Variável | O que colar |
 |---|---|
 | **`DATABASE_URL`** | o endereço inteiro que você copiou do Neon, começando com `postgresql://` |
-| **`DEMO_ADMIN_SENHA`** | uma senha que você inventa para entrar como `admin` na demo, por exemplo `DivinaLuz-Demo-2026`. Anote: ela também vale para o login de exemplo `assistido` |
+| **`DEMO_ADMIN_SENHA`** | uma senha que você inventa para entrar como `admin` na demo, por exemplo `DivinaLuz-Demo-2026`. Anote: ela vale para **todos** os logins de exemplo da demo (ver Parte 3) |
 
 5. Toque em **Deploy Blueprint** (ou **Apply**).
 
@@ -97,12 +97,28 @@ O repositório tem um arquivo `render.yaml` que já descreve tudo: servidor grat
 
 ## Parte 3 — Entrar na demo
 
-| Login | Senha | O que vê |
-|---|---|---|
-| `admin` | a que você colocou em `DEMO_ADMIN_SENHA` | Tudo (Administrador) |
-| `assistido` | a mesma | Só o próprio cartão (Maria Aparecida Souza) e a escala de preleções |
+**Todos os logins usam a mesma senha**: a que você colocou em `DEMO_ADMIN_SENHA`.
+
+| Login | O que vê |
+|---|---|
+| `admin` | Tudo (perfil Administrador) |
+| `dirigente` | Tudo, mas por ser **Dirigente** da casa (Paulo Henrique Duarte) |
+| `recepcionista` | Listagem, prontuários, cadastro e o painel da sessão — não entrevista nem promove trabalhadores (Ronaldo Lima) |
+| `entrevistador` | Listagem, prontuários, painel da sessão e a fila de entrevistas — **não** cadastra assistidos (Tiana Rocha) |
+| `passista` | Só consulta: listagem, prontuários e cartões, sem nenhum botão de alterar (Joseli Martins) |
+| `preletor` | Só a escala de preleções — nem a listagem de assistidos abre (Lúcia Ferraz) |
+| `assistido` | Só o próprio cartão (Maria Aparecida Souza) e a escala de preleções |
+
+Os cinco do meio são todos de perfil **Trabalhador**: o que cada um alcança vem da **função** dele na
+casa, e não do perfil — é essa diferença que eles servem para mostrar. Entrando com `dirigente` e
+depois com `preletor`, dá para ver o menu mudar de tamanho.
 
 A senha provisória `admin` / `password` do ambiente de desenvolvimento **não** funciona na demo.
+
+> Se a sua demo já estava no ar **antes** desses logins existirem, eles não aparecem sozinhos: os
+> dados fictícios só são cadastrados quando o banco está vazio, para um reinício nunca duplicar nada.
+> Nesse caso, siga **Recomeçar a demo do zero**, no fim deste guia — são dados fictícios, não se perde
+> nada. O `admin` continua funcionando de qualquer jeito, porque a senha dele é regravada a cada subida.
 
 ---
 

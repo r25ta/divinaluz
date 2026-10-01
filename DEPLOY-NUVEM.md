@@ -146,6 +146,10 @@ reinício acontece sozinho, quando o sistema acorda de um deploy. Apagá-la é o
 definitiva.
 
 ### 3.4 Criar os acessos das pessoas da casa
+
+> **Antes deste passo, faça a Parte 4 (backup).** A partir daqui entram dados de pessoas reais, e não
+> convém existir um só dia de cadastro sem cópia de segurança.
+
 Para cada pessoa do piloto, nesta ordem:
 
 1. **Novo Cadastro** — cadastre a pessoa como assistida (todo trabalhador é, antes, um assistido).

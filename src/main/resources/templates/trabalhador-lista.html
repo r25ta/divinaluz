@@ -18,6 +18,9 @@
             <div class="alert alert-success" th:if="${sucesso}">
                 <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
             </div>
+            <div class="alert alert-warning" th:if="${aviso}">
+                <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
+            </div>
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${erro}"></span>
             </div>
@@ -35,7 +38,8 @@
                     <p class="dl-muted">
                         Todo trabalhador é antes um assistido — busque quem já está cadastrado para dar a ele
                         um perfil de trabalho. Quem ainda não tem cadastro precisa passar primeiro por
-                        <a th:href="@{/novo}">Novo Cadastro</a>.
+                        <a th:if="${podeCadastro}" th:href="@{/novo}">Novo Cadastro</a>
+                        <span th:unless="${podeCadastro}">Novo Cadastro</span>.
                     </p>
                     <form th:action="@{/trabalhadores}" method="get" class="d-flex flex-wrap gap-2">
                         <div class="dl-search" style="flex: 1 1 280px;">

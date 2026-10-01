@@ -356,7 +356,8 @@
                             </div>
                             <p class="dl-muted small mb-0" th:if="${preletor.preletor == null and preletor.tema == null}">
                                 <i class="bi bi-calendar2-x"></i> Nenhuma preleção na escala para esta data.
-                                <a th:href="@{/prelecao/novo}">Cadastrar na escala</a>
+                                <!--/* Quem atende na sessão não necessariamente monta a escala (ex.: Recepcionista). */-->
+                                <a th:if="${podePrelecao}" th:href="@{/prelecao/novo}">Cadastrar na escala</a>
                             </p>
 
                             <details class="mt-3" th:open="${preletor.prelecaoDaEscala == null and !preletor.substituido}">

@@ -60,7 +60,7 @@
                         </div>
                     </div>
 
-                    <div class="d-flex flex-wrap gap-2 dl-summary-actions">
+                    <div class="d-flex flex-wrap gap-2 dl-summary-actions" th:if="${podeCadastro}">
                         <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-pencil"></i> Editar Dados
                         </a>
@@ -153,11 +153,11 @@
                                 <span th:if="${proprioRegistro}" class="dl-muted small">
                                     <i class="bi bi-person-x"></i> Ninguém conduz o próprio tratamento — outro trabalhador precisa atender.
                                 </span>
-                                <a th:if="${!proprioRegistro and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
+                                <a th:if="${podeEntrevista and !proprioRegistro and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
                                    th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-warning btn-sm">
                                     <i class="bi bi-clipboard2-pulse"></i> Registrar Avaliação
                                 </a>
-                                <a th:if="${!proprioRegistro and statusCartao.name() == 'AGUARDANDO_ENTREVISTA' and avaliacaoPendenteEntrevista != null}"
+                                <a th:if="${podeEntrevista and !proprioRegistro and statusCartao.name() == 'AGUARDANDO_ENTREVISTA' and avaliacaoPendenteEntrevista != null}"
                                    th:href="@{/prontuario/{id}/nova-entrevista(id=${assistido.id}, avaliacaoId=${avaliacaoPendenteEntrevista.id})}" class="btn btn-warning btn-sm">
                                     <i class="bi bi-chat-left-text"></i> Registrar Entrevista
                                 </a>
@@ -175,7 +175,7 @@
                                 <i class="bi bi-hourglass-split"></i> Ainda não definido — aguardando triagem.
                             </p>
 
-                            <form th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
+                            <form th:if="${podeCadastro}" th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
                                   class="pt-2" style="border-top: 1px dashed var(--dl-border);">
                                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                 <div class="d-flex gap-2 flex-wrap">

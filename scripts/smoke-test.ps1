@@ -99,6 +99,54 @@ function Invoke-SqlScalar([string]$Sql) {
     (@($out) | Select-Object -First 1).ToString().Trim()
 }
 
+# Entra com outro login no cookie jar corrente (zerado antes, para não herdar a sessão anterior).
+# As permissões do trabalhador são resolvidas no login (UserDetailsService), então trocar a função
+# de alguém só passa a valer quando ele entra de novo — daí este helper ser chamado a cada troca.
+function Login-Como([string]$Login, [string]$Senha) {
+    if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+    $pagina = Invoke-CurlForm -Url "$BaseUrl/login"
+    $csrf = Extract-Csrf $pagina.Body
+    $script:CsrfToken = $null
+    return Invoke-CurlForm -Method POST -Url "$BaseUrl/login" -Form @{ username = $Login; password = $Senha; "_csrf" = $csrf }
+}
+
+# Troca a função de um trabalhador pela sessão do admin e devolve o controle ao jar corrente. O
+# CSRF é relido da página porque o token é por sessão HTTP — o do outro jar não serve aqui.
+function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao) {
+    $jarAnterior = $script:CookieJar
+    $csrfAnterior = $script:CsrfToken
+    $script:CookieJar = $AdminJar
+    $pagina = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$AssistidoId"
+    $script:CsrfToken = Extract-Csrf $pagina.Body
+    $form = @{}
+    if ($Funcao) { $form["funcoes"] = $Funcao }
+    Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$AssistidoId" -Form $form | Out-Null
+    # Segue o redirect para consumir a mensagem flash: duas POSTs seguidas sem o GET empilhariam
+    # flash maps para o mesmo destino e o Spring entregaria o mais antigo (ver CLAUDE.md, item 6).
+    # A página fica guardada para quem quiser conferir a mensagem desta ação.
+    $script:UltimaPaginaTrabalhadores = (Invoke-CurlForm -Url "$BaseUrl/trabalhadores").Body
+    $script:CookieJar = $jarAnterior
+    $script:CsrfToken = $csrfAnterior
+}
+
+# Troca o perfil do acesso (só o Administrador pode) pela sessão do admin. Perfil e função são
+# telas diferentes de propósito: o perfil diz se a pessoa é staff, a função diz quais módulos ela
+# alcança (ver SecurityConfig.authorities) — daí dar para testar uma sem a outra.
+function Definir-Perfil([string]$AdminJar, [string]$AssistidoId, [string]$Login, [string]$Perfil) {
+    $jarAnterior = $script:CookieJar
+    $csrfAnterior = $script:CsrfToken
+    $script:CookieJar = $AdminJar
+    $pagina = Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId/acesso"
+    $script:CsrfToken = Extract-Csrf $pagina.Body
+    Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$AssistidoId/acesso" -Form @{
+        login = $Login; perfil = $Perfil; acessoAtivo = "true"
+    } | Out-Null
+    # Mesmo motivo do Definir-Funcao: consome o flash para não empilhar com a POST seguinte.
+    Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId" | Out-Null
+    $script:CookieJar = $jarAnterior
+    $script:CsrfToken = $csrfAnterior
+}
+
 try {
     # 0. Login como admin (V21/V23 — ver CLAUDE.md 3.11 sobre o hash real da credencial provisória)
     $loginPage = Invoke-CurlForm -Url "$BaseUrl/login"
@@ -512,6 +560,134 @@ try {
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "PASSISTA" }
         $funcaoAtualizada = Invoke-SqlScalar "SELECT tf.funcao FROM trabalhador_funcao tf JOIN trabalhador t ON t.id = tf.trabalhador_id WHERE t.assistido_id = $trabalhadorId;"
         Check "Perfil atualizado para Passista (Entrevistador removido)" ($funcaoAtualizada -eq "PASSISTA")
+    }
+
+    # 15d. Visibilidade por perfil de trabalho (CLAUDE.md 3.7): é a FUNÇÃO do trabalhador, e não o
+    # perfil de acesso, que decide os módulos que ele alcança. O admin recebe todas as permissões,
+    # então a matriz só se observa com um login de perfil TRABALHADOR — criado aqui pelo próprio
+    # formulário de acesso. Cada troca de função reentra no sistema (ver Login-Como).
+    if ($trabalhadorId) {
+        $loginTrab = "smoke.trab.$PID"
+        $senhaTrab = "senha123"
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/acesso"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$trabalhadorId/acesso" -Form @{
+            login = $loginTrab; senha = $senhaTrab; confirmacaoSenha = $senhaTrab
+            perfil = "TRABALHADOR"; acessoAtivo = "true"
+        }
+        Check "Acesso de perfil TRABALHADOR criado para testar a matriz" ($r.StatusCode -eq 302)
+
+        $adminJarMatriz = $script:CookieJar
+        $adminCsrfMatriz = $script:CsrfToken
+        $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-trab-$PID.txt"
+        try {
+            # Passista: somente CONSULTA — abre prontuários, mas não cadastra, não atende na sessão,
+            # não entrevista, não monta a escala e não promove trabalhadores.
+            $r = Login-Como $loginTrab $senhaTrab
+            Check "Login do trabalhador Passista funciona" ($r.StatusCode -eq 302)
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Passista consulta a listagem de assistidos (200)" ($r.StatusCode -eq 200)
+            Check "Navbar do Passista esconde Sessão, Entrevistas, Trabalhadores e Novo Cadastro" (
+                $r.Body -notmatch 'href="[^"]*/sessao"' -and $r.Body -notmatch 'href="[^"]*/entrevistas"' -and
+                $r.Body -notmatch 'href="[^"]*/trabalhadores"' -and $r.Body -notmatch "Novo Cadastro")
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Passista abre o prontuário de outro assistido (200)" ($r.StatusCode -eq 200)
+            Check "Prontuário não oferece ao Passista editar dados nem alterar tratamento" (
+                $r.Body -notmatch "Editar Dados" -and $r.Body -notmatch "Alterar Tratamento")
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/novo"
+            Check "Passista não cadastra assistido (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/editar"
+            Check "Passista não edita o cadastro de ninguém (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+            Check "Passista não alcança o Módulo Sessão (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+            Check "Passista não alcança a fila de entrevistas (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
+            Check "Passista não registra avaliação (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            Check "Passista não alcança 'Cadastrar Trabalhador' (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
+            Check "Passista não monta a escala de preleções (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
+            Check "Passista consulta a escala de preleções (200)" ($r.StatusCode -eq 200)
+
+            # Secretária: ganha CADASTRO, SESSAO e PRELECAO, mas continua sem entrevistar nem
+            # promover trabalhadores — é o que diferencia a matriz de um "staff tudo ou nada".
+            Definir-Funcao $adminJarMatriz $trabalhadorId "SECRETARIA"
+            Login-Como $loginTrab $senhaTrab | Out-Null
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
+            Check "Secretária monta a escala de preleções (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/novo"
+            Check "Secretária cadastra assistido (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+            Check "Secretária alcança o Módulo Sessão (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+            Check "Secretária ainda não entrevista (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            Check "Secretária não promove trabalhadores (403)" ($r.StatusCode -eq 403)
+
+            # Dirigente: única função que alcança todos os módulos.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
+            Login-Como $loginTrab $senhaTrab | Out-Null
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            Check "Dirigente alcança 'Cadastrar Trabalhador' (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+            Check "Dirigente alcança a fila de entrevistas (200)" ($r.StatusCode -eq 200)
+
+            # Educador de Evangelização: nenhuma permissão — entra, mas só alcança o próprio cartão.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "EDUCADOR_EVANGELIZACAO"
+            Login-Como $loginTrab $senhaTrab | Out-Null
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Educador de Evangelização não consulta a listagem (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
+            Check "Educador de Evangelização não vê o cartão de outro (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
+            Check "Educador de Evangelização vê o próprio cartão (200)" ($r.StatusCode -eq 200)
+
+            # A outra ponta da separação perfil x função: é o perfil do acesso que torna a pessoa
+            # staff, então função de Dirigente com perfil ASSISTIDO não libera módulo nenhum — senão
+            # "Cadastrar Trabalhador" (que qualquer Dirigente alcança) concederia acesso sozinho.
+            Definir-Perfil $adminJarMatriz $trabalhadorId $loginTrab "ASSISTIDO"
+            Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
+            Check "Dar função a quem não tem acesso de trabalhador avisa que nada é liberado" (
+                $script:UltimaPaginaTrabalhadores -match "ainda não tem acesso de trabalhador")
+
+            Login-Como $loginTrab $senhaTrab | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Função de Dirigente com perfil ASSISTIDO não libera a listagem (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            Check "Função de Dirigente com perfil ASSISTIDO não libera 'Cadastrar Trabalhador' (403)" (
+                $r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
+            Check "Com perfil ASSISTIDO o trabalhador ainda vê o próprio cartão (200)" ($r.StatusCode -eq 200)
+            Definir-Perfil $adminJarMatriz $trabalhadorId $loginTrab "TRABALHADOR"
+        } finally {
+            if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+            $script:CookieJar = $adminJarMatriz
+            $script:CsrfToken = $adminCsrfMatriz
+        }
+
+        # Armadilha que a matriz cria: login de perfil TRABALHADOR sem nenhuma função entra e não
+        # enxerga nada além do próprio cartão. O formulário de acesso avisa em vez de bloquear.
+        Invoke-Sql "DELETE FROM trabalhador_funcao WHERE trabalhador_id IN (SELECT id FROM trabalhador WHERE assistido_id = $trabalhadorId);" | Out-Null
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/acesso"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$trabalhadorId/acesso" -Form @{
+            login = $loginTrab; perfil = "TRABALHADOR"; acessoAtivo = "true"
+        }
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+        Check "Acesso de trabalhador sem função avisa que ele só verá o próprio cartão" (
+            $r.Body -match "não tem nenhuma função de trabalho")
+
+        # Devolve o Passista do passo anterior, estado em que a seção 16 encontra este trabalhador.
+        Definir-Funcao $script:CookieJar $trabalhadorId "PASSISTA"
     }
 
     # 15b. Item 3 dos perfis: ninguém conduz o próprio tratamento — o admin (que também é um

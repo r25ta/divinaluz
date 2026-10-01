@@ -80,7 +80,7 @@
                     <div class="dl-table-empty" th:if="${#lists.isEmpty(assistidos)}">
                         <i class="bi bi-people"></i>
                         <p class="mb-2">Nenhum assistido cadastrado ainda.</p>
-                        <a th:href="@{/novo}" class="btn btn-teal btn-sm text-white">
+                        <a th:if="${podeCadastro}" th:href="@{/novo}" class="btn btn-teal btn-sm text-white">
                             <i class="bi bi-plus-lg"></i> Cadastrar o primeiro
                         </a>
                     </div>

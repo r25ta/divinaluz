@@ -1,6 +1,7 @@
 package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.model.Assistido;
+import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
@@ -75,6 +76,18 @@ public class TrabalhadorController {
         redirectAttributes.addFlashAttribute("sucesso", funcoes == null || funcoes.isEmpty()
                 ? assistido.getNome() + " voltou a ser somente assistido."
                 : assistido.getNome() + " cadastrado(a) como trabalhador.");
+
+        // A função diz quais módulos a pessoa alcança, mas quem a torna staff é o perfil do acesso
+        // (ver SecurityConfig.authorities): sem um acesso de perfil TRABALHADOR, as permissões da
+        // função não valem. Avisa em vez de mexer no acesso — trocar perfil é só do Administrador.
+        boolean temFuncao = funcoes != null && !funcoes.isEmpty();
+        if (temFuncao && assistido.getPerfilAcesso() != PerfilAcesso.TRABALHADOR
+                && assistido.getPerfilAcesso() != PerfilAcesso.ADMINISTRADOR) {
+            redirectAttributes.addFlashAttribute("aviso", assistido.getNome()
+                    + " ainda não tem acesso de trabalhador ao sistema, então as funções escolhidas"
+                    + " não liberam nenhum módulo. O administrador precisa trocar o perfil do acesso"
+                    + " para \"Trabalhador\" no prontuário.");
+        }
         return "redirect:/trabalhadores";
     }
 }

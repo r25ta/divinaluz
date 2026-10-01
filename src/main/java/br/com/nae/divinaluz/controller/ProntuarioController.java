@@ -10,6 +10,7 @@ import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.PerfilAcesso;
+import br.com.nae.divinaluz.model.Permissao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -422,6 +423,17 @@ public class ProntuarioController {
 
         redirectAttributes.addFlashAttribute("sucesso",
                 (novo ? "Acesso criado" : "Acesso atualizado") + ". Login: \"" + loginLimpo + "\".");
+
+        // Quem define o que o trabalhador alcança são as funções dele (ver TipoTrabalhador), não o
+        // perfil de acesso: um login TRABALHADOR sem nenhuma função entra e não enxerga nada além
+        // do próprio cartão. Avisa em vez de bloquear — a função pode ser atribuída depois.
+        if (assistido.getPerfilAcesso() == PerfilAcesso.TRABALHADOR
+                && trabalhadorRepository.findByAssistidoId(assistidoId)
+                        .map(t -> t.getFuncoes().isEmpty()).orElse(true)) {
+            redirectAttributes.addFlashAttribute("aviso",
+                    "Este acesso é de trabalhador, mas o assistido não tem nenhuma função de trabalho:"
+                            + " ele só vai enxergar o próprio cartão. Defina as funções em \"Cadastrar Trabalhador\".");
+        }
         return "redirect:/prontuario/" + assistidoId;
     }
 
@@ -435,7 +447,7 @@ public class ProntuarioController {
     @GetMapping(value = "/prontuario/{id}/cartao/qrcode.png", produces = MediaType.IMAGE_PNG_VALUE)
     @ResponseBody
     public byte[] qrCodeDoCartao(@PathVariable Long id, @AuthenticationPrincipal UserDetails usuarioLogado) {
-        Assistido assistido = exigirAcessoAoCartao(id, assistidoLogado(usuarioLogado));
+        Assistido assistido = exigirAcessoAoCartao(id, assistidoLogado(usuarioLogado), usuarioLogado);
         String codigo = checkinService.garantirCodigoCartao(assistido);
         String urlCheckin = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/checkin/{codigo}")
@@ -467,10 +479,16 @@ public class ProntuarioController {
     private static final String ERRO_ATENDER_A_SI =
             "Ninguém conduz o próprio tratamento: outro trabalhador precisa registrar esta avaliação/entrevista.";
 
-    // O assistido só alcança o próprio cartão (e o próprio QR); o staff alcança qualquer um.
-    private Assistido exigirAcessoAoCartao(Long id, Assistido logado) {
-        if (logado.getPerfilAcesso() == PerfilAcesso.ASSISTIDO && !id.equals(logado.getId())) {
-            throw new AccessDeniedException("O assistido só pode consultar o próprio cartão.");
+    /**
+     * Todo mundo alcança o próprio cartão (e o próprio QR); o cartão de outro exige a permissão de
+     * consulta. Fica aqui, e não no {@code SecurityConfig}, porque a rota é a mesma nos dois casos —
+     * é a posse que decide.
+     */
+    private Assistido exigirAcessoAoCartao(Long id, Assistido logado, UserDetails usuarioLogado) {
+        boolean podeConsultarDeOutro = usuarioLogado != null && usuarioLogado.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(Permissao.CONSULTA.getAuthority()));
+        if (!podeConsultarDeOutro && !id.equals(logado.getId())) {
+            throw new AccessDeniedException("Sem permissão para consultar o cartão de outro assistido.");
         }
         return assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
@@ -480,7 +498,7 @@ public class ProntuarioController {
     public String verCartao(@PathVariable Long id, Model model,
             @AuthenticationPrincipal UserDetails usuarioLogado) {
         Assistido logado = assistidoLogado(usuarioLogado);
-        Assistido assistido = exigirAcessoAoCartao(id, logado);
+        Assistido assistido = exigirAcessoAoCartao(id, logado, usuarioLogado);
 
         // Regra 4 do cartão: enquanto o cartão está retido (Aguardando Avaliação / Aguardando
         // Entrevista) o assistido não tem visibilidade do conteúdo — vê apenas os próprios dados e

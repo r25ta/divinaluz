@@ -1,6 +1,6 @@
 # Especificação do Sistema: N.A.E. Divina Luz
 **Projeto:** Automatização do Prontuário de Assistência Espiritual
-**Stack Tecnológico:** Java 17, Spring Boot 4.1.1, PostgreSQL, Flyway, Thymeleaf, HTML5/Bootstrap 5.3.
+**Stack Tecnológico:** Java 25, Spring Boot 4.1.1, PostgreSQL, Flyway, Thymeleaf, HTML5/Bootstrap 5.3.
 
 ## 1. Visão Geral
 Sistema WEB para substituição do prontuário físico (fichas azuis) por um ambiente digital. Controla o cadastro dos assistidos (incluindo os que também são trabalhadores da casa), o histórico de sessões semanais, o ciclo de avaliações/entrevistas espirituais (regra de 4 sessões) e o dia de assistência (terça 19h ou domingo 8h) de cada um.

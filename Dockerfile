@@ -1,14 +1,14 @@
 # Imagem da aplicação em dois estágios: compila com Maven e roda só o JAR num JRE enxuto. Nasceu
 # para a demo na nuvem (descontinuada em 2026-09-30) e ficou porque serve a qualquer deploy em
 # contêiner; o banco vem de DATABASE_URL ou de SPRING_DATASOURCE_* (ver DatabaseUrlConfig).
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /app
 COPY pom.xml .
 RUN mvn -q -B dependency:go-offline
 COPY src ./src
 RUN mvn -q -B package -DskipTests
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY --from=build /app/target/divinaluz-*.jar app.jar
 # Ajustado para um contêiner pequeno (~512 MB e fração de CPU): heap limitado, GC serial e só o

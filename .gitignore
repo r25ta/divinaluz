@@ -42,3 +42,4 @@ bin/
 scripts/.dev-app.log
 scripts/.dev-app.pid
 scripts/.hook-sentinel.txt
+scripts/.docker-build.log

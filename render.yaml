@@ -14,11 +14,16 @@ services:
     branch: main
     healthCheckPath: /login
     envVars:
+      # NÃO troque estes nomes pelos valores. "key" é o NOME da variável; "sync: false" quer dizer
+      # exatamente "o valor é digitado no painel do Render, nunca aqui". Colar a connection string no
+      # lugar de DATABASE_URL faz duas coisas ruins de uma vez: o Render recusa o blueprint (um nome de
+      # variável não pode conter ":", "/", "@", "?" nem "&") e a senha do banco vai para o histórico do
+      # git. Aconteceu em 2026-10-02 e custou a troca da senha do Neon.
       - key: SPRING_PROFILES_ACTIVE
         value: prod
-      - key: postgresql://neondb_owner:npg_V2FIoLWA6nwN@ep-late-field-b6wv285i-pooler.c-2.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - key: DATABASE_URL
         sync: false
-      - key: https://divinaluz.onrender.com
+      - key: APP_BASE_URL
         sync: false
-      - key: SenhaAdminInicial
+      - key: ADMIN_SENHA_REDEFINIR
         sync: false

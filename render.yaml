@@ -16,9 +16,9 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
-      - key: DATABASE_URL
+      - key: postgresql://neondb_owner:npg_V2FIoLWA6nwN@ep-late-field-b6wv285i-pooler.c-2.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
         sync: false
-      - key: APP_BASE_URL
+      - key: https://divinaluz.onrender.com
         sync: false
-      - key: ADMIN_SENHA_REDEFINIR
+      - key: SenhaAdminInicial
         sync: false

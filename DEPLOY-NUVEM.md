@@ -166,6 +166,11 @@ Dois tropeços que o próprio sistema avisa, mas que vale saber antes:
 - **As permissões são resolvidas no login.** Se você mudar a função de alguém, ela precisa sair e entrar
   de novo para a mudança valer.
 
+Para os **assistidos** (que só veem o próprio cartão), o acesso é criado junto com o cadastro, e a forma
+de entrar depende de um detalhe: **com e-mail** informado, a pessoa entra por um código enviado a ele e
+não tem senha — o que exige o envio de e-mail ligado (Parte 5); **sem e-mail**, a recepção digita a senha
+no próprio cadastro. Enquanto o e-mail não estiver configurado, cadastre sem e-mail.
+
 ---
 
 ## Parte 4 — Backup (não é opcional)
@@ -225,9 +230,20 @@ connection string: `pg_restore --no-owner --no-privileges -d "postgresql://..." 
 ## Parte 5 — E-mail (opcional)
 
 Sem configurar nada, o sistema funciona: ao cadastrar alguém **sem e-mail**, a recepção digita a senha
-de acesso na hora. Só o cadastro **com e-mail** depende de envio — nele, o assistido recebe um link para
-criar a própria senha, válido por 48 horas. Sem SMTP, esse link não é enviado e fica apenas no log do
-Render (o que serve para testar, mas não para a casa usar).
+de acesso na hora, e essa pessoa entra em **Entrar** com login e senha.
+
+**Atenção a um detalhe que muda a sua rotina de cadastro.** Quem é cadastrado **com e-mail** não recebe
+senha nenhuma: essa pessoa entra em **Entrar com meu e-mail**, informa o endereço e digita um código de
+6 dígitos que chega na caixa dela. Isso é mais prático — ela não precisa guardar senha —, mas **só
+funciona com o envio de e-mail ligado**. Sem SMTP, o código fica apenas no log do Render, e a pessoa
+**não consegue entrar**.
+
+Então, enquanto você não ligar o e-mail, escolha um dos dois:
+
+- **Deixe o campo de e-mail vazio no cadastro** e informe a senha de acesso. É o caminho mais simples, e
+  provavelmente o da maioria das pessoas da casa.
+- Ou cadastre com e-mail e, no prontuário da pessoa, use **Editar Acesso** para definir uma senha — ela
+  passa a entrar pelos dois caminhos.
 
 Para ligar o envio de verdade, no Render → **Environment**, adicione:
 
@@ -240,7 +256,15 @@ Para ligar o envio de verdade, no Render → **Environment**, adicione:
 | `MAIL_PASSWORD` | uma **senha de app** do Google (não a senha da conta — gere em *Conta Google → Segurança → Senhas de app*, com a verificação em duas etapas ligada) |
 | `MAIL_REMETENTE` | o mesmo endereço do `MAIL_USERNAME` |
 
-Confira que `APP_BASE_URL` está correta antes, senão o link chega apontando para o lugar errado.
+Confira que `APP_BASE_URL` está correta antes, senão o endereço chega apontando para o lugar errado.
+
+Ligado o envio, o assistido com e-mail entra assim: **Entrar com meu e-mail** → informa o endereço →
+recebe um código de 6 dígitos (que aparece até no assunto da mensagem, para ler sem abrir o e-mail) →
+digita o código. O código vale **15 minutos** e serve uma única vez. Se ele deixar marcado **Lembrar
+deste aparelho**, o celular dele continua entrando sozinho por 90 dias, sem pedir código de novo — e
+isso sobrevive à hibernação e aos deploys do Render.
+
+Se alguém disser que o código não chegou, abra o prontuário da pessoa e use **Reenviar Código**.
 
 ---
 

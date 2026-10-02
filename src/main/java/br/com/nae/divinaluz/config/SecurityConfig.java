@@ -3,7 +3,6 @@ package br.com.nae.divinaluz.config;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Permissao;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -104,10 +103,24 @@ public class SecurityConfig {
      * <p>Usa um {@code UserDetailsService} próprio, que de propósito <strong>não</strong> exige
      * {@code senha != null} — ao contrário do bean usado pelo login por formulário. A senha de fachada
      * jamais confere: este serviço só é consultado pelo remember-me, que não compara senha alguma.</p>
+     *
+     * <p><strong>A chave é aleatória por execução, e isso é suficiente</strong> (verificado em
+     * 2026-10-02 reiniciando o contêiner): nesta variante o cookie carrega série/token conferidos
+     * contra a tabela, e não uma assinatura derivada da chave, então reiniciar não derruba os
+     * aparelhos lembrados. Importa porque o plano gratuito do Render hiberna a cada 15 minutos — se
+     * dependesse da chave, "lembrar deste aparelho" não serviria para nada ali. Por isso também não
+     * existe variável de ambiente para configurá-la: seria um botão que não muda nada.</p>
+     *
+     * <p>Dois comportamentos desta variante que confundem quem for depurar: o <strong>token é
+     * rotacionado a cada uso</strong> (um cookie capturado serve uma vez só; reapresentá-lo é lido
+     * como roubo de token e <em>apaga todos</em> os registros daquela pessoa), e uma requisição
+     * autenticada <strong>apenas</strong> por remember-me que tropece numa
+     * {@code AccessDeniedException} é mandada para o login (302) em vez de receber 403, porque o
+     * Spring não a considera plenamente autenticada.</p>
      */
     @Bean
     RememberMeServices rememberMeServices(DataSource dataSource, AssistidoRepository assistidoRepository,
-            AutoridadesAssistido autoridades, @Value("${app.remember-me.chave:}") String chaveConfigurada) {
+            AutoridadesAssistido autoridades) {
         JdbcTokenRepositoryImpl repositorio = new JdbcTokenRepositoryImpl();
         repositorio.setDataSource(dataSource);
 
@@ -117,15 +130,8 @@ public class SecurityConfig {
                 .map(autoridades::usuario)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
 
-        // Sem chave configurada, uma por execução: os cookies caem num restart, o que é o
-        // comportamento seguro por omissão. Em produção, defina APP_REMEMBER_ME_CHAVE para os
-        // aparelhos continuarem lembrados entre deploys (ver application-prod.properties).
-        String chave = chaveConfigurada == null || chaveConfigurada.isBlank()
-                ? UUID.randomUUID().toString()
-                : chaveConfigurada;
-
-        PersistentTokenBasedRememberMeServices servicos =
-                new PersistentTokenBasedRememberMeServices(chave, semExigirSenha, repositorio);
+        PersistentTokenBasedRememberMeServices servicos = new PersistentTokenBasedRememberMeServices(
+                UUID.randomUUID().toString(), semExigirSenha, repositorio);
         servicos.setTokenValiditySeconds(VALIDADE_LEMBRAR_SEGUNDOS);
         servicos.setParameter(PARAMETRO_LEMBRAR);
         return servicos;

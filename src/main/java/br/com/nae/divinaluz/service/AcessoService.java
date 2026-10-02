@@ -8,8 +8,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
-import java.time.LocalDateTime;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -17,12 +15,15 @@ import java.util.regex.Pattern;
  * ProntuarioController.salvar) — item "cadastro de assistido gera acesso" do CLAUDE.md.
  *
  * <ul>
- *   <li>Com e-mail: login = e-mail, senha fica pendente e um link de definição por token é
- *       enviado (ver EmailService). O assistido só consegue logar depois de definir a senha
- *       (UserDetailsService do SecurityConfig já filtra {@code senha != null}).</li>
+ *   <li>Com e-mail: login = e-mail e <strong>nenhuma senha</strong> — a entrada é por código enviado
+ *       ao e-mail, pedido em {@code /entrar} na hora do uso (ver {@link CodigoAcessoService}). Só um
+ *       aviso de boas-vindas é enviado, sem prazo para vencer.</li>
  *   <li>Sem e-mail: a recepção informa a senha na hora do cadastro (campo "Senha de Acesso" em
  *       form.html) e o login é gerado a partir do nome do assistido, de fácil memorização.</li>
  * </ul>
+ *
+ * <p>Os dois caminhos são de primeira classe: boa parte dos assistidos da casa não tem (ou não usa)
+ * e-mail, e para essas pessoas a senha da recepção é a única entrada.</p>
  *
  * Não bloqueia o cadastro do assistido em si: uma falha aqui (ex.: e-mail já usado como login por
  * outro acesso) só deixa de criar o acesso, sinalizada por {@link ResultadoAcesso#aviso()}.
@@ -31,7 +32,6 @@ import java.util.regex.Pattern;
 public class AcessoService {
 
     private static final Pattern NAO_ALFANUMERICO = Pattern.compile("[^a-z0-9]+");
-    private static final int VALIDADE_TOKEN_HORAS = 48;
 
     private final AssistidoRepository assistidoRepository;
     private final PasswordEncoder passwordEncoder;
@@ -71,14 +71,15 @@ public class AcessoService {
         assistido.setAcessoAtivo(true);
 
         if (temEmail) {
-            String token = gerarToken();
+            // Nenhuma credencial com prazo é emitida aqui: a pessoa entra em /entrar informando este
+            // e-mail e pede o código na hora em que for usar (ver CodigoAcessoService). Isso elimina o
+            // "o link expirou e eu perdi" — que era a falha do token de 48h da V30.
             assistido.setSenha(null);
-            assistido.setTokenDefinicaoSenha(token);
-            assistido.setTokenDefinicaoSenhaExpiraEm(LocalDateTime.now().plusHours(VALIDADE_TOKEN_HORAS));
+            assistido.setTokenDefinicaoSenha(null);
+            assistido.setTokenDefinicaoSenhaExpiraEm(null);
             assistidoRepository.save(assistido);
 
-            String link = baseUrl + "/definir-senha/" + token;
-            emailService.enviarDefinicaoSenha(emailLimpo, assistido.getNome(), link);
+            emailService.enviarBoasVindas(emailLimpo, assistido.getNome(), baseUrl + "/entrar");
         } else {
             assistido.setSenha(passwordEncoder.encode(senhaInformada));
             assistido.setTokenDefinicaoSenha(null);
@@ -109,7 +110,4 @@ public class AcessoService {
         return candidato;
     }
 
-    private String gerarToken() {
-        return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
-    }
 }

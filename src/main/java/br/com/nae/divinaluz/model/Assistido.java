@@ -95,6 +95,22 @@ public class Assistido {
     @Column(name = "token_definicao_senha_expira_em")
     private LocalDateTime tokenDefinicaoSenhaExpiraEm;
 
+    // Entrada por código de e-mail (ver CodigoAcessoService). Guarda o HASH do código, nunca o código:
+    // são só 6 dígitos, e há dump diário do banco. Os quatro campos andam juntos e são limpos assim
+    // que o código é usado, expira ou estoura as tentativas.
+    @ToString.Exclude
+    @Column(name = "codigo_acesso", length = 100)
+    private String codigoAcesso;
+
+    @Column(name = "codigo_acesso_expira_em")
+    private LocalDateTime codigoAcessoExpiraEm;
+
+    @Column(name = "codigo_acesso_tentativas", nullable = false)
+    private int codigoAcessoTentativas = 0;
+
+    @Column(name = "codigo_acesso_enviado_em")
+    private LocalDateTime codigoAcessoEnviadoEm;
+
     @Transient
     public Integer getIdade() {
         return dataNascimento != null ? Period.between(dataNascimento, LocalDate.now()).getYears() : null;

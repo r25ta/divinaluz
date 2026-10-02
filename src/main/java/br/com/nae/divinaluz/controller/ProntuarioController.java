@@ -23,6 +23,7 @@ import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import br.com.nae.divinaluz.service.AcessoService;
 import br.com.nae.divinaluz.service.CheckinService;
+import br.com.nae.divinaluz.service.CodigoAcessoService;
 import br.com.nae.divinaluz.service.QrCodeService;
 import br.com.nae.divinaluz.service.TrabalhadorService;
 import br.com.nae.divinaluz.service.TratamentoService;
@@ -84,6 +85,8 @@ public class ProntuarioController {
 
     private final CartaoEncerradoRepository cartaoEncerradoRepository;
 
+    private final CodigoAcessoService codigoAcessoService;
+
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
             TipoTratamentoRepository tipoTratamentoRepository, TrabalhadorRepository trabalhadorRepository,
@@ -91,7 +94,9 @@ public class ProntuarioController {
             EntrevistaRepository entrevistaRepository,
             CheckinService checkinService, QrCodeService qrCodeService,
             PasswordEncoder passwordEncoder, AcessoService acessoService,
-            CartaoEncerradoRepository cartaoEncerradoRepository) {
+            CartaoEncerradoRepository cartaoEncerradoRepository,
+            CodigoAcessoService codigoAcessoService) {
+        this.codigoAcessoService = codigoAcessoService;
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -313,6 +318,26 @@ public class ProntuarioController {
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
         assistido.setAtivo(true);
         assistidoRepository.save(assistido);
+        return "redirect:/prontuario/" + assistidoId;
+    }
+
+    /**
+     * Reenvia o código de entrada para quem entra por e-mail (ver CodigoAcessoService). É a saída da
+     * recepção no atendimento presencial, quando a pessoa diz que o código não chegou — aqui não há o
+     * que vazar sobre existência de cadastro, porque quem pede já está olhando o prontuário.
+     */
+    @PostMapping("/prontuario/{assistidoId}/reenviar-codigo")
+    public String reenviarCodigoAcesso(@PathVariable Long assistidoId, RedirectAttributes redirectAttributes) {
+        Assistido assistido = assistidoRepository.findById(assistidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+
+        if (codigoAcessoService.reenviarPara(assistido)) {
+            redirectAttributes.addFlashAttribute("sucesso",
+                    "Código enviado para " + assistido.getLogin() + ". Vale por 15 minutos.");
+        } else {
+            redirectAttributes.addFlashAttribute("erro",
+                    "Este assistido não entra por código: o acesso dele não é um e-mail ativo.");
+        }
         return "redirect:/prontuario/" + assistidoId;
     }
 

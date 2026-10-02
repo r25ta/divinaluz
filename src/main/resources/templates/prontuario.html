@@ -67,6 +67,15 @@
                         <a th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-person-plus"></i> <span th:text="${assistido.login == null ? 'Criar Acesso' : 'Editar Acesso'}">Criar Acesso</span>
                         </a>
+                        <!-- Quem entra por código de e-mail (login com @) às vezes diz, no atendimento,
+                             que o código não chegou; a recepção reenvia daqui sem mexer no banco. -->
+                        <form th:if="${assistido.login != null and assistido.login.contains('@')}"
+                              th:action="@{/prontuario/{id}/reenviar-codigo(id=${assistido.id})}" method="post" class="d-inline">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-outline-teal btn-sm">
+                                <i class="bi bi-envelope-arrow-up"></i> Reenviar Código
+                            </button>
+                        </form>
                         <form th:if="${assistido.ativo}" th:action="@{/prontuario/{id}/desativar(id=${assistido.id})}" method="post" class="d-inline"
                               onsubmit="return confirm('Desativar o prontuário deste assistido? O histórico é mantido e ele pode ser reativado depois.');">
                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">

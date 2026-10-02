@@ -1,43 +1,46 @@
 package br.com.nae.divinaluz.config;
 
 import br.com.nae.divinaluz.model.Assistido;
-import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.Permissao;
-import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
-import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.RememberMeServices;
+import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
+import org.springframework.security.web.authentication.rememberme.PersistentTokenBasedRememberMeServices;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
+import javax.sql.DataSource;
+import java.util.UUID;
 
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    /** Noventa dias de "lembrar deste aparelho" — ver {@link #rememberMeServices}. */
+    private static final int VALIDADE_LEMBRAR_SEGUNDOS = 90 * 24 * 60 * 60;
+
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, AssistidoRepository assistidoRepository) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AssistidoRepository assistidoRepository,
+            RememberMeServices rememberMeServices) throws Exception {
         http
                 // Visibilidade por perfil de trabalho: cada rota exige a Permissao do módulo a que
                 // pertence, e as permissões vêm das funções do trabalhador (ver TipoTrabalhador).
                 // O Administrador recebe todas, então não precisa aparecer regra a regra.
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/definir-senha/**", "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+                        // "/entrar/**" é a entrada por código de e-mail (ver CodigoAcessoService): é
+                        // pública por natureza, como o /login — quem a usa ainda não está autenticado.
+                        .requestMatchers("/login", "/entrar", "/entrar/**", "/definir-senha/**",
+                                        "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         // Próprio cartão e próprio QR: liberados a qualquer autenticado porque todo
                         // mundo alcança o seu (inclusive quem não tem permissão nenhuma). Quem pode
                         // ver o cartão DE OUTRO é checado no ProntuarioController
@@ -58,7 +61,7 @@ public class SecurityConfig {
                         .requestMatchers("/novo", "/salvar", "/prontuario/*/editar",
                                         "/prontuario/*/desativar", "/prontuario/*/reativar",
                                         "/prontuario/*/dia-frequencia", "/prontuario/*/tratamento",
-                                        "/prontuario/*/acesso")
+                                        "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo")
                                 .hasAuthority(Permissao.CADASTRO.getAuthority())
                         .requestMatchers("/", "/prontuario/*").hasAuthority(Permissao.CONSULTA.getAuthority())
                         // Rede de segurança para qualquer rota nova ainda não classificada: continua
@@ -80,53 +83,74 @@ public class SecurityConfig {
                     })
                         .failureUrl("/login?erro=true")
                         .permitAll())
+                // Sem isto, entrar por código exigiria uma ida ao e-mail toda semana — mais atrito que
+                // a senha, não menos. O LoginCodigoController chama loginSuccess por conta própria,
+                // porque ali o login não passa pelo filtro do formulário.
+                .rememberMe(remember -> remember.rememberMeServices(rememberMeServices))
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login?logout=true")
                         .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID")
+                        .clearAuthentication(true)
+                        .deleteCookies("JSESSIONID", "remember-me")
                         .permitAll());
         return http.build();
     }
 
+    /**
+     * Variante <strong>persistente</strong> (série/token numa tabela) em vez da baseada em hash, por
+     * uma razão que não é preferência: a baseada em hash assina o cookie com a senha do usuário, e
+     * quem entra por código de e-mail não tem senha nenhuma ({@code senha == null}).
+     *
+     * <p>Usa um {@code UserDetailsService} próprio, que de propósito <strong>não</strong> exige
+     * {@code senha != null} — ao contrário do bean usado pelo login por formulário. A senha de fachada
+     * jamais confere: este serviço só é consultado pelo remember-me, que não compara senha alguma.</p>
+     */
+    @Bean
+    RememberMeServices rememberMeServices(DataSource dataSource, AssistidoRepository assistidoRepository,
+            AutoridadesAssistido autoridades, @Value("${app.remember-me.chave:}") String chaveConfigurada) {
+        JdbcTokenRepositoryImpl repositorio = new JdbcTokenRepositoryImpl();
+        repositorio.setDataSource(dataSource);
+
+        UserDetailsService semExigirSenha = login -> assistidoRepository
+                .findByLoginAndAcessoAtivoTrue(login)
+                .filter(a -> a.getPerfilAcesso() != null)
+                .map(autoridades::usuario)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
+
+        // Sem chave configurada, uma por execução: os cookies caem num restart, o que é o
+        // comportamento seguro por omissão. Em produção, defina APP_REMEMBER_ME_CHAVE para os
+        // aparelhos continuarem lembrados entre deploys (ver application-prod.properties).
+        String chave = chaveConfigurada == null || chaveConfigurada.isBlank()
+                ? UUID.randomUUID().toString()
+                : chaveConfigurada;
+
+        PersistentTokenBasedRememberMeServices servicos =
+                new PersistentTokenBasedRememberMeServices(chave, semExigirSenha, repositorio);
+        servicos.setTokenValiditySeconds(VALIDADE_LEMBRAR_SEGUNDOS);
+        servicos.setParameter(PARAMETRO_LEMBRAR);
+        return servicos;
+    }
+
+    /** Nome do checkbox "lembrar deste aparelho", lido pelo remember-me a partir do request. */
+    public static final String PARAMETRO_LEMBRAR = "remember-me";
+
+    /**
+     * Login por <strong>senha</strong>. Continua exigindo {@code senha != null}, e isso agora tem um
+     * segundo motivo além do original (acesso recém-criado com senha pendente): quem entra por código
+     * de e-mail não tem senha, e não deve conseguir entrar pelo formulário de jeito nenhum.
+     */
     @Bean
     UserDetailsService userDetailsService(AssistidoRepository assistidoRepository,
-            TrabalhadorRepository trabalhadorRepository) {
+            AutoridadesAssistido autoridades) {
         return login -> {
             Assistido assistido = assistidoRepository.findByLoginAndAcessoAtivoTrue(login)
                     .filter(a -> a.getSenha() != null && a.getPerfilAcesso() != null)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
             return User.withUsername(assistido.getLogin())
                     .password(assistido.getSenha())
-                    .authorities(authorities(assistido, trabalhadorRepository))
+                    .authorities(autoridades.para(assistido))
                     .build();
         };
-    }
-
-    /**
-     * {@code ROLE_<perfil>} (se a pessoa é staff) + um {@code PERM_<permissao>} por permissão que as
-     * funções do trabalhador concedem (o que dela ela alcança). As duas pontas são deliberadamente
-     * separadas, porque são telas diferentes: o <strong>perfil</strong> vem do acesso
-     * ({@code /prontuario/{id}/acesso}, só o Administrador escolhe) e diz se a pessoa é staff; a
-     * <strong>função</strong> vem de "Cadastrar Trabalhador" e diz quais módulos ela alcança. Logo,
-     * promover alguém a trabalhador não concede acesso por si só, e o perfil ASSISTIDO não recebe
-     * permissão alguma mesmo que tenha função de trabalho. O Administrador recebe todas,
-     * independentemente de função.
-     */
-    private List<GrantedAuthority> authorities(Assistido assistido,
-            TrabalhadorRepository trabalhadorRepository) {
-        PerfilAcesso perfil = assistido.getPerfilAcesso();
-        List<GrantedAuthority> authorities = new ArrayList<>();
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + perfil.name()));
-
-        Collection<Permissao> permissoes = switch (perfil) {
-            case ADMINISTRADOR -> EnumSet.allOf(Permissao.class);
-            case TRABALHADOR -> Permissao.de(trabalhadorRepository.findByAssistidoId(assistido.getId())
-                    .map(Trabalhador::getFuncoes)
-                    .orElse(Set.of()));
-            case ASSISTIDO -> Set.of();
-        };
-        permissoes.forEach(p -> authorities.add(new SimpleGrantedAuthority(p.getAuthority())));
-        return authorities;
     }
 
     @Bean

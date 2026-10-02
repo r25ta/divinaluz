@@ -20,6 +20,11 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     Optional<Assistido> findByCodigoCartao(String codigoCartao);
     Optional<Assistido> findByTokenDefinicaoSenha(String tokenDefinicaoSenha);
 
+    // Entrada por código de e-mail (ver CodigoAcessoService): ignora caixa porque o login é o e-mail
+    // digitado no cadastro, e quem for pedir o código vai digitá-lo de novo, sem garantia de bater a
+    // caixa — "Maria@Gmail.com" e "maria@gmail.com" são a mesma pessoa para ela.
+    Optional<Assistido> findByLoginIgnoreCaseAndAcessoAtivoTrue(String login);
+
     // Módulo de Entrevista (fila de cartões retidos — ver EntrevistaController).
     List<Assistido> findByStatusCartaoAndAtivoTrueOrderByNomeAsc(CartaoStatus statusCartao);
     long countByStatusCartaoInAndAtivoTrue(Collection<CartaoStatus> status);

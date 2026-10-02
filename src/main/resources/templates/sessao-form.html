@@ -37,8 +37,11 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Data da Consulta</label>
+                                    <!--/* Mesma regra da entrevista: a presença cai no dia de assistência da
+                                           pessoa; sem dia definido, nada é exigido e o calendário fica livre. */-->
                                     <input type="text" class="form-control dl-data" th:field="*{dataConsulta}" required
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                           th:attr="data-dias=${assistido.diaFrequencia != null ? assistido.diaFrequencia.indiceJs : null}"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 </div>
                             </div>

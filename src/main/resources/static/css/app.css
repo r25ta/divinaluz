@@ -1394,3 +1394,96 @@ a {
 .dl-resultado-acoes:not(:empty) {
   margin-top: 0.6rem;
 }
+
+/* ===== Calendário dos campos de data (data-picker.js) =====
+   Fica no body com posição absoluta, e não dentro do campo, para não mexer no layout de nenhum
+   formulário — vários campos de data têm largura própria por style inline. */
+.dl-dp {
+  position: absolute;
+  z-index: 1080;
+  width: 268px;
+  padding: 0.65rem;
+  background: var(--dl-surface);
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-md);
+  box-shadow: var(--dl-shadow);
+}
+
+.dl-dp-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.dl-dp-titulo {
+  font-weight: 600;
+  color: var(--dl-teal-900);
+}
+
+.dl-dp-nav {
+  border: 1px solid var(--dl-border);
+  background: var(--dl-teal-50);
+  color: var(--dl-teal-800);
+  border-radius: var(--dl-radius-sm);
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dl-dp-nav:hover { background: var(--dl-teal-100); }
+
+.dl-dp-grade {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.dl-dp-semana {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dl-muted);
+  padding-bottom: 0.2rem;
+}
+
+.dl-dp-dia {
+  border: 0;
+  background: transparent;
+  color: var(--dl-ink);
+  border-radius: var(--dl-radius-sm);
+  padding: 0.35rem 0;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.dl-dp-dia:hover:not(:disabled) { background: var(--dl-teal-100); }
+
+.dl-dp-hoje { box-shadow: inset 0 0 0 1px var(--dl-teal-400); }
+
+.dl-dp-selecionado,
+.dl-dp-selecionado:hover {
+  background: var(--dl-teal-700);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Dia que aquele campo não aceita (ex.: uma quarta no campo de preleção). Fica visível em vez de
+   desaparecer, para a pessoa entender que a regra é do campo e não um defeito da tela. */
+.dl-dp-bloqueado,
+.dl-dp-bloqueado:hover {
+  color: #C3CFD1;
+  background: transparent;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.dl-dp-nota {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--dl-border);
+  font-size: 0.76rem;
+  color: var(--dl-muted);
+  text-align: center;
+}

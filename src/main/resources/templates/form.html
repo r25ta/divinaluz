@@ -71,6 +71,7 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Data de Nascimento</label>
+                                    <!--/* SEM data-dias: data de nascimento é livre. */-->
                                     <input type="text" class="form-control dl-data" th:field="*{dataNascimento}"
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
@@ -119,8 +120,11 @@
 
                             <div id="campoDataPrimeiraSessao" class="mt-3" style="display:none;">
                                 <label class="form-label">Data da 1ª Sessão do Tratamento</label>
+                                <!--/* Edição: se a pessoa já tem dia de assistência, só aquele dia vale (é o que
+                                       TratamentoService.validarDiaDaSemana exige); se ainda não tem, valem os dois. */-->
                                 <input type="text" class="form-control dl-data" name="dataPrimeiraSessao" style="max-width: 260px;"
                                        placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                       th:attr="data-dias=${assistido.diaFrequencia != null ? assistido.diaFrequencia.indiceJs : '0,2'}"
                                        pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 <div class="form-text">Obrigatória ao definir um tratamento novo — a 1ª sessão já é registrada automaticamente com essa data.</div>
                             </div>
@@ -150,8 +154,10 @@
                         <div class="dl-form-section" th:unless="${modoEdicao}">
                             <div class="dl-form-section-title">Primeira Assistência</div>
                             <label class="form-label" for="dataPrimeiraSessao">Data da Assistência</label>
+                            <!--/* Cadastro novo: a pessoa ainda não tem dia de assistência, então valem os
+                                   dois dias da casa. É a mesma regra que o ProntuarioController exige. */-->
                             <input type="text" class="form-control dl-data" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
-                                   required style="max-width: 260px;" placeholder="dd/mm/aaaa" maxlength="10"
+                                   required style="max-width: 260px;" placeholder="dd/mm/aaaa" maxlength="10" data-dias="0,2"
                                    inputmode="numeric" pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                             <div class="form-text">A primeira presença será criada automaticamente no tratamento P2 e buscará a preleção cadastrada para a data. Escolha uma terça-feira ou domingo.</div>
                         </div>

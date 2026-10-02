@@ -203,6 +203,7 @@
                                     <label class="form-label">Data da 1ª Sessão do Novo Tratamento</label>
                                     <input type="text" class="form-control dl-data" name="dataPrimeiraSessao" style="max-width: 260px;"
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                           th:attr="data-dias=${assistido.diaFrequencia != null ? assistido.diaFrequencia.indiceJs : '0,2'}"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                     <div class="form-text">Obrigatória ao mudar de tratamento — a 1ª sessão do novo ciclo já é registrada com essa data.</div>
                                 </div>

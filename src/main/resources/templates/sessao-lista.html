@@ -52,7 +52,7 @@
                             <label for="data" class="form-label">Data da sessão</label>
                             <input type="text" id="data" name="data" class="form-control dl-data" required
                                    th:value="${#temporals.format(proximaData, 'dd/MM/yyyy')}"
-                                   placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                   placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric" data-dias="0,2"
                                    pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                         </div>
                         <button type="submit" class="btn btn-teal text-white">

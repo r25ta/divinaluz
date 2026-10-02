@@ -41,8 +41,12 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Data da Entrevista</label>
+                                    <!--/* A entrevista precisa cair no dia de assistência do assistido. Sem dia
+                                           definido, TratamentoService.validarDiaDaSemana não exige nada — e aí o
+                                           atributo sai (null em th:attr remove), deixando o calendário livre. */-->
                                     <input type="text" class="form-control dl-data" th:field="*{data}" required
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+                                           th:attr="data-dias=${assistido.diaFrequencia != null ? assistido.diaFrequencia.indiceJs : null}"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 </div>
                                 <div class="col-md-4">

@@ -29,6 +29,9 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Data da Avaliação</label>
+                                    <!--/* SEM data-dias de propósito: a data da Avaliação é LIVRE e nunca é
+                                           validada contra o dia de assistência (seção 2 do CLAUDE.md, distinção
+                                           Avaliação x Entrevista). Restringir aqui seria uma regra inventada. */-->
                                     <input type="text" class="form-control dl-data" th:field="*{data}" required
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">

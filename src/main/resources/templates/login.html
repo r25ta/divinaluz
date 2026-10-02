@@ -22,13 +22,9 @@
                     </div>
                     <div class="mb-4">
                         <label class="form-label" for="password">Senha</label>
-                        <div class="input-group">
-                            <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
-                            <button class="btn btn-outline-secondary" type="button" id="verSenha"
-                                    aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha">
-                                <i class="bi bi-eye" id="verSenhaIcone"></i>
-                            </button>
-                        </div>
+                        <!--/* O botão "ver senha" é posto por ver-senha.js, que atende todo campo de
+                               senha do sistema — não repetir o markup dele aqui. */-->
+                        <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
                     </div>
                     <button type="submit" class="btn btn-teal text-white w-100">
                         <i class="bi bi-box-arrow-in-right"></i> Entrar
@@ -43,23 +39,5 @@
         </div>
     </div>
 </main>
-<script>
-    (function () {
-        var botao = document.getElementById('verSenha');
-        var campo = document.getElementById('password');
-        var icone = document.getElementById('verSenhaIcone');
-        if (!botao || !campo || !icone) return;
-        botao.addEventListener('click', function () {
-            var mostrando = campo.type === 'text';
-            campo.type = mostrando ? 'password' : 'text';
-            icone.className = mostrando ? 'bi bi-eye' : 'bi bi-eye-slash';
-            var rotulo = mostrando ? 'Mostrar senha' : 'Ocultar senha';
-            botao.setAttribute('aria-label', rotulo);
-            botao.setAttribute('title', rotulo);
-            botao.setAttribute('aria-pressed', mostrando ? 'false' : 'true');
-            campo.focus();
-        });
-    })();
-</script>
 </body>
 </html>

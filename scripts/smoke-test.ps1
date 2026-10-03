@@ -218,6 +218,19 @@ try {
     if (-not $assistidoId) { throw "Não foi possível continuar sem o ID do assistido de teste." }
     Check "Listagem mostra a mensagem de sucesso do cadastro com o login gerado" ($r.Body -match "Login de acesso")
 
+    # 2c. Formulário aberto antes de um novo login no mesmo navegador (outra aba, ou relogin depois de
+    # um deploy): o token CSRF é da sessão anterior. Continua 403 — é proteção —, mas com uma página
+    # que explica e diz que nada foi gravado, no lugar da Whitelabel (2026-10-04).
+    $tokenAntigo = Extract-Csrf (Invoke-CurlForm -Url "$BaseUrl/novo").Body
+    $paginaLogin = Invoke-CurlForm -Url "$BaseUrl/login"
+    $script:CsrfToken = $null
+    Invoke-CurlForm -Method POST -Url "$BaseUrl/login" -Form @{ username = $AdminLogin; password = $AdminSenha; "_csrf" = (Extract-Csrf $paginaLogin.Body) } | Out-Null
+    $script:CsrfToken = $tokenAntigo
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = "$nomeTeste ANTIGO" }
+    Check "Formulário de antes de um novo login dá 403 explicando que a página ficou desatualizada" (
+        $r.StatusCode -eq 403 -and $r.Body -match "ficou desatualizada" -and $r.Body -match "nada foi gravado")
+    $script:CsrfToken = Extract-Csrf (Invoke-CurlForm -Url "$BaseUrl/").Body
+
     # 2b. O mesmo e-mail (com outra caixa) e o mesmo login (com outra caixa) não entram num segundo
     # cadastro — a mensagem diz de quem é o e-mail, para a recepção não duplicar a pessoa.
     $nomeDuplicado = "$nomeTeste DUP"
@@ -645,6 +658,8 @@ try {
 
             $r = Invoke-CurlForm -Url "$BaseUrl/novo"
             Check "Passista não cadastra assistido (403)" ($r.StatusCode -eq 403)
+            Check "O 403 de permissão explica em vez da Whitelabel" (
+                $r.Body -match "não tem permissão" -and $r.Body -notmatch "Whitelabel")
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/editar"
             Check "Passista não edita o cadastro de ninguém (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"

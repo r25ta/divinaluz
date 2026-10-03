@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<!--/* Página de erro do Spring Boot (substitui a "Whitelabel Error Page"). De propósito SEM a navbar:
+       um erro pode acontecer com o banco fora do ar ou sem ninguém logado, e a navbar consulta os dois.
+       O 403 tem página própria (acesso-negado.html), que explica os dois motivos. */-->
+<head th:replace="~{fragments/layout :: pageHead('Algo deu errado')}"></head>
+<body>
+<div class="dl-app">
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+            <div class="dl-card">
+                <div class="dl-card-body">
+                    <th:block th:switch="${status}">
+                        <th:block th:case="404">
+                            <h1 class="h4"><i class="bi bi-signpost-split text-warning"></i> Página não encontrada</h1>
+                            <p>O endereço não existe — pode ser um link antigo ou digitado errado.</p>
+                        </th:block>
+                        <th:block th:case="403">
+                            <h1 class="h4"><i class="bi bi-shield-lock text-danger"></i> Acesso negado</h1>
+                            <p>
+                                O envio foi recusado e nada foi gravado. Se você estava preenchendo um formulário,
+                                volte, recarregue a página e tente de novo.
+                            </p>
+                        </th:block>
+                        <th:block th:case="*">
+                            <h1 class="h4"><i class="bi bi-exclamation-octagon text-danger"></i> Algo deu errado</h1>
+                            <p>
+                                O sistema não conseguiu concluir esta operação. Tente de novo em instantes; se
+                                continuar, avise o responsável pelo sistema informando o horário abaixo.
+                            </p>
+                        </th:block>
+                    </th:block>
+                    <p class="dl-muted small mb-3">
+                        Código <span th:text="${status}">500</span>
+                        · <span th:text="${#temporals.format(#temporals.createNow(), 'dd/MM/yyyy HH:mm')}">horário</span>
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-outline-teal" onclick="history.back()">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </button>
+                        <a th:href="@{/}" class="btn btn-teal text-white">Ir para o início</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

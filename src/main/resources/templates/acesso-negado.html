@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead(${paginaDesatualizada} ? 'Página desatualizada' : 'Sem permissão')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+
+            <!--/* Formulário aberto antes de um novo login neste navegador: o token CSRF dele era da
+                   sessão anterior (ver AcessoNegadoController). Nada foi gravado. */-->
+            <div class="dl-card" th:if="${paginaDesatualizada}">
+                <div class="dl-card-body">
+                    <h1 class="h4"><i class="bi bi-arrow-clockwise text-warning"></i> Esta página ficou desatualizada</h1>
+                    <p>
+                        Depois que esta página foi aberta, houve um <strong>novo login neste navegador</strong>
+                        — alguém entrou com outro usuário em outra aba, ou o sistema foi reiniciado e foi
+                        preciso entrar de novo. Por segurança, o envio foi recusado e
+                        <strong>nada foi gravado</strong>.
+                    </p>
+                    <p class="mb-3">
+                        Volte, <strong>recarregue a página</strong> (tecla F5 ou puxando a tela para baixo no
+                        celular), preencha de novo e salve.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-teal text-white" onclick="history.back()">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </button>
+                        <a th:href="@{/}" class="btn btn-outline-teal">Ir para o início</a>
+                    </div>
+                    <div class="form-text mt-3">
+                        <i class="bi bi-lightbulb"></i> Para usar dois usuários ao mesmo tempo, abra o segundo
+                        numa janela anônima — as abas comuns do mesmo navegador dividem o mesmo login.
+                    </div>
+                </div>
+            </div>
+
+            <div class="dl-card" th:unless="${paginaDesatualizada}">
+                <div class="dl-card-body">
+                    <h1 class="h4"><i class="bi bi-shield-lock text-danger"></i> Você não tem permissão para isto</h1>
+                    <p>
+                        O seu acesso não alcança esta parte do sistema. O que cada pessoa alcança vem das
+                        funções de trabalho dela, definidas em "Cadastrar Trabalhador".
+                    </p>
+                    <p class="mb-3">
+                        Se você <strong>acabou de receber uma função nova</strong>, saia e entre de novo: as
+                        permissões são carregadas no momento do login.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-outline-teal" onclick="history.back()">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </button>
+                        <a th:href="@{/}" class="btn btn-teal text-white">Ir para o início</a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>

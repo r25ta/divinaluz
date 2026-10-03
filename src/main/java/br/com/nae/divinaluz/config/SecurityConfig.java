@@ -14,6 +14,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
 import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenBasedRememberMeServices;
@@ -38,7 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // "/entrar/**" é a entrada por código de e-mail (ver CodigoAcessoService): é
                         // pública por natureza, como o /login — quem a usa ainda não está autenticado.
-                        .requestMatchers("/login", "/entrar", "/entrar/**", "/definir-senha/**",
+                        .requestMatchers("/login", "/entrar", "/entrar/**", "/definir-senha/**", "/acesso-negado", "/error",
                                         "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
                         // Próprio cartão e próprio QR: liberados a qualquer autenticado porque todo
                         // mundo alcança o seu (inclusive quem não tem permissão nenhuma). Quem pode
@@ -67,6 +69,10 @@ public class SecurityConfig {
                         // Rede de segurança para qualquer rota nova ainda não classificada: continua
                         // exigindo staff, como era antes das permissões.
                         .anyRequest().hasAnyRole("ADMINISTRADOR", "TRABALHADOR"))
+                // 403 com explicação em vez da "Whitelabel Error Page" (ver AcessoNegadoController). O
+                // caso mais comum não é falta de permissão: é um formulário aberto antes de um novo
+                // login no mesmo navegador, cujo token CSRF ficou da sessão anterior.
+                .exceptionHandling(excecoes -> excecoes.accessDeniedHandler(acessoNegado()))
                 .formLogin(form -> form
                         .loginPage("/login")
                     .successHandler((request, response, authentication) -> {
@@ -163,6 +169,14 @@ public class SecurityConfig {
                     .authorities(autoridades.para(assistido))
                     .build();
         };
+    }
+
+    // Encaminha (forward, não redirect) para a página do 403: o pedido negado continua sendo o mesmo,
+    // então a página sabe o motivo pelo atributo WebAttributes.ACCESS_DENIED_403.
+    private static AccessDeniedHandler acessoNegado() {
+        AccessDeniedHandlerImpl handler = new AccessDeniedHandlerImpl();
+        handler.setErrorPage("/acesso-negado");
+        return handler;
     }
 
     @Bean

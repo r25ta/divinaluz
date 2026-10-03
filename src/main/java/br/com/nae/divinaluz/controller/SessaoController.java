@@ -111,6 +111,45 @@ public class SessaoController {
         return "redirect:/sessao/" + sessaoId;
     }
 
+    /** A casa não abriu: a sessão fica registrada como cancelada e as presenças da data são desfeitas. */
+    @PostMapping("/sessao/{sessaoId}/cancelar")
+    public String cancelar(@PathVariable Long sessaoId, @RequestParam(required = false) String motivo,
+            RedirectAttributes redirectAttributes) {
+        try {
+            int desfeitas = sessaoService.cancelar(sessaoId, motivo);
+            redirectAttributes.addFlashAttribute("aviso", "Sessão cancelada." + presencasDesfeitas(desfeitas)
+                    + " Esta semana não conta como falta na regra dos 21 dias.");
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
+        return "redirect:/sessao/" + sessaoId;
+    }
+
+    @PostMapping("/sessao/{sessaoId}/reativar")
+    public String reativar(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
+        sessaoService.reativar(sessaoId);
+        redirectAttributes.addFlashAttribute("sucesso",
+                "Sessão reativada. As presenças desfeitas no cancelamento precisam ser marcadas de novo.");
+        return "redirect:/sessao/" + sessaoId;
+    }
+
+    /** Sessão aberta por engano: some da lista, com a escala, e as presenças da data são desfeitas. */
+    @PostMapping("/sessao/{sessaoId}/excluir")
+    public String excluir(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
+        try {
+            int desfeitas = sessaoService.excluir(sessaoId);
+            redirectAttributes.addFlashAttribute("sucesso", "Sessão excluída." + presencasDesfeitas(desfeitas));
+            return "redirect:/sessao";
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/sessao/" + sessaoId;
+        }
+    }
+
+    private static String presencasDesfeitas(int pessoas) {
+        return pessoas == 0 ? "" : " Presenças desfeitas: " + pessoas + (pessoas == 1 ? " pessoa." : " pessoas.");
+    }
+
     @PostMapping("/sessao/{sessaoId}/preletor")
     public String trocarPreletor(@PathVariable Long sessaoId, @RequestParam(required = false) Long preletorId,
             @RequestParam(required = false) String tema, RedirectAttributes redirectAttributes) {

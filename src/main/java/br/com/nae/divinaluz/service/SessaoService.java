@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.text.Normalizer;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -117,6 +118,56 @@ public class SessaoService {
 
     public List<SessaoAssistencia> listar() {
         return sessaoAssistenciaRepository.findAllByOrderByDataDesc();
+    }
+
+    /**
+     * A casa não abriu nesta data (feriado, chuva, imprevisto): a sessão fica registrada como
+     * cancelada, com o motivo, o check-in é fechado e as presenças da data são desfeitas
+     * ({@link TratamentoService#desfazerPresencasDaData}). A semana cancelada deixa de contar na
+     * regra dos 21 dias.
+     *
+     * @return quantas pessoas tiveram presença desfeita
+     */
+    @Transactional
+    public int cancelar(Long sessaoId, String motivo) {
+        if (!preenchido(motivo)) {
+            throw new RegraNegocioException("Informe o motivo do cancelamento.");
+        }
+        SessaoAssistencia sessao = buscar(sessaoId);
+        if (sessao.isCancelada()) {
+            throw new RegraNegocioException("Esta sessão já está cancelada.");
+        }
+        int desfeitas = tratamentoService.desfazerPresencasDaData(sessao.getData());
+        if (sessao.isCheckinAberto()) {
+            sessao.setCheckinFechadoEm(LocalDateTime.now());
+        }
+        sessao.setCanceladaEm(LocalDateTime.now());
+        sessao.setMotivoCancelamento(motivo.trim());
+        sessaoAssistenciaRepository.save(sessao);
+        return desfeitas;
+    }
+
+    /** Volta a valer a sessão cancelada por engano. As presenças desfeitas não voltam. */
+    @Transactional
+    public SessaoAssistencia reativar(Long sessaoId) {
+        SessaoAssistencia sessao = buscar(sessaoId);
+        sessao.setCanceladaEm(null);
+        sessao.setMotivoCancelamento(null);
+        return sessaoAssistenciaRepository.save(sessao);
+    }
+
+    /**
+     * Sessão aberta por engano (data errada, duplicada): some como se nunca tivesse existido, com
+     * a escala junto. As presenças da data também são desfeitas, como no cancelamento.
+     *
+     * @return quantas pessoas tiveram presença desfeita
+     */
+    @Transactional
+    public int excluir(Long sessaoId) {
+        SessaoAssistencia sessao = buscar(sessaoId);
+        int desfeitas = tratamentoService.desfazerPresencasDaData(sessao.getData());
+        sessaoAssistenciaRepository.delete(sessao);
+        return desfeitas;
     }
 
     /** Data da sessão de assistência de hoje ou, se hoje não é Domingo/Terça, da próxima. */

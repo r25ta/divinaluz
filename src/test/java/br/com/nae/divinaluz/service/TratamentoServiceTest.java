@@ -7,6 +7,7 @@ import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.Prelecao;
+import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
 import br.com.nae.divinaluz.model.TipoTratamento;
@@ -18,6 +19,7 @@ import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
+import br.com.nae.divinaluz.repository.SessaoAssistenciaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,6 +67,9 @@ class TratamentoServiceTest {
 
     @Mock
     private CartaoEncerradoRepository cartaoEncerradoRepository;
+
+    @Mock
+    private SessaoAssistenciaRepository sessaoAssistenciaRepository;
 
     @InjectMocks
     private TratamentoService tratamentoService;
@@ -416,5 +421,126 @@ class TratamentoServiceTest {
 
         assertFalse(mudouDeNovo);
         verify(historicoDiaFrequenciaRepository).save(any());
+    }
+
+    // ---------------------------------------------------------------- sessão cancelada (2026-10-03)
+
+    @Test
+    void presencaEmSessaoCanceladaEhRecusada() {
+        LocalDate data = LocalDate.of(2026, 9, 20);
+        when(sessaoAssistenciaRepository.existsByDataAndCanceladaEmIsNotNull(data)).thenReturn(true);
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarSessao(sessao(data)));
+        verify(sessaoRepository, never()).save(any(SessaoTratamento.class));
+    }
+
+    @Test
+    void semanaCanceladaNaoContaNaRegraDos21Dias() {
+        // 06/09 → 27/09 são 21 dias: sem o cancelamento o cartão expiraria. Com a casa fechada em
+        // 13/09 (domingo, o dia da pessoa), ela só faltou a uma sessão de verdade.
+        assistido.setDiaFrequencia(DiaFrequencia.DOMINGO_08H);
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 6));
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 6))));
+        when(sessaoAssistenciaRepository.findByDataBetweenAndCanceladaEmIsNotNull(
+                LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 26)))
+                .thenReturn(List.of(sessaoCancelada(LocalDate.of(2026, 9, 13), DiaFrequencia.DOMINGO_08H)));
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 9, 6)))
+                .thenReturn(1L);
+        when(sessaoRepository.save(any(SessaoTratamento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SessaoTratamento nova = sessao(LocalDate.of(2026, 9, 27));
+        TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(nova);
+
+        assertFalse(resultado.tratamentoReiniciado());
+        assertEquals(2, nova.getNumeroSerie());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+    }
+
+    @Test
+    void sessaoCanceladaDeOutroDiaNaoEstendeATolerancia() {
+        // A casa fechou numa terça, mas a pessoa é de domingo: ela faltou de verdade.
+        assistido.setDiaFrequencia(DiaFrequencia.DOMINGO_08H);
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 6))));
+        when(sessaoAssistenciaRepository.findByDataBetweenAndCanceladaEmIsNotNull(any(), any()))
+                .thenReturn(List.of(sessaoCancelada(LocalDate.of(2026, 9, 15), DiaFrequencia.TERCA_19H)));
+
+        assertThrows(br.com.nae.divinaluz.exception.CartaoExpiradoException.class,
+                () -> tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 27))));
+        assertEquals(CartaoStatus.INCOMPLETO_POR_TEMPO, assistido.getStatusCartao());
+    }
+
+    @Test
+    void desfazerPresencaRenumeraOCicloEReabreOCartao() {
+        // Ciclo com 4 presenças (Aguardando Avaliação); a de 13/09 é desfeita: sobram 3, renumeradas.
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 6));
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        LocalDate data = LocalDate.of(2026, 9, 13);
+        SessaoTratamento desfeita = presenca(data, 2);
+        SessaoTratamento s1 = presenca(LocalDate.of(2026, 9, 6), 1);
+        SessaoTratamento s3 = presenca(LocalDate.of(2026, 9, 20), 3);
+        SessaoTratamento s4 = presenca(LocalDate.of(2026, 9, 27), 4);
+        when(sessaoRepository.findByDataConsulta(data)).thenReturn(List.of(desfeita));
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(s4, s3, s1));
+
+        int pessoas = tratamentoService.desfazerPresencasDaData(data);
+
+        assertEquals(1, pessoas);
+        verify(sessaoRepository).deleteAll(List.of(desfeita));
+        assertEquals(1, s1.getNumeroSerie());
+        assertEquals(2, s3.getNumeroSerie());
+        assertEquals(3, s4.getNumeroSerie());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+    }
+
+    @Test
+    void desfazerPresencaRecusaQuemJaTemAvaliacaoDepois() {
+        assistido.setNome("Fulano");
+        LocalDate data = LocalDate.of(2026, 9, 27);
+        when(sessaoRepository.findByDataConsulta(data)).thenReturn(List.of(presenca(data, 4)));
+        when(avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(1L, data)).thenReturn(1L);
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.desfazerPresencasDaData(data));
+        assertTrue(erro.getMessage().contains("Fulano"));
+        verify(sessaoRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void desfazerReinicioEmP2RestauraOCicloQueTinhaExpirado() {
+        LocalDate data = LocalDate.of(2026, 9, 27);
+        TipoTratamento p3e = new TipoTratamento();
+        p3e.setId(5L);
+        p3e.setCodigo("P3E");
+        assistido.setCicloIniciadoEm(data);
+        assistido.setTratamentoAtual(tratamento);
+        CartaoEncerrado expirado = new CartaoEncerrado();
+        expirado.setIniciadoEm(LocalDate.of(2026, 8, 2));
+        expirado.setEncerradoEm(data);
+        expirado.setTratamento(p3e);
+        expirado.setStatusFinal(StatusCartaoEncerrado.INCOMPLETO_POR_TEMPO);
+        when(sessaoRepository.findByDataConsulta(data)).thenReturn(List.of(presenca(data, 1)));
+        when(cartaoEncerradoRepository.findByAssistidoIdOrderByEncerradoEmDesc(1L)).thenReturn(List.of(expirado));
+
+        tratamentoService.desfazerPresencasDaData(data);
+
+        assertEquals(LocalDate.of(2026, 8, 2), assistido.getCicloIniciadoEm());
+        assertEquals(p3e, assistido.getTratamentoAtual());
+        verify(cartaoEncerradoRepository).delete(expirado);
+    }
+
+    private SessaoTratamento presenca(LocalDate data, int numeroSerie) {
+        SessaoTratamento sessao = sessao(data);
+        sessao.setNumeroSerie(numeroSerie);
+        return sessao;
+    }
+
+    private SessaoAssistencia sessaoCancelada(LocalDate data, DiaFrequencia dia) {
+        SessaoAssistencia sessao = new SessaoAssistencia();
+        sessao.setData(data);
+        sessao.setDiaFrequencia(dia);
+        sessao.setCanceladaEm(java.time.LocalDateTime.now());
+        return sessao;
     }
 }

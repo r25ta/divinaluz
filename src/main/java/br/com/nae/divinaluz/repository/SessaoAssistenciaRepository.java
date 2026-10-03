@@ -11,6 +11,12 @@ public interface SessaoAssistenciaRepository extends JpaRepository<SessaoAssiste
     Optional<SessaoAssistencia> findByData(LocalDate data);
     List<SessaoAssistencia> findAllByOrderByDataDesc();
 
+    // Sessões canceladas (a casa não abriu): bloqueiam presença na data e esticam a tolerância de
+    // ausência da regra dos 21 dias (ver TratamentoService).
+    boolean existsByDataAndCanceladaEmIsNotNull(LocalDate data);
+
+    List<SessaoAssistencia> findByDataBetweenAndCanceladaEmIsNotNull(LocalDate inicio, LocalDate fim);
+
     // Janela de check-in aberta: a abertura só é permitida na própria data e fecha a janela
     // esquecida de outra data, então na prática isto devolve no máximo uma linha.
     Optional<SessaoAssistencia> findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull();

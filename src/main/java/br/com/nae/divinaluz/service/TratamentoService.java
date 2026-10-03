@@ -22,6 +22,7 @@ import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
+import br.com.nae.divinaluz.repository.SessaoAssistenciaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,9 +33,14 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class TratamentoService {
@@ -52,12 +58,14 @@ public class TratamentoService {
     private final PrelecaoRepository prelecaoRepository;
     private final HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository;
     private final CartaoEncerradoRepository cartaoEncerradoRepository;
+    private final SessaoAssistenciaRepository sessaoAssistenciaRepository;
 
     public TratamentoService(SessaoRepository sessaoRepository, AvaliacaoRepository avaliacaoRepository,
             EntrevistaRepository entrevistaRepository, AssistidoRepository assistidoRepository,
             TipoTratamentoRepository tipoTratamentoRepository, PrelecaoRepository prelecaoRepository,
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
-            CartaoEncerradoRepository cartaoEncerradoRepository) {
+            CartaoEncerradoRepository cartaoEncerradoRepository,
+            SessaoAssistenciaRepository sessaoAssistenciaRepository) {
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
         this.entrevistaRepository = entrevistaRepository;
@@ -66,6 +74,7 @@ public class TratamentoService {
         this.prelecaoRepository = prelecaoRepository;
         this.historicoDiaFrequenciaRepository = historicoDiaFrequenciaRepository;
         this.cartaoEncerradoRepository = cartaoEncerradoRepository;
+        this.sessaoAssistenciaRepository = sessaoAssistenciaRepository;
     }
 
     public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
@@ -85,6 +94,7 @@ public class TratamentoService {
         if (novaSessao.getDataConsulta() == null) {
             throw new RegraNegocioException("Informe a data da sessão.");
         }
+        validarSessaoNaoCancelada(novaSessao.getDataConsulta());
         validarDiaDaSemana(assistido, novaSessao.getDataConsulta());
 
         if (assistido.getStatusCartao() == null) {
@@ -110,7 +120,8 @@ public class TratamentoService {
 
         boolean expirado = assistido.getStatusCartao() == CartaoStatus.INCOMPLETO_POR_TEMPO
                 || (ultimaSessao.isPresent() && ChronoUnit.DAYS.between(
-                        ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta()) >= DIAS_TOLERANCIA_AUSENCIA);
+                        ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta())
+                        >= toleranciaAusencia(assistido, ultimaSessao.get().getDataConsulta(), novaSessao.getDataConsulta()));
 
         if (expirado && ultimaSessao.isPresent()) {
             // Passou de 2 semanas de tolerância (faltou na 3ª semana): o cartão expira. Quem reinicia em
@@ -184,6 +195,7 @@ public class TratamentoService {
     @Transactional
     public Entrevista registrarEntrevista(Entrevista novaEntrevista) {
         Assistido assistido = novaEntrevista.getAssistido();
+        validarSessaoNaoCancelada(novaEntrevista.getData());
         validarDiaDaSemana(assistido, novaEntrevista.getData());
 
         if (entrevistaRepository.existsByAvaliacaoId(novaEntrevista.getAvaliacao().getId())) {
@@ -225,6 +237,7 @@ public class TratamentoService {
                 throw new RegraNegocioException(
                         "Informe a data da 1ª sessão para iniciar o tratamento " + novoTratamento.getCodigo() + ".");
             }
+            validarSessaoNaoCancelada(dataPrimeiraSessao);
             validarDiaDaSemana(assistido, dataPrimeiraSessao);
 
             // O ciclo em andamento é cortado no meio pela troca de tratamento: vai para o
@@ -269,6 +282,91 @@ public class TratamentoService {
         return true;
     }
 
+    /**
+     * Desfaz todas as presenças (efetivas e de ouvinte) de uma data — é o que acontece quando a
+     * sessão daquela data é cancelada ou excluída (2026-10-03). Para cada pessoa com presença
+     * efetiva, o cartão é recalculado: as presenças seguintes do ciclo são renumeradas, o status
+     * volta a refletir quantas sobraram (4 ou mais = Aguardando Avaliação) e, se a presença
+     * desfeita era a do reinício em P2 por 21 dias, o ciclo que tinha expirado é restaurado — a
+     * próxima presença reavalia a ausência já descontando a semana cancelada.
+     *
+     * <p>Recusa tudo (nada é apagado) se alguém com presença efetiva nesta data já tem Avaliação
+     * ou Entrevista nesta data ou depois: esses atendimentos dependem das presenças, e desfazê-los
+     * em cascata seria mexer em diagnóstico espiritual por um clique na tela da sessão.</p>
+     *
+     * @return quantas pessoas tiveram presença desfeita
+     */
+    @Transactional
+    public int desfazerPresencasDaData(LocalDate data) {
+        Map<Long, List<SessaoTratamento>> porAssistido = sessaoRepository.findByDataConsulta(data).stream()
+                .filter(s -> s.getAssistido() != null)
+                .collect(Collectors.groupingBy(s -> s.getAssistido().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        List<String> comAtendimento = porAssistido.values().stream()
+                .filter(linhas -> linhas.stream().anyMatch(s -> !s.isOuvinte()))
+                .map(linhas -> linhas.get(0).getAssistido())
+                .filter(a -> avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(a.getId(), data) > 0
+                        || entrevistaRepository.countByAssistidoIdAndDataGreaterThanEqual(a.getId(), data) > 0)
+                .map(Assistido::getNome)
+                .toList();
+        if (!comAtendimento.isEmpty()) {
+            throw new RegraNegocioException("Não é possível desfazer as presenças de " + data.format(FORMATO_DATA)
+                    + ": " + String.join(", ", comAtendimento) + " já passou por Avaliação ou Entrevista nesta"
+                    + " data ou depois, e esses atendimentos dependem das presenças.");
+        }
+
+        porAssistido.values().forEach(linhas -> {
+            Assistido assistido = linhas.get(0).getAssistido();
+            boolean tinhaEfetiva = linhas.stream().anyMatch(s -> !s.isOuvinte());
+            sessaoRepository.deleteAll(linhas);
+            if (tinhaEfetiva) {
+                recalcularCartaoAposDesfazer(assistido, data);
+            }
+        });
+        return porAssistido.size();
+    }
+
+    private void recalcularCartaoAposDesfazer(Assistido assistido, LocalDate data) {
+        // A presença desfeita abriu o ciclo atual por reinício em P2 (21 dias): volta ao ciclo que
+        // tinha expirado. Os outros começos de ciclo (cadastro, troca manual de tratamento) ficam
+        // como estão — o tratamento ali foi escolhido por alguém, não pela regra.
+        if (data.equals(assistido.getCicloIniciadoEm())) {
+            cartaoEncerradoRepository.findByAssistidoIdOrderByEncerradoEmDesc(assistido.getId()).stream()
+                    .filter(c -> data.equals(c.getEncerradoEm())
+                            && c.getStatusFinal() == StatusCartaoEncerrado.INCOMPLETO_POR_TEMPO)
+                    .findFirst()
+                    .ifPresent(expirado -> {
+                        assistido.setCicloIniciadoEm(expirado.getIniciadoEm());
+                        if (expirado.getTratamento() != null) {
+                            assistido.setTratamentoAtual(expirado.getTratamento());
+                        }
+                        cartaoEncerradoRepository.delete(expirado);
+                    });
+        }
+
+        LocalDate ciclo = assistido.getCicloIniciadoEm();
+        List<SessaoTratamento> efetivas = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistido.getId())
+                .stream()
+                .filter(s -> !s.isOuvinte() && s.getDataConsulta() != null
+                        && (ciclo == null || !s.getDataConsulta().isBefore(ciclo)))
+                .sorted(Comparator.comparing(SessaoTratamento::getDataConsulta))
+                .toList();
+        for (int i = 0; i < efetivas.size(); i++) {
+            SessaoTratamento sessao = efetivas.get(i);
+            if (!Objects.equals(sessao.getNumeroSerie(), i + 1)) {
+                sessao.setNumeroSerie(i + 1);
+                sessaoRepository.save(sessao);
+            }
+        }
+
+        CartaoStatus status = assistido.getStatusCartao();
+        if (status == null || status == CartaoStatus.EM_TRATAMENTO || status == CartaoStatus.AGUARDANDO_AVALIACAO) {
+            assistido.setStatusCartao(efetivas.size() >= SESSOES_POR_AVALIACAO
+                    ? CartaoStatus.AGUARDANDO_AVALIACAO : CartaoStatus.EM_TRATAMENTO);
+        }
+        assistidoRepository.save(assistido);
+    }
+
     @Transactional
     public void iniciarTratamentoInicial(Assistido assistido, TipoTratamento tratamentoInicial,
             LocalDate dataPrimeiraSessao) {
@@ -279,6 +377,7 @@ public class TratamentoService {
             throw new RegraNegocioException("Informe a data da primeira assistência.");
         }
 
+        validarSessaoNaoCancelada(dataPrimeiraSessao);
         validarDiaDaSemana(assistido, dataPrimeiraSessao);
         assistido.setTratamentoAtual(tratamentoInicial);
         assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
@@ -309,6 +408,31 @@ public class TratamentoService {
         throw new RegraNegocioException(
                 "A data " + data.format(FORMATO_DATA) + " cai em uma " + nomeDia
                         + ", mas o assistido frequenta às " + dia.getLabel() + ".");
+    }
+
+    // Sessão cancelada = a casa não abriu: ninguém pode ter presença, 1ª sessão ou entrevista nela.
+    private void validarSessaoNaoCancelada(LocalDate data) {
+        if (data != null && sessaoAssistenciaRepository.existsByDataAndCanceladaEmIsNotNull(data)) {
+            throw new RegraNegocioException("A sessão de " + data.format(FORMATO_DATA)
+                    + " foi cancelada: a casa não abriu nessa data.");
+        }
+    }
+
+    /**
+     * Regra dos 21 dias descontando a casa fechada: cada semana com sessão cancelada entre as duas
+     * presenças (do dia de assistência da pessoa, ou de qualquer dia se ela ainda não tem um) soma
+     * 7 dias à tolerância — se a casa não abriu, ninguém faltou.
+     */
+    private long toleranciaAusencia(Assistido assistido, LocalDate ultimaPresenca, LocalDate novaPresenca) {
+        DiaFrequencia dia = assistido.getDiaFrequencia();
+        long semanasCanceladas = sessaoAssistenciaRepository
+                .findByDataBetweenAndCanceladaEmIsNotNull(ultimaPresenca.plusDays(1), novaPresenca.minusDays(1))
+                .stream()
+                .filter(s -> dia == null || s.getDiaFrequencia() == dia)
+                .map(s -> s.getData().with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)))
+                .distinct()
+                .count();
+        return DIAS_TOLERANCIA_AUSENCIA + 7L * semanasCanceladas;
     }
 
     private void reiniciarTratamento(Assistido assistido, LocalDate dataReinicio) {

@@ -818,6 +818,51 @@ try {
         Check "Com o check-in fechado o QR não carimba mais presença" ($r.Body -match "Nenhuma sessão está com o check-in aberto")
     }
 
+    # 16b. Cancelar / excluir a sessão (2026-10-03). Usa um domingo de 2099, vazio de propósito:
+    # cancelar desfaz as presenças de TODO MUNDO na data, e uma data real do banco de dev levaria
+    # junto presenças que não são do teste. A presença é de ouvinte, inserida por SQL, para conferir
+    # que ela some sem mexer no cartão de ninguém.
+    $dataCancelar = "04/01/2099"
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = $dataCancelar }
+    $sessaoCancelarId = Invoke-SqlScalar "SELECT id FROM sessao_assistencia WHERE data = DATE '2099-01-04';"
+    $script:sessaoCancelarId = $sessaoCancelarId
+    Check "Sessão de 2099 criada para testar o cancelamento" ([bool]$sessaoCancelarId)
+    if ($sessaoCancelarId) {
+        Invoke-Sql "INSERT INTO sessao_tratamento (assistido_id, data_consulta, ouvinte, visto, assistencia, evangelho_no_lar, leituras, escola, trabalho_espiritual, medico) VALUES ($assistidoId, DATE '2099-01-04', true, false, false, false, false, false, false, false);" | Out-Null
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoCancelarId"
+        Check "Painel oferece cancelar e excluir, avisando das presenças" (
+            $r.Body -match "Cancelar sessão" -and $r.Body -match "Excluir sessão" -and $r.Body -match "presença\(s\)")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoCancelarId/cancelar" -Form @{ motivo = "" }
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoCancelarId"
+        $canceladaSemMotivo = Invoke-SqlScalar "SELECT COALESCE(cancelada_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoCancelarId;"
+        Check "Cancelar sem motivo é recusado" ($canceladaSemMotivo -eq "NULL" -and $r.Body -match "Informe o motivo")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoCancelarId/cancelar" -Form @{ motivo = "Feriado SMOKE" }
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoCancelarId"
+        $motivo = Invoke-SqlScalar "SELECT COALESCE(motivo_cancelamento, 'NULL') FROM sessao_assistencia WHERE id = $sessaoCancelarId;"
+        Check "Cancelar grava o motivo" ($motivo -eq "Feriado SMOKE")
+        $presencasCanceladas = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE data_consulta = DATE '2099-01-04';"
+        Check "Cancelar desfaz as presenças da data" ($presencasCanceladas -eq "0")
+        Check "Painel mostra a sessão cancelada, o motivo e quantas presenças saíram" (
+            $r.Body -match "Sessão cancelada" -and $r.Body -match "Feriado SMOKE" -and $r.Body -match "Presenças desfeitas: 1 pessoa")
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+        Check "Lista de sessões marca a sessão como cancelada" ($r.Body -match "Cancelada")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoCancelarId/reativar"
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoCancelarId"
+        $canceladaDepois = Invoke-SqlScalar "SELECT COALESCE(cancelada_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoCancelarId;"
+        Check "Reativar desfaz o cancelamento" ($canceladaDepois -eq "NULL" -and $r.Body -match "Sessão reativada")
+
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoCancelarId/excluir"
+        Check "Excluir volta para a lista de sessões" ($r.StatusCode -eq 302 -and $r.Location -match "sessao$")
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao"  # consome o flash
+        $restantes = Invoke-SqlScalar "SELECT count(*) FROM sessao_assistencia WHERE id = $sessaoCancelarId;"
+        Check "Excluir apaga a sessão" ($restantes -eq "0")
+    }
+
 } finally {
     Write-Output "Limpando dados de teste ($nomeTeste)..."
     # O cadastro de trabalhador agora também exige dataPrimeiraSessao (item 4), então ele também
@@ -836,6 +881,7 @@ try {
     # original (fechada) para não deixar um check-in aberto no banco de dev.
     Invoke-Sql "DELETE FROM prelecao WHERE tema IN ('$temaPrelecaoTeste', '$temaPrelecaoAntiga');" | Out-Null
     if ($script:sessaoAntigaId) { Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoAntigaId);" | Out-Null }
+    if ($script:sessaoCancelarId) { Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoCancelarId);" | Out-Null }
     if ($script:sessaoHojeCriada) {
         Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoHojeCriada);" | Out-Null
     } else {

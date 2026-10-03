@@ -14,6 +14,9 @@
                 </div>
             </div>
 
+            <div class="alert alert-success" th:if="${sucesso}">
+                <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
+            </div>
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
             </div>
@@ -86,15 +89,21 @@
                                 <td th:text="${s.diaFrequencia.label}"></td>
                                 <td th:text="${s.semanaDoAno}"></td>
                                 <td>
-                                    <span class="dl-badge dl-badge-success" th:if="${s.checkinAberto}">
-                                        <i class="bi bi-broadcast"></i> Aberto
+                                    <span class="dl-badge dl-badge-danger" th:if="${s.cancelada}"
+                                          th:title="${s.motivoCancelamento}">
+                                        <i class="bi bi-x-octagon-fill"></i> Cancelada
                                     </span>
-                                    <span class="dl-badge dl-badge-neutral" th:if="${!s.checkinAberto and s.checkinFechadoEm != null}">
-                                        <i class="bi bi-lock-fill"></i> Encerrado
-                                    </span>
-                                    <span class="dl-badge dl-badge-neutral" th:if="${s.checkinAbertoEm == null}">
-                                        Não aberto
-                                    </span>
+                                    <th:block th:unless="${s.cancelada}">
+                                        <span class="dl-badge dl-badge-success" th:if="${s.checkinAberto}">
+                                            <i class="bi bi-broadcast"></i> Aberto
+                                        </span>
+                                        <span class="dl-badge dl-badge-neutral" th:if="${!s.checkinAberto and s.checkinFechadoEm != null}">
+                                            <i class="bi bi-lock-fill"></i> Encerrado
+                                        </span>
+                                        <span class="dl-badge dl-badge-neutral" th:if="${s.checkinAbertoEm == null}">
+                                            Não aberto
+                                        </span>
+                                    </th:block>
                                 </td>
                                 <td th:text="${#lists.size(s.escala)} + ' trabalhador(es)'"></td>
                                 <td class="text-center">

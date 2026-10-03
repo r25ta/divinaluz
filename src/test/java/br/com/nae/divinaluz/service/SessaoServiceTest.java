@@ -105,6 +105,51 @@ class SessaoServiceTest {
         verify(sessaoAssistenciaRepository, never()).save(any());
     }
 
+    // ------------------------------------------------------------ cancelamento (2026-10-03)
+
+    @Test
+    void cancelarExigeMotivo() {
+        assertThrows(RegraNegocioException.class, () -> sessaoService.cancelar(1L, "  "));
+        verify(tratamentoService, never()).desfazerPresencasDaData(any());
+    }
+
+    @Test
+    void cancelarDesfazPresencasFechaCheckinERegistraMotivo() {
+        sessao.setCheckinAbertoEm(java.time.LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findById(1L)).thenReturn(Optional.of(sessao));
+        when(tratamentoService.desfazerPresencasDaData(DOMINGO)).thenReturn(3);
+
+        int desfeitas = sessaoService.cancelar(1L, " Feriado ");
+
+        assertEquals(3, desfeitas);
+        assertTrue(sessao.isCancelada());
+        assertFalse(sessao.isCheckinAberto());
+        assertEquals("Feriado", sessao.getMotivoCancelamento());
+        verify(sessaoAssistenciaRepository).save(sessao);
+    }
+
+    @Test
+    void reativarDesfazOCancelamento() {
+        sessao.setCanceladaEm(java.time.LocalDateTime.now());
+        sessao.setMotivoCancelamento("Chuva");
+        when(sessaoAssistenciaRepository.findById(1L)).thenReturn(Optional.of(sessao));
+
+        sessaoService.reativar(1L);
+
+        assertFalse(sessao.isCancelada());
+        assertEquals(null, sessao.getMotivoCancelamento());
+    }
+
+    @Test
+    void excluirDesfazPresencasEApagaASessao() {
+        when(sessaoAssistenciaRepository.findById(1L)).thenReturn(Optional.of(sessao));
+
+        sessaoService.excluir(1L);
+
+        verify(tratamentoService).desfazerPresencasDaData(DOMINGO);
+        verify(sessaoAssistenciaRepository).delete(sessao);
+    }
+
     @Test
     void garantirSessaoCriaComODiaDaDataEReaproveitaAExistente() {
         LocalDate terca = DOMINGO.plusDays(2);

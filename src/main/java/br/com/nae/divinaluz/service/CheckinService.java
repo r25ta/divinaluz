@@ -63,6 +63,9 @@ public class CheckinService {
     public SessaoAssistencia abrirCheckin(Long sessaoId, LocalDate hoje) {
         SessaoAssistencia sessao = buscarSessao(sessaoId);
 
+        if (sessao.isCancelada()) {
+            throw new RegraNegocioException("Esta sessão foi cancelada. Reative-a antes de abrir o check-in.");
+        }
         if (!hoje.equals(sessao.getData())) {
             throw new RegraNegocioException("O check-in só pode ser aberto no dia da sessão ("
                     + sessao.getData().format(FORMATO_DATA) + ").");

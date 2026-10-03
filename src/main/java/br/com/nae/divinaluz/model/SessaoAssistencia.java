@@ -49,6 +49,13 @@ public class SessaoAssistencia {
     @Column(name = "checkin_fechado_em")
     private LocalDateTime checkinFechadoEm;
 
+    /** Preenchido quando a casa não abriu nesta data (V34). Ver {@link #isCancelada()}. */
+    @Column(name = "cancelada_em")
+    private LocalDateTime canceladaEm;
+
+    @Column(name = "motivo_cancelamento")
+    private String motivoCancelamento;
+
     @OneToMany(mappedBy = "sessao", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("posicao, id")
     @ToString.Exclude
@@ -57,6 +64,15 @@ public class SessaoAssistencia {
     @Transient
     public boolean isCheckinAberto() {
         return checkinAbertoEm != null && checkinFechadoEm == null;
+    }
+
+    /**
+     * Sessão cancelada: a casa não abriu. Não recebe presença nem abre check-in, e a semana dela
+     * não conta como falta na regra dos 21 dias.
+     */
+    @Transient
+    public boolean isCancelada() {
+        return canceladaEm != null;
     }
 
     /** Semana do ano contada de Domingo a Sábado, a mesma janela da regra de presença semanal. */

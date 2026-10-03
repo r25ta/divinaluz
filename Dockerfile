@@ -19,8 +19,13 @@ ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k -XX:Tie
 # e a subida real lê dali. Com 0,1 CPU isso derrubou a subida de ~4 min para ~1 min (medido em
 # 2026-09-27). O treino para logo após montar o contexto (spring.context.exit=onRefresh) e não
 # precisa de banco: Flyway e o acesso a metadados do Hibernate ficam desligados só nesta execução.
+# O -Xmx do treino não é enfeite: o arquivo CDS só vale se o modo dos ponteiros (compressed oops)
+# for o mesmo no treino e na subida. Sem ele, o heap sai do MaxRAMPercentage da máquina de BUILD —
+# no Render, grande o bastante para passar de 32 GB, o que desliga os compressed oops — e na subida
+# (512 MB) eles ficam ligados: a JVM descarta o arquivo ("The saved state of UseCompressedOops ... is
+# different from runtime") e sobe sem CDS, de volta à subida lenta. Visto no deploy de 2026-10-03.
 RUN java -Djarmode=tools -jar app.jar extract --destination aplicacao && rm app.jar
-RUN java -XX:ArchiveClassesAtExit=aplicacao/app.jsa -Dspring.context.exit=onRefresh \
+RUN java -Xmx512m -XX:ArchiveClassesAtExit=aplicacao/app.jsa -Dspring.context.exit=onRefresh \
         -Dspring.main.lazy-initialization=false \
         -Dspring.flyway.enabled=false -Dspring.jpa.hibernate.ddl-auto=none \
         -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \

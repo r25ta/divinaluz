@@ -441,7 +441,9 @@ public class ProntuarioController {
         if (admin && perfil != null) {
             assistido.setPerfilAcesso(perfil);
         } else if (novo) {
-            assistido.setPerfilAcesso(PerfilAcesso.ASSISTIDO);
+            // Quem já foi promovido em "Cadastrar Trabalhador" nasce com o perfil que a promoção daria.
+            assistido.setPerfilAcesso(TrabalhadorService.VINCULO_TRABALHADOR.equals(assistido.getVinculo())
+                    ? PerfilAcesso.TRABALHADOR : PerfilAcesso.ASSISTIDO);
         }
         assistido.setAcessoAtivo(novo || acessoAtivo);
         assistidoRepository.save(assistido);

@@ -47,10 +47,8 @@
                             </div>
                         </div>
 
-                        <!--/* Acesso ao sistema, na mesma tela de propósito (decisão de 2026-10-02): a função
-                               diz quais módulos a pessoa alcança, mas é o PERFIL do acesso que a torna staff —
-                               e antes disso a troca de perfil só existia em /prontuario/{id}/acesso, o que
-                               obrigava a sair daqui e levava a crer que a promoção havia falhado. */-->
+                        <!--/* Sem seletor de perfil desde 2026-10-03: o perfil do acesso acompanha as funções
+                               (TrabalhadorService.definirPerfis). Aqui só se informa o estado. */-->
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Acesso ao Sistema</div>
 
@@ -61,23 +59,18 @@
                                 <a th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="alert-link ms-1">Criar acesso agora</a>.
                             </div>
 
-                            <div th:unless="${assistido.login == null}">
-                                <p class="dl-muted" style="margin-top:-0.4rem; margin-bottom:1rem;">
-                                    O perfil é o que torna a pessoa staff; a função, acima, é o que ela alcança.
-                                    Sem o perfil <strong>Trabalhador</strong>, as funções não liberam módulo nenhum.
-                                </p>
-                                <label class="form-label" for="perfilAcesso">Perfil do acesso
-                                    <span class="dl-muted" th:text="'(login: ' + ${assistido.login} + ')'"></span>
-                                </label>
-                                <select id="perfilAcesso" name="perfilAcesso" class="form-select" style="max-width: 320px;">
-                                    <option th:each="p : ${perfis}" th:value="${p.name()}" th:text="${p.name()}"
-                                            th:selected="${p == assistido.perfilAcesso}"></option>
-                                </select>
-                                <div class="form-text">
-                                    Trocar o perfil só passa a valer quando a pessoa sair e entrar de novo —
-                                    as permissões são resolvidas no login.
-                                </div>
-                            </div>
+                            <p th:unless="${assistido.login == null}" class="dl-muted mb-0">
+                                Login <strong th:text="${assistido.login}">login</strong>, perfil
+                                <strong th:text="${assistido.perfilAcesso}">ASSISTIDO</strong>.
+                                <th:block th:unless="${assistido.perfilAcesso?.name() == 'ADMINISTRADOR'}">
+                                    Com pelo menos uma função marcada o perfil passa a <strong>TRABALHADOR</strong>
+                                    automaticamente; sem nenhuma, volta a <strong>ASSISTIDO</strong>. Vale quando a
+                                    pessoa sair e entrar de novo.
+                                </th:block>
+                                <th:block th:if="${assistido.perfilAcesso?.name() == 'ADMINISTRADOR'}">
+                                    O Administrador tem acesso total e não muda de perfil por aqui.
+                                </th:block>
+                            </p>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">

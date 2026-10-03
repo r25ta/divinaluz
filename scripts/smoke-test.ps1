@@ -112,7 +112,7 @@ function Login-Como([string]$Login, [string]$Senha) {
 
 # Troca a função de um trabalhador pela sessão do admin e devolve o controle ao jar corrente. O
 # CSRF é relido da página porque o token é por sessão HTTP — o do outro jar não serve aqui.
-function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao, [string]$Perfil) {
+function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao) {
     $jarAnterior = $script:CookieJar
     $csrfAnterior = $script:CsrfToken
     $script:CookieJar = $AdminJar
@@ -120,10 +120,6 @@ function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao
     $script:CsrfToken = Extract-Csrf $pagina.Body
     $form = @{}
     if ($Funcao) { $form["funcoes"] = $Funcao }
-    # Desde 2026-10-02 esta tela também troca o perfil do acesso. Só é enviado quando o chamador
-    # pede: sem isso, o controller deixa o perfil como está, que é o estado exercitado pelos testes
-    # de "função sem perfil de staff".
-    if ($Perfil) { $form["perfilAcesso"] = $Perfil }
     Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$AssistidoId" -Form $form | Out-Null
     # Segue o redirect para consumir a mensagem flash: duas POSTs seguidas sem o GET empilhariam
     # flash maps para o mesmo destino e o Spring entregaria o mais antigo (ver CLAUDE.md, item 6).
@@ -657,16 +653,10 @@ try {
 
             # A outra ponta da separação perfil x função: é o perfil do acesso que torna a pessoa
             # staff, então função de Dirigente com perfil ASSISTIDO não libera módulo nenhum. Desde
-            # 2026-10-02 o perfil TAMBÉM se troca na tela do trabalhador (antes era só em
-            # /prontuario/{id}/acesso, e só pelo Administrador), mas o estado "função sem perfil de
-            # staff" continua existindo e continua não liberando nada — é o que se confere aqui.
-            # Definir-Funcao de propósito não envia perfilAcesso, então o perfil fica como está.
-            Definir-Perfil $adminJarMatriz $trabalhadorId $loginTrab "ASSISTIDO"
+            # 2026-10-03 a tela do trabalhador não chega mais a esse estado (o perfil acompanha a
+            # função), mas o Administrador ainda chega nele pelo /prontuario/{id}/acesso.
             Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
-            Check "Dar função a quem não tem acesso de trabalhador avisa que nada é liberado" (
-                $script:UltimaPaginaTrabalhadores -match "não liberam módulo nenhum")
-            Check "O aviso aponta a própria tela, e não o prontuário" (
-                $script:UltimaPaginaTrabalhadores -match "nesta mesma tela")
+            Definir-Perfil $adminJarMatriz $trabalhadorId $loginTrab "ASSISTIDO"
 
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -677,15 +667,20 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
             Check "Com perfil ASSISTIDO o trabalhador ainda vê o próprio cartão (200)" ($r.StatusCode -eq 200)
 
-            # O que a mudança de 2026-10-02 acrescentou: a própria tela do trabalhador troca o perfil,
-            # sem passar pelo prontuário nem exigir Administrador. Aqui se confere que isso tem efeito
-            # de verdade — a pessoa sai do 403 e alcança o módulo depois de entrar de novo.
-            Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE" "TRABALHADOR"
-            Check "Tela do trabalhador troca o perfil do acesso e avisa" (
+            # 2026-10-03: salvar as funções na tela do trabalhador ajusta o perfil sozinho, sem seletor.
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$trabalhadorId"
+            Check "Tela do trabalhador não tem mais o seletor de perfil" ($r.Body -notmatch 'name="perfilAcesso"')
+            Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
+            Check "Salvar funções promove o perfil a TRABALHADOR e avisa" (
                 $script:UltimaPaginaTrabalhadores -match "Perfil do acesso alterado para TRABALHADOR")
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-            Check "Perfil trocado na tela do trabalhador libera o módulo (200)" ($r.StatusCode -eq 200)
+            Check "Perfil promovido automaticamente libera o módulo (200)" ($r.StatusCode -eq 200)
+
+            # Desmarcar todas as funções devolve o perfil a ASSISTIDO.
+            Definir-Funcao $adminJarMatriz $trabalhadorId ""
+            $perfilDespromovido = Invoke-SqlScalar "SELECT perfil_acesso FROM assistido WHERE id = $trabalhadorId;"
+            Check "Sem nenhuma função, o perfil do acesso volta a ASSISTIDO" ($perfilDespromovido -eq "ASSISTIDO")
         } finally {
             if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
             $script:CookieJar = $adminJarMatriz

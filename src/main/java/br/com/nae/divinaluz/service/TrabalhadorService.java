@@ -1,6 +1,7 @@
 package br.com.nae.divinaluz.service;
 
 import br.com.nae.divinaluz.model.Assistido;
+import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -43,9 +44,15 @@ public class TrabalhadorService {
      * <p>Na "despromoção" a linha de {@link Trabalhador} é mantida (apenas sem funções) de
      * propósito: ela é referenciada pelas preleções e pela escala das sessões, e apagá-la levaria
      * junto esse histórico (a FK de {@code prelecao} tem {@code ON DELETE CASCADE}).
+     *
+     * <p>O perfil do acesso acompanha (2026-10-03): quem tem login vira {@code TRABALHADOR} ao
+     * ganhar uma função e volta a {@code ASSISTIDO} ao perder todas. O {@code ADMINISTRADOR} nunca é
+     * mexido aqui — rebaixá-lo por desmarcar funções tiraria o acesso total por engano.</p>
+     *
+     * @return {@code true} se o perfil do acesso mudou (vale só no próximo login da pessoa)
      */
     @Transactional
-    public void definirPerfis(Assistido assistido, Collection<TipoTrabalhador> perfis) {
+    public boolean definirPerfis(Assistido assistido, Collection<TipoTrabalhador> perfis) {
         boolean ehTrabalhador = perfis != null && !perfis.isEmpty();
 
         Trabalhador trabalhador = trabalhadorRepository.findByAssistidoId(assistido.getId())
@@ -58,7 +65,15 @@ public class TrabalhadorService {
         trabalhadorRepository.save(trabalhador);
 
         assistido.setVinculo(ehTrabalhador ? VINCULO_TRABALHADOR : VINCULO_ASSISTIDO);
+
+        boolean perfilMudou = false;
+        if (assistido.getLogin() != null && assistido.getPerfilAcesso() != PerfilAcesso.ADMINISTRADOR) {
+            PerfilAcesso novoPerfil = ehTrabalhador ? PerfilAcesso.TRABALHADOR : PerfilAcesso.ASSISTIDO;
+            perfilMudou = novoPerfil != assistido.getPerfilAcesso();
+            assistido.setPerfilAcesso(novoPerfil);
+        }
         assistidoRepository.save(assistido);
+        return perfilMudou;
     }
 
     /** Trabalhadores de fato: quem tem pelo menos um perfil de trabalho, por nome. */

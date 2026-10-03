@@ -1,7 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.model.Assistido;
-import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
@@ -57,7 +56,6 @@ public class TrabalhadorController {
 
         model.addAttribute("assistido", assistido);
         model.addAttribute("funcoes", TipoTrabalhador.values());
-        model.addAttribute("perfis", PerfilAcesso.values());
         model.addAttribute("funcoesSelecionadas",
                 trabalhadorRepository.findByAssistidoId(id)
                         .map(trabalhador -> trabalhador.getFuncoes())
@@ -66,58 +64,33 @@ public class TrabalhadorController {
     }
 
     /**
-     * Salva as funções e, quando a pessoa já tem login, o perfil do acesso — os dois na mesma tela.
-     *
-     * <p><strong>Mudança de 2026-10-02, decidida pelo responsável do projeto:</strong> a troca de
-     * perfil existia só em {@code /prontuario/{id}/acesso} e era exclusiva do Administrador, e aqui
-     * só havia um aviso mandando ir até lá. Isso confundia — o prontuário é dos tratamentos, não dos
-     * perfis — e fazia a promoção parecer ter falhado quando havia funcionado. Agora quem alcança
-     * este módulo (permissão {@code TRABALHADORES}, hoje só o Dirigente) também troca o perfil.</p>
-     *
-     * <p><strong>Consequência aceita:</strong> isto afrouxa a separação descrita em 3.17 do
-     * CLAUDE.md. Promover alguém a Dirigente passa a conceder, por si só, o poder de tornar qualquer
-     * pessoa staff, sem um Administrador no caminho. Era exatamente o que a separação evitava.</p>
+     * Salva as funções; o perfil do acesso acompanha sozinho (ver
+     * {@link TrabalhadorService#definirPerfis}). Desde 2026-10-03 não há mais seletor de perfil
+     * nesta tela: promover a trabalhador já é a decisão de torná-lo staff.
      */
     @PostMapping("/trabalhadores/{assistidoId}")
     public String salvar(@PathVariable Long assistidoId,
             @RequestParam(required = false) List<TipoTrabalhador> funcoes,
-            @RequestParam(required = false) PerfilAcesso perfilAcesso,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
 
-        trabalhadorService.definirPerfis(assistido, funcoes);
-
-        // Só mexe no perfil se a pessoa tem acesso: sem login não há o que trocar, e gravar um perfil
-        // sem login deixaria a linha num estado que o UserDetailsService ignora de qualquer forma.
-        boolean trocouPerfil = false;
-        if (perfilAcesso != null && assistido.getLogin() != null
-                && perfilAcesso != assistido.getPerfilAcesso()) {
-            assistido.setPerfilAcesso(perfilAcesso);
-            assistidoRepository.save(assistido);
-            trocouPerfil = true;
-        }
+        boolean trocouPerfil = trabalhadorService.definirPerfis(assistido, funcoes);
 
         boolean temFuncao = funcoes != null && !funcoes.isEmpty();
         String mensagem = temFuncao
                 ? assistido.getNome() + " cadastrado(a) como trabalhador."
                 : assistido.getNome() + " voltou a ser somente assistido.";
         if (trocouPerfil) {
-            mensagem += " Perfil do acesso alterado para " + perfilAcesso.name()
+            mensagem += " Perfil do acesso alterado para " + assistido.getPerfilAcesso().name()
                     + " — vale no próximo login dele(a).";
         }
         redirectAttributes.addFlashAttribute("sucesso", mensagem);
 
-        // O aviso continua, mas agora só quando ainda há de fato algo pendente, e apontando para a
-        // ação certa em vez de mandar ao prontuário.
-        if (temFuncao && assistido.getPerfilAcesso() != PerfilAcesso.TRABALHADOR
-                && assistido.getPerfilAcesso() != PerfilAcesso.ADMINISTRADOR) {
+        // Sem login não há perfil a acompanhar: as funções ficam registradas, mas só valem com acesso.
+        if (temFuncao && assistido.getLogin() == null) {
             redirectAttributes.addFlashAttribute("aviso", assistido.getNome()
-                    + (assistido.getLogin() == null
-                        ? " ainda não tem login, então as funções não liberam módulo nenhum. Crie o acesso pelo prontuário."
-                        : " está com perfil de acesso \"" + assistido.getPerfilAcesso()
-                          + "\", então as funções não liberam módulo nenhum. Mude o perfil para"
-                          + " \"TRABALHADOR\" nesta mesma tela."));
+                    + " ainda não tem login, então as funções não liberam módulo nenhum. Crie o acesso pelo prontuário.");
         }
         return "redirect:/trabalhadores";
     }

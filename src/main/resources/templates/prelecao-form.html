@@ -25,7 +25,7 @@
 
             <div class="dl-card">
                 <div class="dl-card-body">
-                    <form th:action="${prelecao.id != null ? '/divinaluz/prelecao/' + prelecao.id + '/editar' : '/divinaluz/prelecao/salvar'}" method="post" th:object="${prelecao}">
+                    <form th:action="${prelecao.id != null} ? @{/prelecao/{id}/editar(id=${prelecao.id})} : @{/prelecao/salvar}" method="post" th:object="${prelecao}">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                         <div class="row g-3">
                             <div class="col-md-6">

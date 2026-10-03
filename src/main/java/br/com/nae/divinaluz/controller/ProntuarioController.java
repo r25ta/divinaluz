@@ -34,7 +34,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -79,8 +79,6 @@ public class ProntuarioController {
 
     private final QrCodeService qrCodeService;
 
-    private final PasswordEncoder passwordEncoder;
-
     private final AcessoService acessoService;
 
     private final CartaoEncerradoRepository cartaoEncerradoRepository;
@@ -93,7 +91,7 @@ public class ProntuarioController {
             HistoricoDiaFrequenciaRepository historicoDiaFrequenciaRepository,
             EntrevistaRepository entrevistaRepository,
             CheckinService checkinService, QrCodeService qrCodeService,
-            PasswordEncoder passwordEncoder, AcessoService acessoService,
+            AcessoService acessoService,
             CartaoEncerradoRepository cartaoEncerradoRepository,
             CodigoAcessoService codigoAcessoService) {
         this.codigoAcessoService = codigoAcessoService;
@@ -107,7 +105,6 @@ public class ProntuarioController {
         this.entrevistaRepository = entrevistaRepository;
         this.checkinService = checkinService;
         this.qrCodeService = qrCodeService;
-        this.passwordEncoder = passwordEncoder;
         this.acessoService = acessoService;
         this.cartaoEncerradoRepository = cartaoEncerradoRepository;
     }
@@ -154,47 +151,40 @@ public class ProntuarioController {
 
     @GetMapping("/novo")
     public String novo(Model model) {
-        model.addAttribute("assistido", new Assistido());
-        model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
-        model.addAttribute("modoEdicao", false);
-        return "form";
+        return exibirCadastro(model, new Assistido(), null, null, null);
     }
 
-    // Item 4: se um tratamento for escolhido já no cadastro, a data da 1ª sessão passa a ser
-    // obrigatória (ver TratamentoService.definirTratamento). O assistido é salvo primeiro (sem
-    // tratamento) para existir um ID antes de aplicar a regra e, se necessário, criar o Perfil de
-    // Trabalhador (item 2).
+    /**
+     * Cadastro completo, com o acesso ao sistema na mesma tela (2026-10-03): login sugerido a partir
+     * do nome, e-mail único e senha. Tudo é validado ANTES de gravar qualquer coisa, e um erro devolve
+     * o formulário preenchido — antes, voltava um {@code /novo} vazio e a recepção digitava tudo de
+     * novo.
+     */
     @PostMapping("/salvar")
     public String salvar(@ModelAttribute Assistido assistido,
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
+            @RequestParam(required = false) String login,
             @RequestParam(required = false) String senhaAcesso, @RequestParam(required = false) String confirmacaoSenhaAcesso,
-            RedirectAttributes redirectAttributes) {
-        if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
-            redirectAttributes.addFlashAttribute("erro", "Informe uma data de assistência que seja Domingo ou Terça-feira.");
-            return "redirect:/novo";
-        }
-
-        // Cadastro de assistido cria o acesso automaticamente (perfil ASSISTIDO — ver
-        // AcessoService): com e-mail, o próprio assistido define a senha por um link enviado por
-        // e-mail; sem e-mail, a recepção precisa informar a senha aqui.
-        boolean temEmail = assistido.getEmail() != null && !assistido.getEmail().isBlank();
-        String senhaLimpa = senhaAcesso == null ? "" : senhaAcesso.trim();
-        if (!temEmail) {
-            if (senhaLimpa.length() < 6) {
-                redirectAttributes.addFlashAttribute("erro",
-                        "Informe um e-mail (para o assistido definir a própria senha) ou uma senha de acesso com pelo menos 6 caracteres.");
-                return "redirect:/novo";
+            Model model, RedirectAttributes redirectAttributes) {
+        assistido.setEmail(AcessoService.normalizarEmail(assistido.getEmail()));
+        String loginLimpo = AcessoService.normalizarLogin(login);
+        try {
+            if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
+                throw new RegraNegocioException("Informe uma data de assistência que seja Domingo ou Terça-feira.");
             }
-            if (!senhaLimpa.equals(confirmacaoSenhaAcesso)) {
-                redirectAttributes.addFlashAttribute("erro", "A confirmação da senha de acesso não confere.");
-                return "redirect:/novo";
-            }
+            acessoService.validarEmail(assistido.getEmail(), null);
+            acessoService.validarLogin(loginLimpo, null);
+            acessoService.validarSenha(senhaAcesso, confirmacaoSenhaAcesso,
+                    acessoService.senhaObrigatoria(assistido.getEmail()),
+                    acessoService.motivoSenhaObrigatoria(assistido.getEmail()));
+        } catch (RegraNegocioException e) {
+            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao, e.getMessage());
         }
 
         TipoTratamento tratamentoInicial = tipoTratamentoRepository.findByCodigo("P2")
                 .orElseThrow(() -> new IllegalStateException("Tratamento padrão P2 não encontrado no catálogo."));
         assistido.setTratamentoAtual(null);
-        // Acesso é criado logo abaixo pelo AcessoService (nunca via bind direto do form).
+        // O acesso é gravado logo abaixo pelo AcessoService, nunca pelo bind direto do formulário.
         assistido.setLogin(null);
         assistido.setSenha(null);
         assistido.setPerfilAcesso(null);
@@ -203,7 +193,22 @@ public class ProntuarioController {
         // "Cadastrar Trabalhador" (/trabalhadores), que é quem atribui os perfis de trabalho.
         assistido.setVinculo(TrabalhadorService.VINCULO_ASSISTIDO);
         atualizarResidenciaLegada(assistido);
-        assistidoRepository.save(assistido);
+        try {
+            assistidoRepository.save(assistido);
+        } catch (DataIntegrityViolationException e) {
+            // Outra recepção gravou o mesmo e-mail entre a validação e aqui (índice da V35).
+            assistido.setId(null);
+            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao,
+                    "Este e-mail acabou de ser usado em outro cadastro. Confira e tente de novo.");
+        }
+
+        String avisoAcesso = null;
+        try {
+            acessoService.criarAcesso(assistido, loginLimpo, senhaAcesso);
+        } catch (DataIntegrityViolationException e) {
+            avisoAcesso = "O login \"" + loginLimpo + "\" acabou de ser usado em outro cadastro, então o acesso"
+                    + " não foi criado. Crie pela edição do cadastro, com outro login.";
+        }
 
         try {
             tratamentoService.iniciarTratamentoInicial(assistido, tratamentoInicial, dataPrimeiraSessao);
@@ -212,19 +217,29 @@ public class ProntuarioController {
             return "redirect:/prontuario/" + assistido.getId() + "/editar";
         }
 
-        AcessoService.ResultadoAcesso resultadoAcesso = acessoService.criarAcessoAutomatico(assistido, senhaLimpa);
-        if (resultadoAcesso.aviso() != null) {
-            redirectAttributes.addFlashAttribute("aviso", resultadoAcesso.aviso());
-        } else if (temEmail) {
-            redirectAttributes.addFlashAttribute("sucesso",
-                    assistido.getNome() + " cadastrado(a). Um e-mail foi enviado para \"" + assistido.getEmail()
-                            + "\" com o link de definição de senha.");
+        if (avisoAcesso != null) {
+            redirectAttributes.addFlashAttribute("aviso", avisoAcesso);
         } else {
-            redirectAttributes.addFlashAttribute("sucesso",
-                    assistido.getNome() + " cadastrado(a). Login de acesso: \"" + assistido.getLogin() + "\".");
+            boolean entraPorCodigo = assistido.getSenha() == null;
+            redirectAttributes.addFlashAttribute("sucesso", assistido.getNome() + " cadastrado(a). Login de acesso: \""
+                    + assistido.getLogin() + "\"" + (entraPorCodigo
+                            ? " — entra pelo código enviado a " + assistido.getEmail() + "."
+                            : "."));
         }
-
         return "redirect:/";
+    }
+
+    private String exibirCadastro(Model model, Assistido assistido, String loginInformado,
+            LocalDate dataPrimeiraSessao, String erro) {
+        model.addAttribute("assistido", assistido);
+        model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
+        model.addAttribute("modoEdicao", false);
+        model.addAttribute("loginInformado", loginInformado);
+        model.addAttribute("dataPrimeiraSessaoInformada", dataPrimeiraSessao);
+        model.addAttribute("emailHabilitado", acessoService.envioDeEmailLigado());
+        model.addAttribute("senhaMinima", AcessoService.SENHA_MINIMA);
+        model.addAttribute("erro", erro);
+        return "form";
     }
 
     private boolean ehDiaDeAssistencia(LocalDate data) {
@@ -236,14 +251,36 @@ public class ProntuarioController {
     }
 
     @GetMapping("/prontuario/{id}/editar")
-    public String editarAssistido(@PathVariable Long id, Model model) {
+    public String editarAssistido(@PathVariable Long id, Authentication authentication, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        return exibirEdicao(model, assistido, null, false, ehAdministrador(authentication), null);
+    }
 
+    private String exibirEdicao(Model model, Assistido assistido, String loginInformado, boolean criarAcessoMarcado,
+            boolean admin, String erro) {
         model.addAttribute("assistido", assistido);
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("modoEdicao", true);
+        model.addAttribute("loginInformado", loginInformado);
+        model.addAttribute("criarAcessoMarcado", criarAcessoMarcado);
+        model.addAttribute("ehAdmin", admin);
+        model.addAttribute("perfis", PerfilAcesso.values());
+        model.addAttribute("emailHabilitado", acessoService.envioDeEmailLigado());
+        model.addAttribute("senhaMinima", AcessoService.SENHA_MINIMA);
+        if (erro != null) {
+            model.addAttribute("erro", erro);
+        }
         return "form";
+    }
+
+    /**
+     * Antes, o acesso tinha tela própria ({@code /prontuario/{id}/acesso}); desde 2026-10-03 ele é a
+     * seção "Acesso ao Sistema" da edição do cadastro. A rota antiga leva para lá.
+     */
+    @GetMapping("/prontuario/{id}/acesso")
+    public String acessoRedireciona(@PathVariable Long id) {
+        return "redirect:/prontuario/" + id + "/editar#acesso";
     }
 
     // "dadosForm" chega sem id (o form de edição não envia esse campo), então não há risco de
@@ -251,12 +288,66 @@ public class ProntuarioController {
     // salvar "dadosForm" diretamente, para não sobrescrever com null campos que não estão no
     // formulário (ex.: cicloIniciadoEm, diaFrequencia, ativo). O tratamento passa pela mesma regra
     // do item 4: só exige data da 1ª sessão se o tratamento realmente mudou.
+    //
+    // Acesso ao sistema (2026-10-03), na mesma submissão:
+    //  - quem ainda não tem login ganha um marcando "Criar acesso" (qualquer um com CADASTRO);
+    //  - quem já tem só tem o acesso alterado pelo Administrador, e só quando a seção dele veio no
+    //    formulário (alterarAcesso) — um POST só com os dados pessoais nunca mexe no acesso.
+    // Tudo é validado antes de gravar; um erro devolve o formulário preenchido.
     @PostMapping("/prontuario/{assistidoId}/editar")
     public String salvarEdicaoAssistido(@PathVariable Long assistidoId, @ModelAttribute Assistido dadosForm,
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
-            RedirectAttributes redirectAttributes) {
+            @RequestParam(defaultValue = "false") boolean criarAcesso,
+            @RequestParam(defaultValue = "false") boolean alterarAcesso,
+            @RequestParam(required = false) String login,
+            @RequestParam(required = false) String senha, @RequestParam(required = false) String confirmacaoSenha,
+            @RequestParam(required = false) PerfilAcesso perfil,
+            @RequestParam(defaultValue = "false") boolean acessoAtivo,
+            Authentication authentication, Model model, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+
+        boolean admin = ehAdministrador(authentication);
+        boolean temAcesso = assistido.getLogin() != null;
+        boolean vaiCriarAcesso = !temAcesso && criarAcesso;
+        boolean vaiAlterarAcesso = temAcesso && admin && alterarAcesso;
+        boolean proprioAcesso = temAcesso && assistido.getLogin().equals(authentication.getName());
+        String email = AcessoService.normalizarEmail(dadosForm.getEmail());
+        String loginLimpo = AcessoService.normalizarLogin(login);
+
+        try {
+            acessoService.validarEmail(email, assistidoId);
+            if (vaiCriarAcesso) {
+                acessoService.validarLogin(loginLimpo, assistidoId);
+                acessoService.validarSenha(senha, confirmacaoSenha, acessoService.senhaObrigatoria(email),
+                        acessoService.motivoSenhaObrigatoria(email));
+            } else if (vaiAlterarAcesso) {
+                acessoService.validarLogin(loginLimpo, assistidoId);
+                // Sem senha gravada, quem entra por código precisa continuar tendo como entrar.
+                boolean semOutraEntrada = assistido.getSenha() == null && acessoService.senhaObrigatoria(email);
+                acessoService.validarSenha(senha, confirmacaoSenha, semOutraEntrada,
+                        acessoService.motivoSenhaObrigatoria(email));
+                if (proprioAcesso && !loginLimpo.equals(assistido.getLogin())) {
+                    throw new RegraNegocioException("Você não pode trocar o seu próprio login: a sua sessão "
+                            + "ficaria presa ao login antigo. Peça a outro administrador.");
+                }
+                if (proprioAcesso && (!acessoAtivo || (perfil != null && perfil != PerfilAcesso.ADMINISTRADOR))) {
+                    throw new RegraNegocioException("Você não pode desativar o seu próprio acesso nem tirar o seu "
+                            + "perfil de Administrador — ficaria sem como desfazer. Peça a outro administrador.");
+                }
+            }
+        } catch (RegraNegocioException e) {
+            // Reexibe o que foi digitado, mas o estado do acesso vem do banco (é ele que decide qual
+            // versão da seção "Acesso ao Sistema" aparece).
+            dadosForm.setId(assistidoId);
+            dadosForm.setEmail(email);
+            dadosForm.setLogin(assistido.getLogin());
+            dadosForm.setPerfilAcesso(assistido.getPerfilAcesso());
+            dadosForm.setAcessoAtivo(assistido.isAcessoAtivo());
+            dadosForm.setDiaFrequencia(assistido.getDiaFrequencia());
+            dadosForm.setSenha(null);
+            return exibirEdicao(model, dadosForm, loginLimpo, vaiCriarAcesso, admin, e.getMessage());
+        }
 
         assistido.setNome(dadosForm.getNome());
         assistido.setResidencia(dadosForm.getResidencia());
@@ -271,11 +362,49 @@ public class ProntuarioController {
         assistido.setDataNascimento(dadosForm.getDataNascimento());
         assistido.setEstadoCivil(dadosForm.getEstadoCivil());
         assistido.setSexo(dadosForm.getSexo());
-        assistido.setEmail(dadosForm.getEmail());
+        assistido.setEmail(email);
+        // Salvar a edição é a resolução do aviso de e-mail repetido da V35: o e-mail que está no
+        // formulário agora é o que vale.
+        assistido.setEmailConflito(null);
         // O vínculo NÃO vem mais do formulário (a categoria Trabalhador saiu daqui e virou o
         // módulo /trabalhadores): preservá-lo é essencial, senão editar os dados de um
         // trabalhador o rebaixaria a assistido sem querer.
-        assistidoRepository.save(assistido);
+        try {
+            if (vaiCriarAcesso) {
+                acessoService.criarAcesso(assistido, loginLimpo, senha);
+                redirectAttributes.addFlashAttribute("sucesso", "Dados salvos e acesso criado. Login: \""
+                        + assistido.getLogin() + "\"" + (assistido.getSenha() == null
+                                ? " — entra pelo código enviado a " + assistido.getEmail() + "." : "."));
+            } else {
+                if (vaiAlterarAcesso) {
+                    assistido.setLogin(loginLimpo);
+                    if (senha != null && !senha.isBlank()) {
+                        acessoService.trocarSenha(assistido, senha);
+                    }
+                    if (perfil != null) {
+                        assistido.setPerfilAcesso(perfil);
+                    }
+                    assistido.setAcessoAtivo(acessoAtivo);
+                }
+                assistidoRepository.save(assistido);
+                redirectAttributes.addFlashAttribute("sucesso", "Dados salvos.");
+            }
+        } catch (DataIntegrityViolationException e) {
+            redirectAttributes.addFlashAttribute("erro",
+                    "O e-mail ou o login acabou de ser usado em outro cadastro. Confira e salve de novo.");
+            return "redirect:/prontuario/" + assistidoId + "/editar";
+        }
+
+        // Quem define o que o trabalhador alcança são as funções dele (ver TipoTrabalhador), não o
+        // perfil de acesso: um login TRABALHADOR sem nenhuma função entra e não enxerga nada além
+        // do próprio cartão. Avisa em vez de bloquear — a função pode ser atribuída depois.
+        if (vaiAlterarAcesso && assistido.getPerfilAcesso() == PerfilAcesso.TRABALHADOR
+                && trabalhadorRepository.findByAssistidoId(assistidoId)
+                        .map(t -> t.getFuncoes().isEmpty()).orElse(true)) {
+            redirectAttributes.addFlashAttribute("aviso",
+                    "Este acesso é de trabalhador, mas o assistido não tem nenhuma função de trabalho:"
+                            + " ele só vai enxergar o próprio cartão. Defina as funções em \"Cadastrar Trabalhador\".");
+        }
 
         try {
             tratamentoService.definirTratamento(assistido, dadosForm.getTratamentoAtual(), dataPrimeiraSessao);
@@ -378,90 +507,6 @@ public class ProntuarioController {
         model.addAttribute("proprioRegistro", ehOProprioRegistro(id, usuarioLogado));
 
         return "prontuario"; // Nome do novo arquivo HTML
-    }
-
-    // Dados de acesso (login/senha/perfil) fazem parte do próprio cadastro do assistido — ver
-    // Assistido.login. Qualquer staff cria o acesso (sempre como ASSISTIDO); só o Administrador
-    // altera um acesso existente ou escolhe outro perfil.
-    @GetMapping("/prontuario/{id}/acesso")
-    public String editarAcesso(@PathVariable Long id, Authentication authentication, Model model) {
-        Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
-        boolean admin = ehAdministrador(authentication);
-        if (assistido.getLogin() != null && !admin) {
-            return "redirect:/prontuario/" + id;
-        }
-
-        model.addAttribute("assistido", assistido);
-        model.addAttribute("perfis", PerfilAcesso.values());
-        model.addAttribute("podeEscolherPerfil", admin);
-        return "acesso-form";
-    }
-
-    @PostMapping("/prontuario/{assistidoId}/acesso")
-    public String salvarAcesso(@PathVariable Long assistidoId, @RequestParam String login,
-            @RequestParam(required = false) String senha, @RequestParam(required = false) String confirmacaoSenha,
-            @RequestParam(required = false) PerfilAcesso perfil,
-            @RequestParam(defaultValue = "false") boolean acessoAtivo,
-            Authentication authentication, RedirectAttributes redirectAttributes) {
-        Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
-
-        boolean admin = ehAdministrador(authentication);
-        boolean novo = assistido.getLogin() == null;
-        String destinoForm = "redirect:/prontuario/" + assistidoId + "/acesso";
-
-        if (!novo && !admin) {
-            redirectAttributes.addFlashAttribute("erro", "Somente o administrador pode alterar um acesso existente.");
-            return "redirect:/prontuario/" + assistidoId;
-        }
-        String loginLimpo = login == null ? "" : login.trim();
-        if (loginLimpo.isEmpty()) {
-            redirectAttributes.addFlashAttribute("erro", "Informe o login.");
-            return destinoForm;
-        }
-        if (!loginLimpo.equals(assistido.getLogin()) && assistidoRepository.existsByLogin(loginLimpo)) {
-            redirectAttributes.addFlashAttribute("erro", "Já existe um usuário com este login.");
-            return destinoForm;
-        }
-        boolean trocaSenha = senha != null && !senha.isBlank();
-        if (novo || trocaSenha) {
-            if (!trocaSenha || senha.length() < 6) {
-                redirectAttributes.addFlashAttribute("erro", "Informe uma senha com pelo menos 6 caracteres.");
-                return destinoForm;
-            }
-            if (!senha.equals(confirmacaoSenha)) {
-                redirectAttributes.addFlashAttribute("erro", "A confirmação da senha não confere.");
-                return destinoForm;
-            }
-            assistido.setSenha(passwordEncoder.encode(senha));
-        }
-
-        assistido.setLogin(loginLimpo);
-        if (admin && perfil != null) {
-            assistido.setPerfilAcesso(perfil);
-        } else if (novo) {
-            // Quem já foi promovido em "Cadastrar Trabalhador" nasce com o perfil que a promoção daria.
-            assistido.setPerfilAcesso(TrabalhadorService.VINCULO_TRABALHADOR.equals(assistido.getVinculo())
-                    ? PerfilAcesso.TRABALHADOR : PerfilAcesso.ASSISTIDO);
-        }
-        assistido.setAcessoAtivo(novo || acessoAtivo);
-        assistidoRepository.save(assistido);
-
-        redirectAttributes.addFlashAttribute("sucesso",
-                (novo ? "Acesso criado" : "Acesso atualizado") + ". Login: \"" + loginLimpo + "\".");
-
-        // Quem define o que o trabalhador alcança são as funções dele (ver TipoTrabalhador), não o
-        // perfil de acesso: um login TRABALHADOR sem nenhuma função entra e não enxerga nada além
-        // do próprio cartão. Avisa em vez de bloquear — a função pode ser atribuída depois.
-        if (assistido.getPerfilAcesso() == PerfilAcesso.TRABALHADOR
-                && trabalhadorRepository.findByAssistidoId(assistidoId)
-                        .map(t -> t.getFuncoes().isEmpty()).orElse(true)) {
-            redirectAttributes.addFlashAttribute("aviso",
-                    "Este acesso é de trabalhador, mas o assistido não tem nenhuma função de trabalho:"
-                            + " ele só vai enxergar o próprio cartão. Defina as funções em \"Cadastrar Trabalhador\".");
-        }
-        return "redirect:/prontuario/" + assistidoId;
     }
 
     private boolean ehAdministrador(Authentication authentication) {

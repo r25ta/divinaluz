@@ -97,9 +97,13 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label">E-mail</label>
-                                    <input type="email" class="form-control" th:field="*{email}" placeholder="opcional">
+                                    <label class="form-label" for="email">E-mail</label>
+                                    <input type="email" class="form-control" th:field="*{email}" placeholder="opcional"
+                                           autocomplete="off" aria-describedby="emailFeedback">
                                 </div>
+                                <!--/* Fora da coluna estreita para a mensagem (com o nome de quem já usa o
+                                       e-mail) caber sem quebrar o layout. */-->
+                                <div class="col-12 mt-0" id="emailFeedback" aria-live="polite"></div>
                             </div>
                         </div>
 
@@ -130,25 +134,118 @@
                             </div>
                         </div>
 
-                        <div class="dl-form-section" th:unless="${modoEdicao}">
+                        <!--/* Acesso ao sistema (2026-10-03): faz parte do cadastro, não é mais tela à parte.
+                               Quatro situações, decididas aqui e conferidas de novo no ProntuarioController:
+                                 1. cadastro novo: o acesso é sempre criado, com o login sugerido pelo nome;
+                                 2. edição de quem não tem acesso: "Criar acesso" é opcional;
+                                 3. edição de quem já tem, pelo Administrador: login, senha, perfil e ativo;
+                                 4. edição de quem já tem, por outro staff: só leitura.
+                               O JS do fim da página consulta /acesso/verificar enquanto se digita — é só
+                               conforto, o servidor valida tudo ao salvar. */-->
+                        <div class="dl-form-section" id="acesso"
+                             th:attr="data-url-verificar=@{/acesso/verificar},data-url-prontuario=@{/prontuario/},data-id=${assistido.id},data-email-habilitado=${emailHabilitado}">
                             <div class="dl-form-section-title">Acesso ao Sistema</div>
-                            <div class="form-text mb-2">
-                                O cadastro já cria o acesso do assistido (visão do próprio cartão). Com e-mail
-                                informado acima, enviaremos um link para o assistido definir a própria senha.
-                                Sem e-mail, informe abaixo a senha de acesso — o login será gerado a partir do nome.
-                            </div>
-                            <div id="camposSenhaAcesso" class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label" for="senhaAcesso">Senha de Acesso</label>
-                                    <input type="password" class="form-control" id="senhaAcesso" name="senhaAcesso"
-                                           autocomplete="new-password" minlength="6" placeholder="mín. 6 caracteres">
+
+                            <!--/* 1 e 2: login novo + senha. No cadastro novo o bloco está sempre ativo; na
+                                   edição ele só vale com "Criar acesso" marcado. */-->
+                            <th:block th:if="${!modoEdicao or assistido.login == null}">
+                                <div class="form-check mb-3" th:if="${modoEdicao}">
+                                    <input class="form-check-input" type="checkbox" id="criarAcesso" name="criarAcesso" value="true"
+                                           th:checked="${criarAcessoMarcado}">
+                                    <label class="form-check-label" for="criarAcesso">
+                                        Criar acesso para <strong th:text="${assistido.nome}">o assistido</strong> entrar no sistema
+                                    </label>
+                                    <div class="form-text">Este cadastro ainda não tem login.</div>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="form-label" for="confirmacaoSenhaAcesso">Confirmar Senha</label>
-                                    <input type="password" class="form-control" id="confirmacaoSenhaAcesso"
-                                           name="confirmacaoSenhaAcesso" autocomplete="new-password" minlength="6">
+
+                                <div id="camposNovoAcesso" class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="login">Login</label>
+                                        <input type="text" class="form-control" id="login" name="login" maxlength="80"
+                                               autocomplete="off" autocapitalize="none" spellcheck="false"
+                                               th:value="${loginInformado}" th:attr="data-auto=${loginInformado == null}"
+                                               aria-describedby="loginFeedback" required>
+                                        <div id="loginFeedback" class="form-text" aria-live="polite">
+                                            Sugerido a partir do nome; pode ser alterado.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="senhaAcesso">Senha de acesso</label>
+                                        <input type="password" class="form-control" id="senhaAcesso"
+                                               th:name="${modoEdicao} ? 'senha' : 'senhaAcesso'"
+                                               autocomplete="new-password" th:attr="minlength=${senhaMinima}"
+                                               th:placeholder="'mín. ' + ${senhaMinima} + ' caracteres'">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="confirmacaoSenhaAcesso">Confirmar senha</label>
+                                        <input type="password" class="form-control" id="confirmacaoSenhaAcesso"
+                                               th:name="${modoEdicao} ? 'confirmacaoSenha' : 'confirmacaoSenhaAcesso'"
+                                               autocomplete="new-password" th:attr="minlength=${senhaMinima}">
+                                    </div>
+                                    <div class="col-12 mt-1">
+                                        <div id="senhaDica" class="form-text">
+                                            Informe a senha que a pessoa vai usar para entrar.
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            </th:block>
+
+                            <!--/* 3: o Administrador altera um acesso existente. alterarAcesso diz ao servidor
+                                   que esta seção veio no formulário — sem ele, salvar os dados não mexe no acesso. */-->
+                            <th:block th:if="${modoEdicao and assistido.login != null and ehAdmin}">
+                                <input type="hidden" name="alterarAcesso" value="true">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="login">Login</label>
+                                        <input type="text" class="form-control" id="login" name="login" maxlength="80"
+                                               autocomplete="off" autocapitalize="none" spellcheck="false" required
+                                               th:value="${loginInformado != null ? loginInformado : assistido.login}"
+                                               data-auto="false" aria-describedby="loginFeedback">
+                                        <div id="loginFeedback" class="form-text" aria-live="polite"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="perfil">Perfil</label>
+                                        <select id="perfil" name="perfil" class="form-select">
+                                            <option th:each="p : ${perfis}" th:value="${p.name()}" th:text="${p.name()}"
+                                                    th:selected="${assistido.perfilAcesso == p}"></option>
+                                        </select>
+                                        <div class="form-text">Trabalhadores ganham o perfil sozinhos em "Cadastrar Trabalhador".</div>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-center">
+                                        <div class="form-check mt-3">
+                                            <input class="form-check-input" type="checkbox" id="acessoAtivo" name="acessoAtivo" value="true"
+                                                   th:checked="${assistido.acessoAtivo}">
+                                            <label class="form-check-label" for="acessoAtivo">Acesso ativo</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="senhaNova">Nova senha</label>
+                                        <input type="password" class="form-control" id="senhaNova" name="senha"
+                                               autocomplete="new-password" th:attr="minlength=${senhaMinima}"
+                                               placeholder="em branco mantém a atual">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="confirmacaoSenhaNova">Confirmar nova senha</label>
+                                        <input type="password" class="form-control" id="confirmacaoSenhaNova" name="confirmacaoSenha"
+                                               autocomplete="new-password" th:attr="minlength=${senhaMinima}">
+                                    </div>
+                                    <div class="col-12 mt-1" th:if="${assistido.senha == null}">
+                                        <div class="form-text">
+                                            <i class="bi bi-envelope"></i> Esta pessoa não tem senha: entra pelo código enviado ao e-mail.
+                                        </div>
+                                    </div>
+                                </div>
+                            </th:block>
+
+                            <!--/* 4: outro staff só vê. */-->
+                            <th:block th:if="${modoEdicao and assistido.login != null and !ehAdmin}">
+                                <p class="mb-1">
+                                    Login <strong th:text="${assistido.login}">login</strong> ·
+                                    perfil <strong th:text="${assistido.perfilAcesso}">ASSISTIDO</strong> ·
+                                    <span th:text="${assistido.acessoAtivo} ? 'ativo' : 'desativado'">ativo</span>
+                                </p>
+                                <div class="form-text">Só o Administrador altera um acesso que já existe (login, senha, perfil).</div>
+                            </th:block>
                         </div>
 
                         <div class="dl-form-section" th:unless="${modoEdicao}">
@@ -157,6 +254,7 @@
                             <!--/* Cadastro novo: a pessoa ainda não tem dia de assistência, então valem os
                                    dois dias da casa. É a mesma regra que o ProntuarioController exige. */-->
                             <input type="text" class="form-control dl-data" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
+                                   th:value="${dataPrimeiraSessaoInformada != null ? #temporals.format(dataPrimeiraSessaoInformada, 'dd/MM/yyyy') : ''}"
                                    required style="max-width: 260px;" placeholder="dd/mm/aaaa" maxlength="10" data-dias="0,2"
                                    inputmode="numeric" pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                             <div class="form-text">A primeira presença será criada automaticamente no tratamento P2 e buscará a preleção cadastrada para a data. Escolha uma terça-feira ou domingo.</div>
@@ -194,19 +292,172 @@
             atualizarDataPrimeiraSessao();
         }
 
+        // ---------------------------------------------------------------- acesso ao sistema
+        // Sugere o login enquanto o nome é digitado (até a recepção mexer no login), confere se o
+        // login está livre e avisa na hora se o e-mail já está em outro cadastro. Tudo é conforto:
+        // se a consulta falhar, nada trava, e o servidor valida de novo ao salvar.
+        var secaoAcesso = document.getElementById('acesso');
+        var nomeInput = document.getElementById('nome');
         var emailInput = document.getElementById('email');
+        var emailFeedback = document.getElementById('emailFeedback');
+        var loginInput = document.getElementById('login');
+        var loginFeedback = document.getElementById('loginFeedback');
+        var criarAcessoCheck = document.getElementById('criarAcesso');
+        var camposNovoAcesso = document.getElementById('camposNovoAcesso');
         var senhaAcessoInput = document.getElementById('senhaAcesso');
         var confirmacaoSenhaAcessoInput = document.getElementById('confirmacaoSenhaAcesso');
-        function atualizarSenhaAcessoObrigatoria() {
-            if (!emailInput || !senhaAcessoInput) return;
-            var obrigatoria = emailInput.value.trim() === '';
+        var senhaDica = document.getElementById('senhaDica');
+        var urlVerificar = secaoAcesso ? secaoAcesso.getAttribute('data-url-verificar') : null;
+        var idCadastro = secaoAcesso ? (secaoAcesso.getAttribute('data-id') || '') : '';
+        var emailHabilitado = secaoAcesso && secaoAcesso.getAttribute('data-email-habilitado') === 'true';
+        var loginAutomatico = loginInput && loginInput.getAttribute('data-auto') === 'true';
+
+        function aguardar(fn, ms) {
+            var timer;
+            return function () { clearTimeout(timer); timer = setTimeout(fn, ms); };
+        }
+
+        function consultar(parametros, aoResponder) {
+            if (!urlVerificar) return;
+            var q = new URLSearchParams(parametros);
+            if (idCadastro) q.set('id', idCadastro);
+            fetch(urlVerificar + '?' + q.toString(), {headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
+                .then(function (r) { return r.ok && !r.redirected ? r.json() : null; })
+                .then(function (dados) { if (dados) aoResponder(dados); })
+                .catch(function () {});
+        }
+
+        // Mesma regra do servidor (AcessoService.normalizarLogin + formato): minúsculas, sem acento,
+        // espaço vira ponto. Aplicada ao sair do campo, para não brigar com quem está digitando.
+        function normalizarLogin(valor) {
+            return valor.normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .toLowerCase().trim().replace(/\s+/g, '.').replace(/[^a-z0-9._@+-]/g, '');
+        }
+
+        function acessoNovoAtivo() {
+            return camposNovoAcesso && (!criarAcessoCheck || criarAcessoCheck.checked);
+        }
+
+        function mostrarLogin(problema, sugestao) {
+            if (!loginInput || !loginFeedback) return;
+            loginFeedback.textContent = '';
+            loginInput.classList.remove('is-invalid', 'is-valid');
+            loginInput.setCustomValidity('');
+            if (problema) {
+                loginInput.classList.add('is-invalid');
+                loginInput.setCustomValidity(problema);
+                loginFeedback.className = 'invalid-feedback d-block';
+                loginFeedback.appendChild(document.createTextNode(problema + ' '));
+                if (sugestao && sugestao !== loginInput.value) {
+                    var usar = document.createElement('button');
+                    usar.type = 'button';
+                    usar.className = 'btn btn-link btn-sm p-0 align-baseline';
+                    usar.textContent = 'Usar "' + sugestao + '"';
+                    usar.addEventListener('click', function () {
+                        loginInput.value = sugestao;
+                        mostrarLogin(null);
+                    });
+                    loginFeedback.appendChild(usar);
+                }
+            } else if (loginInput.value) {
+                loginInput.classList.add('is-valid');
+                loginFeedback.className = 'form-text text-success';
+                loginFeedback.textContent = loginAutomatico ? 'Sugerido a partir do nome; pode ser alterado.' : 'Login disponível.';
+            }
+        }
+
+        var sugerirPeloNome = aguardar(function () {
+            if (!loginAutomatico || !acessoNovoAtivo() || !nomeInput || nomeInput.value.trim().length < 2) return;
+            consultar({nome: nomeInput.value}, function (dados) {
+                if (!loginAutomatico || !dados.sugestao) return;
+                loginInput.value = dados.sugestao;
+                mostrarLogin(null);
+            });
+        }, 350);
+
+        var conferirLogin = aguardar(function () {
+            if (!loginInput || loginInput.disabled || !loginInput.value) return;
+            consultar({login: loginInput.value, nome: nomeInput ? nomeInput.value : ''}, function (dados) {
+                mostrarLogin(dados.loginProblema, dados.sugestao);
+            });
+        }, 350);
+
+        var conferirEmail = aguardar(function () {
+            if (!emailInput || !emailFeedback) return;
+            emailInput.classList.remove('is-invalid');
+            emailInput.setCustomValidity('');
+            emailFeedback.textContent = '';
+            var email = emailInput.value.trim();
+            if (!email || !emailInput.checkValidity()) return;
+            consultar({email: email}, function (dados) {
+                var dono = dados.emailEmUso;
+                if (!dono || emailInput.value.trim() !== email) return;
+                // Mesmo e-mail em outro cadastro quase sempre é a mesma pessoa: o link leva até ela.
+                emailInput.classList.add('is-invalid');
+                emailInput.setCustomValidity('E-mail já cadastrado');
+                emailFeedback.className = 'col-12 mt-0 invalid-feedback d-block';
+                emailFeedback.appendChild(document.createTextNode('Este e-mail já está no cadastro de '));
+                var link = document.createElement('a');
+                link.href = secaoAcesso.getAttribute('data-url-prontuario') + dono.id;
+                link.textContent = dono.nome;
+                emailFeedback.appendChild(link);
+                emailFeedback.appendChild(document.createTextNode(
+                    (dono.ativo ? '' : ' (cadastro desativado — reative-o em vez de cadastrar de novo)')
+                    + '. Cada e-mail só pode estar em um cadastro.'));
+            });
+        }, 400);
+
+        // Senha: obrigatória quando a pessoa não teria outra forma de entrar — sem e-mail, ou com
+        // e-mail mas sem o envio ligado (o código só iria para o log). Mesma regra do servidor.
+        function atualizarSenha() {
+            if (!senhaAcessoInput) return;
+            var ativo = acessoNovoAtivo();
+            var temEmail = emailInput && emailInput.value.trim() !== '';
+            var obrigatoria = ativo && (!temEmail || !emailHabilitado);
             senhaAcessoInput.required = obrigatoria;
-            if (confirmacaoSenhaAcessoInput) { confirmacaoSenhaAcessoInput.required = obrigatoria; }
+            if (confirmacaoSenhaAcessoInput) confirmacaoSenhaAcessoInput.required = obrigatoria;
+            if (senhaDica) {
+                senhaDica.textContent = !temEmail
+                    ? 'Sem e-mail, a senha é a única forma de a pessoa entrar. Anote e entregue a ela.'
+                    : emailHabilitado
+                        ? 'Opcional: com e-mail, a pessoa pode entrar pelo código enviado. Defina uma senha se ela preferir.'
+                        : 'O envio de e-mail não está ligado, então a pessoa não receberia o código: defina uma senha para ela entrar.';
+            }
+        }
+
+        function atualizarCriarAcesso() {
+            if (!camposNovoAcesso) return;
+            var ativo = acessoNovoAtivo();
+            camposNovoAcesso.style.display = ativo ? '' : 'none';
+            camposNovoAcesso.querySelectorAll('input').forEach(function (campo) { campo.disabled = !ativo; });
+            if (ativo && loginInput && !loginInput.value) {
+                loginAutomatico = true;
+                sugerirPeloNome();
+            }
+            atualizarSenha();
+        }
+
+        if (nomeInput) nomeInput.addEventListener('input', sugerirPeloNome);
+        if (loginInput) {
+            loginInput.addEventListener('input', function () {
+                loginAutomatico = false;
+                loginInput.setCustomValidity('');
+                conferirLogin();
+            });
+            loginInput.addEventListener('blur', function () {
+                var normalizado = normalizarLogin(loginInput.value);
+                if (normalizado !== loginInput.value) { loginInput.value = normalizado; conferirLogin(); }
+            });
         }
         if (emailInput) {
-            emailInput.addEventListener('input', atualizarSenhaAcessoObrigatoria);
-            atualizarSenhaAcessoObrigatoria();
+            emailInput.addEventListener('input', function () { conferirEmail(); atualizarSenha(); });
         }
+        if (criarAcessoCheck) criarAcessoCheck.addEventListener('change', atualizarCriarAcesso);
+
+        atualizarCriarAcesso();
+        if (loginInput && loginInput.value && !loginAutomatico) conferirLogin();
+        if (loginInput && !loginInput.value) sugerirPeloNome();
+        if (emailInput && emailInput.value) conferirEmail();
 
         var cepInput = document.getElementById('cep');
         var cepMensagem = document.getElementById('cepMensagem');

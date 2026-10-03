@@ -25,6 +25,14 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     // caixa — "Maria@Gmail.com" e "maria@gmail.com" são a mesma pessoa para ela.
     Optional<Assistido> findByLoginIgnoreCaseAndAcessoAtivoTrue(String login);
 
+    // Unicidade de e-mail e login (V35): os dois sem diferenciar maiúsculas, como os índices.
+    Optional<Assistido> findFirstByEmailIgnoreCase(String email);
+    Optional<Assistido> findFirstByLoginIgnoreCase(String login);
+
+    // Entrada por código: desde a V35 o login não é mais o e-mail, então a pessoa é achada pelo
+    // e-mail do cadastro (único). Só quem tem acesso criado e ativo.
+    Optional<Assistido> findFirstByEmailIgnoreCaseAndLoginIsNotNullAndAcessoAtivoTrue(String email);
+
     // Módulo de Entrevista (fila de cartões retidos — ver EntrevistaController).
     List<Assistido> findByStatusCartaoAndAtivoTrueOrderByNomeAsc(CartaoStatus statusCartao);
     long countByStatusCartaoInAndAtivoTrue(Collection<CartaoStatus> status);

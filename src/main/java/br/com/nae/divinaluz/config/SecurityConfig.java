@@ -60,7 +60,8 @@ public class SecurityConfig {
                         .requestMatchers("/novo", "/salvar", "/prontuario/*/editar",
                                         "/prontuario/*/desativar", "/prontuario/*/reativar",
                                         "/prontuario/*/dia-frequencia", "/prontuario/*/tratamento",
-                                        "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo")
+                                        "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo",
+                                        "/acesso/verificar")
                                 .hasAuthority(Permissao.CADASTRO.getAuthority())
                         .requestMatchers("/", "/prontuario/*").hasAuthority(Permissao.CONSULTA.getAuthority())
                         // Rede de segurança para qualquer rota nova ainda não classificada: continua
@@ -148,8 +149,13 @@ public class SecurityConfig {
     @Bean
     UserDetailsService userDetailsService(AssistidoRepository assistidoRepository,
             AutoridadesAssistido autoridades) {
+        // Sem diferenciar maiúsculas (V35): quem digita "Maria.Souza" no celular, com a primeira letra
+        // maiúscula automática do teclado, entra do mesmo jeito. O principal leva o login como está
+        // gravado, que é o que as demais buscas por login usam depois.
         return login -> {
-            Assistido assistido = assistidoRepository.findByLoginAndAcessoAtivoTrue(login)
+            String digitado = login == null ? "" : login.trim();
+            Assistido assistido = assistidoRepository.findByLoginAndAcessoAtivoTrue(digitado)
+                    .or(() -> assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(digitado))
                     .filter(a -> a.getSenha() != null && a.getPerfilAcesso() != null)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
             return User.withUsername(assistido.getLogin())

@@ -79,6 +79,20 @@ class CodigoAcessoServiceTest {
     }
 
     @Test
+    void desdeAV35APessoaEAchadaPeloEmailDoCadastroEOCodigoVaiParaEle() {
+        // Login sugerido pelo nome, e-mail no campo próprio: é o e-mail que a pessoa digita em /entrar.
+        maria.setLogin("maria.dores");
+        maria.setEmail(EMAIL);
+        when(assistidoRepository.findFirstByEmailIgnoreCaseAndLoginIsNotNullAndAcessoAtivoTrue("Maria@Exemplo.com"))
+                .thenReturn(Optional.of(maria));
+
+        codigoAcessoService.solicitar("Maria@Exemplo.com");
+
+        verify(emailService).enviarCodigoAcesso(eq(EMAIL), anyString(), anyString(), anyInt());
+        verify(assistidoRepository, never()).findByLoginIgnoreCaseAndAcessoAtivoTrue(anyString());
+    }
+
+    @Test
     void solicitarParaEmailDesconhecidoNaoEnviaNadaENaoFalha() {
         when(assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue("ninguem@exemplo.com"))
                 .thenReturn(Optional.empty());

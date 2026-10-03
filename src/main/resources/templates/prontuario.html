@@ -27,6 +27,15 @@
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
             </div>
+            <!--/* V35: o e-mail estava repetido em outro cadastro e saiu deste (cada e-mail só pode
+                   estar em um). Salvar a edição do cadastro resolve e tira o aviso. */-->
+            <div class="alert alert-warning" th:if="${assistido.emailConflito != null}">
+                <i class="bi bi-envelope-exclamation"></i>
+                O e-mail <strong th:text="${assistido.emailConflito}">e-mail</strong> também estava em outro cadastro
+                e foi retirado deste, porque cada e-mail só pode estar em um cadastro. Se for a mesma pessoa
+                cadastrada duas vezes, desative este prontuário; se não for, corrija o e-mail em
+                <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="alert-link">Editar Dados</a>.
+            </div>
             <div class="alert alert-warning" th:unless="${assistido.ativo}">
                 <i class="bi bi-slash-circle"></i> Este prontuário está <strong>desativado</strong>. O histórico continua disponível, mas ele não aparece na listagem principal.
             </div>
@@ -64,12 +73,14 @@
                         <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-pencil"></i> Editar Dados
                         </a>
-                        <a th:href="@{/prontuario/{id}/acesso(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                        <!-- O acesso é a seção "Acesso ao Sistema" da edição do cadastro (2026-10-03). -->
+                        <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})} + '#acesso'" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-person-plus"></i> <span th:text="${assistido.login == null ? 'Criar Acesso' : 'Editar Acesso'}">Criar Acesso</span>
                         </a>
-                        <!-- Quem entra por código de e-mail (login com @) às vezes diz, no atendimento,
-                             que o código não chegou; a recepção reenvia daqui sem mexer no banco. -->
-                        <form th:if="${assistido.login != null and assistido.login.contains('@')}"
+                        <!-- Quem entra por código de e-mail às vezes diz, no atendimento, que o código não
+                             chegou; a recepção reenvia daqui sem mexer no banco. O código vai para o e-mail
+                             do cadastro (ou, nos acessos antigos, para o login que é um e-mail). -->
+                        <form th:if="${assistido.login != null and ((assistido.email != null and !#strings.isEmpty(assistido.email)) or assistido.login.contains('@'))}"
                               th:action="@{/prontuario/{id}/reenviar-codigo(id=${assistido.id})}" method="post" class="d-inline">
                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                             <button type="submit" class="btn btn-outline-teal btn-sm">

@@ -36,6 +36,11 @@ public class Assistido {
     private String estadoCivil;
     private String sexo;
     private String email;
+
+    // E-mail que estava repetido em outro cadastro quando a unicidade entrou (V35) e foi retirado
+    // daqui. Só serve para o prontuário avisar a recepção; salvar a edição do cadastro limpa.
+    @Column(name = "email_conflito")
+    private String emailConflito;
     private String vinculo; // ASSISTIDO, TRABALHADOR, ALUNO
 
     // Dia da semana em que o assistido comparece à casa espírita (terça 19h ou domingo 08h).

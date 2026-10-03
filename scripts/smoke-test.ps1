@@ -129,18 +129,31 @@ function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao
     $script:CsrfToken = $csrfAnterior
 }
 
+# Altera o acesso de um cadastro pela seção "Acesso ao Sistema" da edição (desde 2026-10-03 não há
+# mais tela /acesso própria). A edição grava TODOS os dados pessoais do formulário, então o nome e o
+# tratamento atual vão junto — sem o tratamento, o select vazio o apagaria. alterarAcesso=true é o
+# que a seção do Administrador envia; sem ele o servidor não mexe no acesso. Não consome o flash:
+# quem chama decide (para poder conferir a mensagem).
+function Salvar-Acesso([string]$AssistidoId, [hashtable]$Acesso) {
+    $pagina = Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId/editar"
+    $script:CsrfToken = Extract-Csrf $pagina.Body
+    $form = @{
+        nome = (Invoke-SqlScalar "SELECT nome FROM assistido WHERE id = $AssistidoId;")
+        tratamentoAtual = (Invoke-SqlScalar "SELECT COALESCE(tratamento_atual_id::text, '') FROM assistido WHERE id = $AssistidoId;")
+        alterarAcesso = "true"
+    }
+    foreach ($chave in $Acesso.Keys) { $form[$chave] = $Acesso[$chave] }
+    return Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$AssistidoId/editar" -Form $form
+}
+
 # Troca o perfil do acesso (só o Administrador pode) pela sessão do admin. Perfil e função são
-# telas diferentes de propósito: o perfil diz se a pessoa é staff, a função diz quais módulos ela
+# coisas diferentes de propósito: o perfil diz se a pessoa é staff, a função diz quais módulos ela
 # alcança (ver SecurityConfig.authorities) — daí dar para testar uma sem a outra.
 function Definir-Perfil([string]$AdminJar, [string]$AssistidoId, [string]$Login, [string]$Perfil) {
     $jarAnterior = $script:CookieJar
     $csrfAnterior = $script:CsrfToken
     $script:CookieJar = $AdminJar
-    $pagina = Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId/acesso"
-    $script:CsrfToken = Extract-Csrf $pagina.Body
-    Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$AssistidoId/acesso" -Form @{
-        login = $Login; perfil = $Perfil; acessoAtivo = "true"
-    } | Out-Null
+    Salvar-Acesso $AssistidoId @{ login = $Login; perfil = $Perfil; acessoAtivo = "true" } | Out-Null
     # Mesmo motivo do Definir-Funcao: consome o flash para não empilhar com a POST seguinte.
     Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId" | Out-Null
     $script:CookieJar = $jarAnterior
@@ -179,7 +192,20 @@ try {
     # 2. Cadastro: 1ª sessão obrigatória em Domingo/Terça (item 4). 2024-01-07 é domingo ->
     # define diaFrequencia=DOMINGO_08H, entra em P2, cria a 1ª sessão automaticamente. Sem e-mail,
     # o cadastro exige a senha de acesso (o acesso ASSISTIDO agora é criado automaticamente).
+    # 2a. Login e e-mail no cadastro (2026-10-03): sem login, e com o e-mail de outro cadastro, o
+    # formulário volta preenchido com o erro — e nada é gravado.
+    $emailTeste = "smoke.$PID@exemplo.com"
     $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    Check "Cadastro sem login volta ao formulário com o erro, preenchido" (
+        $r.StatusCode -eq 200 -and $r.Body -match "Informe o login" -and $r.Body -match [regex]::Escape($nomeTeste))
+    $gravadoSemLogin = Invoke-SqlScalar "SELECT count(*) FROM assistido WHERE nome = '$nomeTeste';"
+    Check "Cadastro recusado não grava nada" ($gravadoSemLogin -eq "0")
+
+    $r = Invoke-CurlForm -Url "$BaseUrl/acesso/verificar?nome=$([uri]::EscapeDataString('Joana da Silva Souza'))"
+    Check "Verificação sugere o login pelo nome (primeiro e último, sem partícula)" ($r.Body -match '"sugestao":"joana\.souza\d*"')
+
+    $loginCadastro = "smoke.teste$PID"
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTeste; email = $emailTeste; login = $loginCadastro; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
     Check "Cadastro redireciona para /" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -191,6 +217,22 @@ try {
     Check "Assistido de teste aparece na listagem com ID" ($null -ne $assistidoId)
     if (-not $assistidoId) { throw "Não foi possível continuar sem o ID do assistido de teste." }
     Check "Listagem mostra a mensagem de sucesso do cadastro com o login gerado" ($r.Body -match "Login de acesso")
+
+    # 2b. O mesmo e-mail (com outra caixa) e o mesmo login (com outra caixa) não entram num segundo
+    # cadastro — a mensagem diz de quem é o e-mail, para a recepção não duplicar a pessoa.
+    $nomeDuplicado = "$nomeTeste DUP"
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeDuplicado; email = $emailTeste.ToUpper(); login = "smoke.outro$PID"; dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    Check "E-mail já usado (outra caixa) é recusado dizendo de quem é" (
+        $r.StatusCode -eq 200 -and $r.Body -match "já está no cadastro de" -and $r.Body -match [regex]::Escape($nomeTeste))
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeDuplicado; login = $loginCadastro.ToUpper(); dataPrimeiraSessao = "07/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    Check "Login já usado (outra caixa) é recusado" ($r.StatusCode -eq 200 -and $r.Body -match "já está em uso")
+    $duplicados = Invoke-SqlScalar "SELECT count(*) FROM assistido WHERE nome = '$nomeDuplicado';"
+    Check "Nenhum cadastro duplicado foi gravado" ($duplicados -eq "0")
+
+    $r = Invoke-CurlForm -Url "$BaseUrl/acesso/verificar?email=$([uri]::EscapeDataString($emailTeste))"
+    Check "Verificação avisa na hora que o e-mail já está em outro cadastro" ($r.Body -match '"emailEmUso"' -and $r.Body -match [regex]::Escape($nomeTeste))
+    $r = Invoke-CurlForm -Url "$BaseUrl/acesso/verificar?login=$loginCadastro"
+    Check "Verificação avisa que o login já está em uso" ($r.Body -match "já está em uso")
 
     $prontuarioUrl = "$BaseUrl/prontuario/$assistidoId"
     $cartaoUrl = "$prontuarioUrl/cartao"
@@ -412,7 +454,11 @@ try {
     Check "Login gerado a partir do nome extraído do prontuário" ($null -ne $loginTeste)
 
     $r = Invoke-CurlForm -Url "$prontuarioUrl/acesso"
-    Check "Administrador consegue abrir o formulário para editar o acesso já criado (200)" ($r.StatusCode -eq 200)
+    Check "A rota antiga /acesso leva à seção de acesso da edição do cadastro" ($r.StatusCode -eq 302 -and $r.Location -match "editar#acesso$")
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/editar"
+    Check "Edição do cadastro traz o acesso editável para o Administrador" (
+        $r.Body -match "Acesso ao Sistema" -and $r.Body -match 'name="alterarAcesso"' -and $r.Body -match [regex]::Escape($loginTeste))
+    Check "Login extraído é o informado no cadastro" ($loginTeste -eq $loginCadastro)
 
     # Confere de ponta a ponta que o login criado funciona e respeita o limite do perfil Assistido
     # (só o próprio cartão) — troca temporariamente para uma sessão HTTP separada do admin.
@@ -510,7 +556,7 @@ try {
     # 15. Módulo "Cadastrar Trabalhador" (/trabalhadores): todo trabalhador é antes um assistido,
     # então o cadastro nasce como ASSISTIDO (a categoria Trabalhador saiu do form) e a promoção é
     # um passo à parte, dando perfis de trabalho. 2024-01-14 é domingo.
-    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; dataPrimeiraSessao = "14/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
+    $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/salvar" -Form @{ nome = $nomeTrabalhador; login = "smoke.trabcad$PID"; dataPrimeiraSessao = "14/01/2024"; senhaAcesso = "senha123"; confirmacaoSenhaAcesso = "senha123" }
     Check "Cadastro redireciona para / (futuro trabalhador)" ($r.StatusCode -eq 302 -and $r.Location -match '/divinaluz/?$')
 
     $r = Invoke-CurlForm -Url "$BaseUrl/"
@@ -570,13 +616,12 @@ try {
         $loginTrab = "smoke.trab.$PID"
         $senhaTrab = "senha123"
 
-        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/acesso"
-        $script:CsrfToken = Extract-Csrf $r.Body
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$trabalhadorId/acesso" -Form @{
+        $r = Salvar-Acesso $trabalhadorId @{
             login = $loginTrab; senha = $senhaTrab; confirmacaoSenha = $senhaTrab
             perfil = "TRABALHADOR"; acessoAtivo = "true"
         }
-        Check "Acesso de perfil TRABALHADOR criado para testar a matriz" ($r.StatusCode -eq 302)
+        Check "Acesso de perfil TRABALHADOR criado para testar a matriz" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId$")
+        Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId" | Out-Null  # consome o flash
 
         $adminJarMatriz = $script:CookieJar
         $adminCsrfMatriz = $script:CsrfToken
@@ -690,11 +735,7 @@ try {
         # Armadilha que a matriz cria: login de perfil TRABALHADOR sem nenhuma função entra e não
         # enxerga nada além do próprio cartão. O formulário de acesso avisa em vez de bloquear.
         Invoke-Sql "DELETE FROM trabalhador_funcao WHERE trabalhador_id IN (SELECT id FROM trabalhador WHERE assistido_id = $trabalhadorId);" | Out-Null
-        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/acesso"
-        $script:CsrfToken = Extract-Csrf $r.Body
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$trabalhadorId/acesso" -Form @{
-            login = $loginTrab; perfil = "TRABALHADOR"; acessoAtivo = "true"
-        }
+        $r = Salvar-Acesso $trabalhadorId @{ login = $loginTrab; perfil = "TRABALHADOR"; acessoAtivo = "true" }
         $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
         Check "Acesso de trabalhador sem função avisa que ele só verá o próprio cartão" (
             $r.Body -match "não tem nenhuma função de trabalho")

@@ -30,6 +30,11 @@ public class EmailService {
         this.mailSender = mailSender;
     }
 
+    /** Envio real ligado? Sem isso a entrada por código não funciona (o código só iria ao log). */
+    public boolean isHabilitado() {
+        return habilitado;
+    }
+
     public void enviarDefinicaoSenha(String destinatario, String nomeAssistido, String link) {
         String assunto = "Defina sua senha de acesso — N.A.E. Divina Luz";
         String corpo = "Olá, " + nomeAssistido + "!\n\n"

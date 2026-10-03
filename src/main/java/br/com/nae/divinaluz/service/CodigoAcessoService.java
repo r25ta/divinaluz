@@ -71,17 +71,13 @@ public class CodigoAcessoService {
     }
 
     /**
-     * Gera e envia um código para o e-mail, <strong>se</strong> ele for o login de um acesso ativo.
+     * Gera e envia um código para o e-mail, <strong>se</strong> ele for de um cadastro com acesso ativo.
      * Não devolve nada de propósito: quem chama não pode distinguir e-mail cadastrado de
      * desconhecido, senão a tela vira um verificador de quem frequenta a casa.
      */
     @Transactional
     public void solicitar(String email) {
-        String login = email == null ? "" : email.trim();
-        if (login.isEmpty()) {
-            return;
-        }
-        Optional<Assistido> encontrado = assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(login);
+        Optional<Assistido> encontrado = porEmail(email);
         if (encontrado.isEmpty()) {
             log.debug("Pedido de código para e-mail sem acesso ativo; nada enviado.");
             return;
@@ -102,11 +98,8 @@ public class CodigoAcessoService {
      */
     @Transactional
     public Conferencia conferir(String email, String codigoInformado) {
-        String login = email == null ? "" : email.trim();
         String codigo = codigoInformado == null ? "" : codigoInformado.replaceAll("\\s", "");
-        Optional<Assistido> encontrado = login.isEmpty()
-                ? Optional.empty()
-                : assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(login);
+        Optional<Assistido> encontrado = porEmail(email);
         if (encontrado.isEmpty()) {
             return new Conferencia(Resultado.INVALIDO, null);
         }
@@ -148,13 +141,36 @@ public class CodigoAcessoService {
      */
     @Transactional
     public boolean reenviarPara(Assistido assistido) {
-        if (assistido.getLogin() == null || !assistido.getLogin().contains("@") || !assistido.isAcessoAtivo()) {
+        if (assistido.getLogin() == null || !assistido.isAcessoAtivo() || destinoDoCodigo(assistido) == null) {
             return false;
         }
         // O intervalo mínimo de propósito não se aplica aqui: o pedido vem de um atendimento
         // presencial, e travar a recepção por um minuto seria pior que o risco que o intervalo evita.
         gerarEEnviar(assistido);
         return true;
+    }
+
+    /**
+     * Quem pediu o código por este e-mail. Desde a V35 o e-mail é único e o login deixou de ser o
+     * e-mail, então a busca é pelo e-mail do cadastro; o login só é consultado para os acessos
+     * antigos, criados quando o login era o próprio e-mail e o campo e-mail podia estar diferente.
+     */
+    private Optional<Assistido> porEmail(String email) {
+        String informado = email == null ? "" : email.trim();
+        if (informado.isEmpty() || !informado.contains("@")) {
+            return Optional.empty();
+        }
+        return assistidoRepository.findFirstByEmailIgnoreCaseAndLoginIsNotNullAndAcessoAtivoTrue(informado)
+                .or(() -> assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(informado));
+    }
+
+    /** Para onde vai o código: o e-mail do cadastro ou, nos acessos antigos, o login que é e-mail. */
+    public static String destinoDoCodigo(Assistido assistido) {
+        if (assistido.getEmail() != null && !assistido.getEmail().isBlank()) {
+            return assistido.getEmail();
+        }
+        String login = assistido.getLogin();
+        return login != null && login.contains("@") ? login : null;
     }
 
     private void gerarEEnviar(Assistido assistido) {
@@ -165,7 +181,7 @@ public class CodigoAcessoService {
         assistido.setCodigoAcessoEnviadoEm(LocalDateTime.now());
         assistidoRepository.save(assistido);
 
-        emailService.enviarCodigoAcesso(assistido.getLogin(), assistido.getNome(), codigo, VALIDADE_MINUTOS);
+        emailService.enviarCodigoAcesso(destinoDoCodigo(assistido), assistido.getNome(), codigo, VALIDADE_MINUTOS);
     }
 
     private void limparCodigo(Assistido assistido) {

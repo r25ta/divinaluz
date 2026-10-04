@@ -44,9 +44,21 @@
         var base = img.getAttribute('data-src');
         // Bem antes do código vencer (ele vale alguns minutos): quem está na fila sempre vê um válido.
         setInterval(function () { img.src = base + (base.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now(); }, 30000);
+        // Uma imagem que falha não diz o motivo; pergunta ao servidor: 409 é sessão encerrada (ver
+        // SessaoController.imagemQrCode), o resto é falha a tentar de novo — antes, todo erro aparecia
+        // como "sessão encerrada", e isso escondeu um bug de verdade.
         img.addEventListener('error', function () {
             img.style.opacity = '0.15';
-            aviso.textContent = 'A sessão não está mais aberta. Volte ao painel.';
+            fetch(base, {credentials: 'same-origin', cache: 'no-store'})
+                .then(function (r) {
+                    aviso.textContent = r.status === 409
+                        ? 'A sessão não está mais aberta. Volte ao painel.'
+                        : 'Não foi possível mostrar o QR agora. Tentando de novo...';
+                })
+                .catch(function () { aviso.textContent = 'Sem conexão. Tentando de novo...'; });
+        });
+        img.addEventListener('load', function () {
+            img.style.opacity = '1';
         });
     })();
 </script>

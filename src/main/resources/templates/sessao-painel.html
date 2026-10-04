@@ -220,28 +220,32 @@
                             </div>
                             <div class="dl-card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="dl-table" th:if="${not #lists.isEmpty(indicadores.presentes)}">
+                                    <table class="dl-table dl-tabela-presentes" th:if="${not #lists.isEmpty(indicadores.presentes)}">
                                         <thead>
                                         <tr>
                                             <th>Nome</th>
                                             <th>Tratamento</th>
                                             <th>Presença</th>
-                                            <th class="text-end" th:if="${sessao.checkinAberto}"><span class="visually-hidden">Ações</span></th>
+                                            <th class="text-end" th:if="${sessao.checkinAberto}"></th>
                                         </tr>
                                         </thead>
                                         <tbody>
                                         <tr th:each="p : ${indicadores.presentes}">
+                                            <!--/* Selos sempre numa linha própria, abaixo do nome: assim todas as linhas
+                                                   ficam iguais, em vez de quebrar só quando o nome é comprido. */-->
                                             <td>
                                                 <a th:href="@{/prontuario/{id}(id=${p.assistido.id})}" th:text="${p.assistido.nome}">Nome</a>
-                                                <span class="dl-badge dl-badge-info ms-1" th:if="${p.novo}"
-                                                      title="Primeira vez na casa: encaminhar para entrevista (opcional)">
-                                                    <i class="bi bi-stars"></i> Novo
-                                                </span>
-                                                <span class="dl-badge dl-badge-teal ms-1"
-                                                      th:if="${p.assistido.vinculo == 'TRABALHADOR'}">Trabalhador</span>
+                                                <div class="dl-presente-selos" th:if="${p.novo or p.assistido.vinculo == 'TRABALHADOR'}">
+                                                    <span class="dl-badge dl-badge-info" th:if="${p.novo}"
+                                                          title="Primeira vez na casa: encaminhar para entrevista (opcional)">
+                                                        <i class="bi bi-stars"></i> Novo
+                                                    </span>
+                                                    <span class="dl-badge dl-badge-teal"
+                                                          th:if="${p.assistido.vinculo == 'TRABALHADOR'}">Trabalhador</span>
+                                                </div>
                                             </td>
                                             <td th:text="${p.ouvinte} ? '—' : ${p.tratamento}">P2</td>
-                                            <td>
+                                            <td class="text-nowrap">
                                                 <span class="dl-badge dl-badge-neutral" th:if="${p.ouvinte}">
                                                     <i class="bi bi-ear"></i> Ouvinte
                                                 </span>
@@ -252,14 +256,15 @@
                                             </td>
                                             <!--/* Marcou a pessoa errada: remove e o cartão dela é recalculado. Só com a
                                                    sessão aberta — encerrada, o dia está consolidado. */-->
-                                            <td class="text-end" th:if="${sessao.checkinAberto}">
+                                            <td class="text-end dl-col-acao" th:if="${sessao.checkinAberto}">
                                                 <form th:action="@{/sessao/{id}/presenca/{assistidoId}/remover(id=${sessao.id},assistidoId=${p.assistido.id})}"
                                                       method="post" class="d-inline"
                                                       th:attr="data-confirmar='Remover a presença de ' + ${p.assistido.nome} + ' desta sessão? O cartão dele(a) será recalculado.'">
                                                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm"
-                                                            th:title="'Remover a presença de ' + ${p.assistido.nome}">
-                                                        <i class="bi bi-x-lg"></i><span class="d-none d-sm-inline"> Remover</span>
+                                                    <button type="submit" class="dl-btn-icone dl-btn-icone-perigo"
+                                                            th:title="'Remover a presença de ' + ${p.assistido.nome}"
+                                                            th:attr="aria-label='Remover a presença de ' + ${p.assistido.nome}">
+                                                        <i class="bi bi-trash3"></i>
                                                     </button>
                                                 </form>
                                             </td>

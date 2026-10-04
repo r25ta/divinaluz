@@ -1455,6 +1455,65 @@ a {
   .table-responsive {
     overflow-x: visible;
   }
+  /* No cartão, a coluna de ação é uma linha inteira (o 1% de largura é só da tabela larga). */
+  .dl-table-rotulada tbody td.dl-col-acao {
+    width: 100%;
+  }
+}
+
+/* ---------- Botão só com ícone (ações de linha) ----------
+   Ação de linha em tabela é ícone, não botão com texto: o texto repetido em cada linha engordava a
+   coluna e desalinhava a tabela. O nome da ação vai no title e no aria-label. */
+.dl-btn-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--dl-border);
+  background: transparent;
+  color: var(--dl-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dl-btn-icone:hover,
+.dl-btn-icone:focus-visible {
+  background: var(--dl-teal-50);
+  color: var(--dl-teal-700);
+  border-color: var(--dl-teal-200);
+}
+
+.dl-btn-icone-perigo {
+  color: var(--dl-danger);
+}
+
+.dl-btn-icone-perigo:hover,
+.dl-btn-icone-perigo:focus-visible {
+  background: var(--dl-danger-bg);
+  color: var(--dl-danger);
+  border-color: #F3C4C2;
+}
+
+/* Coluna de ação: só a largura do ícone. */
+.dl-table .dl-col-acao {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Selos ("Novo", "Trabalhador") numa linha própria abaixo do nome, iguais em todas as linhas. */
+.dl-presente-selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.dl-presente-selos .dl-badge {
+  font-size: 0.68rem;
 }
 
 /* ---------- Módulo Sessão (painel da sessão) ---------- */

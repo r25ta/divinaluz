@@ -144,9 +144,20 @@ public class CheckinService {
     public record ResultadoAutoCheckin(SessaoAssistencia sessao, Assistido assistido, SessaoTratamento presenca,
             boolean ouvinte, boolean jaEstavaPresente) {}
 
-    /** Código atual do QR da sessão (muda a cada minuto). Só existe com a sessão aberta. */
+    /**
+     * Código atual do QR da sessão (muda a cada minuto). Só existe com a sessão aberta.
+     *
+     * <p>O segredo é gerado aqui se faltar: uma sessão aberta antes de o QR da sessão existir (o deploy
+     * de 2026-10-04 chegou com a sessão de domingo já aberta) não tinha segredo, e a imagem dava 500.
+     * Gerar na primeira vez que alguém pede o QR resolve sem exigir fechar e reabrir a sessão.</p>
+     */
+    @Transactional
     public String codigoQrAtual(Long sessaoId) {
         SessaoAssistencia sessao = exigirCheckinAberto(sessaoId);
+        if (sessao.getCheckinSegredo() == null) {
+            sessao.setCheckinSegredo(CodigoQrSessao.novoSegredo());
+            sessaoAssistenciaRepository.save(sessao);
+        }
         return CodigoQrSessao.codigo(sessao.getCheckinSegredo(), java.time.Instant.now());
     }
 

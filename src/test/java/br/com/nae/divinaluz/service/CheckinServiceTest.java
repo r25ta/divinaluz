@@ -186,6 +186,19 @@ class CheckinServiceTest {
         return CodigoQrSessao.codigo(sessaoDeDomingo.getCheckinSegredo(), java.time.Instant.now());
     }
 
+    // Sessão aberta antes de o QR da sessão existir: o segredo é gerado na hora, e a imagem não dá 500.
+    @Test
+    void qrDaSessaoGeraOSegredoSeASessaoFoiAbertaSemEle() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+
+        String codigo = checkinService.codigoQrAtual(10L);
+
+        assertNotNull(sessaoDeDomingo.getCheckinSegredo());
+        assertEquals(16, codigo.length());
+        verify(sessaoAssistenciaRepository).save(sessaoDeDomingo);
+    }
+
     @Test
     void autoCheckinComCodigoVencidoOuSessaoFechadaERecusado() {
         qrValido();

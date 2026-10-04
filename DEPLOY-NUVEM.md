@@ -132,13 +132,14 @@ Abra o endereço e entre com **`admin`** e a senha que você colocou em `ADMIN_S
 ### 3.2 Conferir o endereço
 Se o endereço que o Render deu for diferente do que você colocou em `APP_BASE_URL`, corrija agora: no
 serviço, **Environment** → edite `APP_BASE_URL` → **Save Changes** (o Render reinicia sozinho). Esse
-endereço é o que vai dentro do link de definição de senha enviado aos assistidos.
+endereço é o que vai nos e-mails enviados aos assistidos (quando o envio estiver ligado — Parte 5). Os
+QR codes do cartão e da sessão não dependem dele: usam o endereço por onde a pessoa abriu o sistema.
 
 ### 3.3 Trocar a senha do admin e apagar a variável
 Esta ordem importa.
 
-1. No sistema, abra a listagem, procure **admin** e entre em **Ver Prontuário** → **Editar Acesso**.
-2. Defina uma senha nova e salve.
+1. No sistema, abra o menu **Prontuário**, procure **admin** e entre em **Ver Prontuário** → **Editar Acesso**.
+2. Na seção **Acesso ao Sistema**, preencha **Nova senha** e a confirmação, e salve.
 3. No Render: **Environment** → apague a variável **`ADMIN_SENHA_REDEFINIR`** → **Save Changes**.
 
 Enquanto essa variável existir, **cada reinício do serviço volta a gravar a senha antiga** — e todo
@@ -152,24 +153,58 @@ definitiva.
 
 Para cada pessoa do piloto, nesta ordem:
 
-1. **Novo Cadastro** — cadastre a pessoa como assistida (todo trabalhador é, antes, um assistido).
-2. **Cadastrar Trabalhador** — busque o nome e marque as funções dela na casa. É a **função** que decide
-   quais telas ela alcança (Dirigente alcança tudo; Recepcionista consulta, cadastra e opera a sessão;
-   Entrevistador registra avaliação e entrevista; e assim por diante).
-3. No prontuário dela, **Editar Acesso** — defina o login, a senha e o perfil **Trabalhador**.
+1. **Novo Cadastro** — cadastre a pessoa como assistida (todo trabalhador é, antes, um assistido). O
+   acesso ao sistema é criado no próprio cadastro, na seção **Acesso ao Sistema**:
+   - o **login** vem sugerido a partir do nome ("Maria da Silva Souza" → `maria.souza`) e pode ser
+     alterado; ele é único, e o sistema avisa na hora se já estiver em uso;
+   - a **senha** é obrigatória enquanto o envio de e-mail estiver desligado (o padrão — ver Parte 5);
+   - cada **e-mail** só pode estar em um cadastro: se ele já existir, o sistema diz de quem é, com o link
+     para o cadastro dessa pessoa — quase sempre é a mesma pessoa cadastrada antes.
+2. **Cadastrar Trabalhador** — busque o nome e marque as funções dela na casa. Marcar uma função já
+   torna o acesso dela de **Trabalhador**, sem escolher nada à mão. É a **função** que decide quais
+   telas ela alcança:
 
-Dois tropeços que o próprio sistema avisa, mas que vale saber antes:
+   | Função | O que alcança |
+   |---|---|
+   | Dirigente | tudo |
+   | Recepcionista | sessão, consulta, dados cadastrais e login, escala de preleções — não altera o prontuário |
+   | Avaliador | consulta e registra a avaliação, propondo o novo tratamento |
+   | Entrevistador | consulta e registra a entrevista, que comunica o tratamento ao assistido |
+   | Expositor / Preletor | escala de preleções |
+   | Passista | consulta |
 
-- Perfil **Trabalhador** sem nenhuma função marcada não alcança tela nenhuma além do próprio cartão.
-- Função marcada sem perfil de Trabalhador também não libera nada — são duas telas diferentes, de
-  propósito.
+   Todos alcançam também o próprio cartão.
+
+Dois tropeços que vale saber antes:
+
 - **As permissões são resolvidas no login.** Se você mudar a função de alguém, ela precisa sair e entrar
   de novo para a mudança valer.
+- Para testar dois usuários ao mesmo tempo, use uma **janela anônima** para o segundo. As abas comuns do
+  mesmo navegador dividem o mesmo login, e um formulário aberto antes de um novo login é recusado com o
+  aviso "Esta página ficou desatualizada" (nada é gravado; basta recarregar).
 
-Para os **assistidos** (que só veem o próprio cartão), o acesso é criado junto com o cadastro, e a forma
-de entrar depende de um detalhe: **com e-mail** informado, a pessoa entra por um código enviado a ele e
-não tem senha — o que exige o envio de e-mail ligado (Parte 5); **sem e-mail**, a recepção digita a senha
-no próprio cadastro. Enquanto o e-mail não estiver configurado, cadastre sem e-mail.
+Todo mundo, assistido ou trabalhador, entra direto no **próprio cartão de tratamento**. Os prontuários
+ficam no menu **Prontuário** (no celular, atrás do botão ☰).
+
+---
+
+## Parte 3b — O dia de sessão
+
+1. **Sessão** → **Abrir sessão** com a data de hoje. Isso já libera a marcação de presença.
+2. Três formas de marcar presença, que respeitam as mesmas regras do cartão (só com o cartão Em
+   Tratamento, regra dos 21 dias, dia da semana, uma presença por semana):
+   - **busca por nome** no painel da sessão;
+   - a recepção escaneia o **QR do cartão** da pessoa;
+   - **QR da sessão** (botão no painel, abre numa nova aba): deixe essa tela num tablet ou monitor de
+     frente para a fila; cada pessoa escaneia com o celular, entra com o próprio login se pedir e toca em
+     **Confirmar minha presença**. O código muda a cada minuto, para uma foto dele não servir de casa.
+     Cartão retido, expirado ou de outro dia: a pessoa é orientada a procurar a recepção.
+3. Marcou alguém por engano: na lista **Assistidos Presentes**, o ícone de lixeira remove a presença e o
+   cartão da pessoa é recalculado.
+4. Ao terminar o trabalho: **Encerrar sessão**. Isso consolida o dia — presenças, escala e preletor não
+   mudam mais. Se encerrou cedo demais, **Reabrir sessão** funciona só no próprio dia.
+5. A casa não abriu (feriado, chuva): **Cancelar ou excluir esta sessão** → informe o motivo. Essa semana
+   não conta como falta na regra dos 21 dias.
 
 ---
 
@@ -229,21 +264,17 @@ connection string: `pg_restore --no-owner --no-privileges -d "postgresql://..." 
 
 ## Parte 5 — E-mail (opcional)
 
-Sem configurar nada, o sistema funciona: ao cadastrar alguém **sem e-mail**, a recepção digita a senha
-de acesso na hora, e essa pessoa entra em **Entrar** com login e senha.
+Sem configurar nada, o sistema funciona: a recepção digita a senha de acesso no cadastro, e a pessoa
+entra com login e senha. **Enquanto o envio de e-mail estiver desligado, o próprio cadastro exige a
+senha**, mesmo para quem informa e-mail — sem envio, o código de entrada não chegaria e a pessoa ficaria
+sem como entrar.
 
-**Atenção a um detalhe que muda a sua rotina de cadastro.** Quem é cadastrado **com e-mail** não recebe
-senha nenhuma: essa pessoa entra em **Entrar com meu e-mail**, informa o endereço e digita um código de
-6 dígitos que chega na caixa dela. Isso é mais prático — ela não precisa guardar senha —, mas **só
-funciona com o envio de e-mail ligado**. Sem SMTP, o código fica apenas no log do Render, e a pessoa
-**não consegue entrar**.
+Com o envio ligado, quem tem e-mail no cadastro também pode entrar sem senha: na tela de login, toca em
+**entre com seu e-mail**, informa o endereço e digita um código de 6 dígitos que chega na caixa dela. Nesse caso a senha
+no cadastro passa a ser opcional.
 
-Então, enquanto você não ligar o e-mail, escolha um dos dois:
-
-- **Deixe o campo de e-mail vazio no cadastro** e informe a senha de acesso. É o caminho mais simples, e
-  provavelmente o da maioria das pessoas da casa.
-- Ou cadastre com e-mail e, no prontuário da pessoa, use **Editar Acesso** para definir uma senha — ela
-  passa a entrar pelos dois caminhos.
+> Cadastros feitos **antes** de 2026-10-03 com e-mail podem estar sem senha. Se alguém assim disser que
+> não consegue entrar, abra o prontuário → **Editar Acesso** e defina uma senha.
 
 Para ligar o envio de verdade, no Render → **Environment**, adicione:
 
@@ -258,7 +289,7 @@ Para ligar o envio de verdade, no Render → **Environment**, adicione:
 
 Confira que `APP_BASE_URL` está correta antes, senão o endereço chega apontando para o lugar errado.
 
-Ligado o envio, o assistido com e-mail entra assim: **Entrar com meu e-mail** → informa o endereço →
+Ligado o envio, o assistido com e-mail entra assim: na tela de login, **entre com seu e-mail** → informa o endereço →
 recebe um código de 6 dígitos (que aparece até no assunto da mensagem, para ler sem abrir o e-mail) →
 digita o código. O código vale **15 minutos** e serve uma única vez. Se ele deixar marcado **Lembrar
 deste aparelho**, o celular dele continua entrando sozinho por 90 dias, sem pedir código de novo — e
@@ -277,9 +308,13 @@ Se alguém disser que o código não chegou, abra o prontuário da pessoa e use 
 | Log com `password authentication failed` | A senha no endereço está errada ou veio como `****` |
 | Log com `Connection refused` ou `timeout` | Confira se o endereço é o do projeto certo; abrir o projeto no painel do Neon já acorda o banco |
 | Log com `ADMIN_SENHA_REDEFINIR tem menos de 8 caracteres` | Escolha uma senha maior nessa variável |
-| Log com `APP_BASE_URL não definida` | Só um aviso: o sistema sobe, mas o link de definição de senha sairia errado |
+| Log com `APP_BASE_URL não definida` | Só um aviso: o sistema sobe, mas os endereços nos e-mails sairiam errados (só importa com o envio ligado) |
 | A senha do admin "voltou" sozinha | Faltou apagar `ADMIN_SENHA_REDEFINIR` (passo 3.3) |
 | Alguém mudou de função e continua sem ver as telas novas | Ela precisa sair e entrar de novo: as permissões são resolvidas no login |
+| "Esta página ficou desatualizada" ao salvar | Houve um novo login no mesmo navegador (outra aba, ou o sistema reiniciou e foi preciso entrar de novo) depois que a página foi aberta. Nada foi gravado: recarregue e salve de novo |
+| "Você não tem permissão para isto" | A função da pessoa não alcança aquela tela (Parte 3, passo 3.4). Se ela acabou de ganhar uma função, sair e entrar de novo |
+| QR da sessão não aparece na tela da recepção | Recarregue a tela do QR. Se a sessão foi encerrada, ele some de propósito — reabra a sessão (só no próprio dia) |
+| Presença pelo celular recusada | A tela diz o motivo: cartão aguardando avaliação/entrevista, expirado por ausência ou de outro dia — a recepção resolve |
 | `Suspended` no serviço, no fim do mês | O plano gratuito dá 750 horas de instância por mês para a conta inteira; volta no dia 1º |
 
 ## Limites do plano gratuito
@@ -301,7 +336,8 @@ Se alguém disser que o código não chegou, abra o prontuário da pessoa e use 
 
 - Perfil Spring `prod` (`application-prod.properties`): sem context path (o endereço abre direto no
   login), `show-sql` desligado (um SQL com parâmetros no log exporia dado de assistido), inicialização
-  tardia e pool de 4 conexões.
+  tardia, pool de 4 conexões e `server.forward-headers-strategy=framework` (atrás do proxy do Render,
+  para os endereços dentro dos QR codes saírem com `https://`).
 - Banco por `DATABASE_URL`, convertida para JDBC por `config/DatabaseUrlConfig`; porta por `PORT`.
 - `config/SenhaAdminInicial` (`@Profile("prod")`) é quem aplica `ADMIN_SENHA_REDEFINIR` e avisa quando
   falta `APP_BASE_URL`.

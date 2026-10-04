@@ -2,7 +2,6 @@ package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.config.AutoridadesAssistido;
 import br.com.nae.divinaluz.model.Assistido;
-import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.service.CodigoAcessoService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -103,9 +102,8 @@ public class LoginCodigoController {
         autenticar(assistido, request, response);
         sessao.removeAttribute(SESSAO_EMAIL);
 
-        return assistido.getPerfilAcesso() == PerfilAcesso.ASSISTIDO
-                ? "redirect:/prontuario/" + assistido.getId() + "/cartao"
-                : "redirect:/";
+        // Mesmo destino do login por senha: todo mundo entra pelo próprio cartão (ver SecurityConfig).
+        return "redirect:/prontuario/" + assistido.getId() + "/cartao";
     }
 
     /**

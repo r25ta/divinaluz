@@ -32,7 +32,9 @@
                 </span>
             </a>
             <div class="d-flex align-items-center gap-2">
-                <a th:if="${not podeConsulta and meuAssistidoId != null}" th:href="@{/prontuario/{id}/cartao(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
+                <!--/* Para todos (2026-10-04): o próprio cartão é a tela de entrada de quem loga, e o
+                       trabalhador também é assistido e tem o seu. */-->
+                <a th:if="${meuAssistidoId != null}" th:href="@{/prontuario/{id}/cartao(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
                     <i class="bi bi-card-checklist"></i> Meu Cartão
                 </a>
                 <a th:if="${podeSessao}" th:href="@{/sessao}" class="btn btn-nav btn-sm">

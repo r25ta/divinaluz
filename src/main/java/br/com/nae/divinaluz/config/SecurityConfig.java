@@ -65,7 +65,11 @@ public class SecurityConfig {
                                         "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo",
                                         "/acesso/verificar")
                                 .hasAuthority(Permissao.CADASTRO.getAuthority())
-                        .requestMatchers("/", "/prontuario/*").hasAuthority(Permissao.CONSULTA.getAuthority())
+                        // "/" é o endereço que se abre ao chegar (inclusive já lembrado pelo remember-me):
+                        // liberado a qualquer autenticado, e o ProntuarioController.index manda para o
+                        // próprio cartão quem não tem CONSULTA, em vez de um 403 na porta de entrada.
+                        .requestMatchers("/").authenticated()
+                        .requestMatchers("/prontuario/*").hasAuthority(Permissao.CONSULTA.getAuthority())
                         // Rede de segurança para qualquer rota nova ainda não classificada: continua
                         // exigindo staff, como era antes das permissões.
                         .anyRequest().hasAnyRole("ADMINISTRADOR", "TRABALHADOR"))
@@ -75,17 +79,13 @@ public class SecurityConfig {
                 .exceptionHandling(excecoes -> excecoes.accessDeniedHandler(acessoNegado()))
                 .formLogin(form -> form
                         .loginPage("/login")
+                    // Todo mundo — assistido ou trabalhador — entra pelo próprio cartão de tratamento
+                    // (pedido de 2026-10-04). Antes, quem não era ASSISTIDO ia para a listagem "/", que
+                    // exige CONSULTA: um Expositor/Preletor entrava direto num 403.
                     .successHandler((request, response, authentication) -> {
-                        boolean assistido = authentication.getAuthorities().stream()
-                            .anyMatch(authority -> authority.getAuthority().equals("ROLE_ASSISTIDO"));
-                        if (assistido) {
                         Assistido logado = assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
                             .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
-                        response.sendRedirect(request.getContextPath() + "/prontuario/"
-                            + logado.getId() + "/cartao");
-                        } else {
-                        response.sendRedirect(request.getContextPath() + "/");
-                        }
+                        response.sendRedirect(request.getContextPath() + "/prontuario/" + logado.getId() + "/cartao");
                     })
                         .failureUrl("/login?erro=true")
                         .permitAll())

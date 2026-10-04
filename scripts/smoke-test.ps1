@@ -169,8 +169,9 @@ try {
     if (-not $csrfLogin) { throw "Não foi possível obter o token CSRF do /login." }
 
     $loginResp = Invoke-CurlForm -Method POST -Url "$BaseUrl/login" -Form @{ username = $AdminLogin; password = $AdminSenha; "_csrf" = $csrfLogin }
-    Check "Login do admin bem-sucedido (redireciona para /)" ($loginResp.StatusCode -eq 302 -and $loginResp.Location -match '/divinaluz/?$')
-    if ($loginResp.StatusCode -ne 302 -or $loginResp.Location -notmatch '/divinaluz/?$') {
+    # Desde 2026-10-04 todo mundo entra pelo próprio cartão, inclusive o Administrador.
+    Check "Login do admin bem-sucedido (entra pelo próprio cartão)" ($loginResp.StatusCode -eq 302 -and $loginResp.Location -match '/prontuario/\d+/cartao$')
+    if ($loginResp.StatusCode -ne 302 -or $loginResp.Location -notmatch '/prontuario/\d+/cartao$') {
         throw "Login do admin falhou (login=$AdminLogin) — abortando smoke test."
     }
 
@@ -491,7 +492,10 @@ try {
         Check "Assistido vê os próprios tratamentos anteriores no cartão" ($r.Body -match "Tratamentos Anteriores" -and $r.Body -match "Tratamento Incompleto")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/"
-        Check "Assistido logado é bloqueado na listagem geral (só vê o próprio cartão)" ($r.StatusCode -eq 403)
+        Check "Assistido logado não vê a listagem geral: a entrada leva ao próprio cartão" (
+            $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId/cartao$")
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+        Check "Assistido logado não abre prontuário (403)" ($r.StatusCode -eq 403)
 
         # Perfil Assistido é somente consulta: cartão + escala de preleções, sem incluir/alterar/excluir.
         $r = Invoke-CurlForm -Url $cartaoUrl
@@ -705,11 +709,23 @@ try {
             Login-Como $loginTrab $senhaTrab | Out-Null
 
             $r = Invoke-CurlForm -Url "$BaseUrl/"
-            Check "Educador de Evangelização não consulta a listagem (403)" ($r.StatusCode -eq 403)
+            Check "Educador de Evangelização não consulta a listagem: a entrada leva ao próprio cartão" (
+                $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId/cartao$")
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
             Check "Educador de Evangelização não vê o cartão de outro (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
             Check "Educador de Evangelização vê o próprio cartão (200)" ($r.StatusCode -eq 200)
+
+            # Expositor/Preletor (o caso que motivou a mudança de 2026-10-04): entrava direto num 403,
+            # porque o login levava à listagem e ele não tem CONSULTA. Agora entra pelo próprio cartão
+            # e alcança o cadastro de preleções.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "EXPOSITOR_PRELETOR"
+            $r = Login-Como $loginTrab $senhaTrab
+            Check "Expositor/Preletor entra pelo próprio cartão" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId/cartao$")
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
+            Check "Cartão do Expositor/Preletor abre e oferece Preleções na barra" ($r.StatusCode -eq 200 -and $r.Body -match "Preleções")
+            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
+            Check "Expositor/Preletor cadastra preleção (200)" ($r.StatusCode -eq 200)
 
             # A outra ponta da separação perfil x função: é o perfil do acesso que torna a pessoa
             # staff, então função de Dirigente com perfil ASSISTIDO não libera módulo nenhum. Desde
@@ -720,7 +736,8 @@ try {
 
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/"
-            Check "Função de Dirigente com perfil ASSISTIDO não libera a listagem (403)" ($r.StatusCode -eq 403)
+            Check "Função de Dirigente com perfil ASSISTIDO não libera a listagem (vai ao próprio cartão)" (
+                $r.StatusCode -eq 302 -and $r.Location -match "cartao$")
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
             Check "Função de Dirigente com perfil ASSISTIDO não libera 'Cadastrar Trabalhador' (403)" (
                 $r.StatusCode -eq 403)

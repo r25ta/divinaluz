@@ -110,7 +110,17 @@ public class ProntuarioController {
     }
 
     @GetMapping
-    public String index(@RequestParam(required = false, defaultValue = "false") boolean mostrarInativos, Model model) {
+    public String index(@RequestParam(required = false, defaultValue = "false") boolean mostrarInativos,
+            Authentication authentication, Model model) {
+        // Sem CONSULTA (assistido, Expositor/Preletor, Educador...) a listagem não é para a pessoa: o
+        // endereço de entrada leva ao próprio cartão. A listagem em si continua exigindo CONSULTA.
+        boolean podeConsultar = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(Permissao.CONSULTA.getAuthority()));
+        if (!podeConsultar) {
+            return assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
+                    .map(logado -> "redirect:/prontuario/" + logado.getId() + "/cartao")
+                    .orElseThrow(() -> new AccessDeniedException("Acesso sem cadastro vinculado."));
+        }
         List<Assistido> assistidos = mostrarInativos ? assistidoRepository.findAll() : assistidoRepository.findByAtivo(true);
 
         // Checklist de frequência do mês corrente (item 4): para cada assistido com dia de

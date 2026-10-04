@@ -16,26 +16,39 @@
                O picker depende da máscara já ter sido aplicada, então vem depois dela. */-->
         <script th:src="@{/js/data-picker.js}" defer></script>
         <script th:src="@{/js/ver-senha.js}" defer></script>
+        <!--/* Celular (2026-10-04): o menu recolhível e as tabelas que viram cartões em tela pequena. */-->
+        <script th:src="@{/js/menu.js}" defer></script>
+        <script th:src="@{/js/tabela-responsiva.js}" defer></script>
     </th:block>
 </head>
 <body>
     <!--/* Fragmento de navbar: uso com th:replace="fragments/layout :: navbar" */-->
+    <!--/* Menu (2026-10-04): no celular os itens se recolhem atrás do botão "☰" (menu.js) — antes
+           eles ficavam numa linha só, alargavam a página inteira e cortavam todas as telas à direita.
+           Sem o JS do Bootstrap de propósito: o projeto não carrega JavaScript de terceiros. */-->
     <nav class="dl-navbar" th:fragment="navbar">
-        <div class="container-fluid d-flex align-items-center justify-content-between gap-3">
-            <!--/* Sem permissão de consulta (perfil Assistido, Expositor/Preletor...) a home é o
-                   próprio cartão: a listagem daria 403. */-->
-            <a th:href="${not podeConsulta and meuAssistidoId != null} ? @{/prontuario/{id}/cartao(id=${meuAssistidoId})} : @{/}" class="dl-brand">
+        <div class="container-fluid dl-navbar-inner">
+            <!--/* A marca leva à tela de entrada, que é o próprio cartão (todo login entra por ele). */-->
+            <a th:href="${meuAssistidoId != null} ? @{/prontuario/{id}/cartao(id=${meuAssistidoId})} : @{/}" class="dl-brand">
                 <span class="dl-brand-mark"><i class="bi bi-brightness-high-fill"></i></span>
                 <span class="dl-brand-text">
                     <span class="dl-brand-title d-block">N.A.E. Divina Luz</span>
                     <span class="dl-brand-subtitle d-block">Assistência Espiritual</span>
                 </span>
             </a>
-            <div class="d-flex align-items-center gap-2">
+            <button type="button" class="dl-nav-toggle" aria-controls="dlNavMenu" aria-expanded="false" aria-label="Abrir o menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="dl-nav-menu" id="dlNavMenu">
                 <!--/* Para todos (2026-10-04): o próprio cartão é a tela de entrada de quem loga, e o
                        trabalhador também é assistido e tem o seu. */-->
                 <a th:if="${meuAssistidoId != null}" th:href="@{/prontuario/{id}/cartao(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
                     <i class="bi bi-card-checklist"></i> Meu Cartão
+                </a>
+                <!--/* Prontuário (2026-10-04): a listagem de assistidos — o caminho para os prontuários é este
+                       item do menu (antes só se chegava clicando na marca do topo). Só com CONSULTA. */-->
+                <a th:if="${podeConsulta}" th:href="@{/}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-folder2-open"></i> Prontuário
                 </a>
                 <a th:if="${podeSessao}" th:href="@{/sessao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-speedometer2"></i> Sessão
@@ -56,7 +69,7 @@
                 <form th:action="@{/logout}" method="post" class="d-inline">
                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-nav btn-sm" title="Sair">
-                        <i class="bi bi-box-arrow-right"></i>
+                        <i class="bi bi-box-arrow-right"></i><span class="dl-nav-sair-texto"> Sair</span>
                     </button>
                 </form>
             </div>

@@ -68,6 +68,77 @@ a {
   max-width: 1140px;
 }
 
+/* Barra: marca à esquerda, itens à direita. Em tela estreita os itens descem para uma lista que
+   abre e fecha pelo botão "☰" (menu.js) — numa linha só eles alargavam a página inteira. */
+.dl-navbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.dl-nav-menu {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.dl-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.dl-nav-sair-texto {
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  .dl-nav-toggle {
+    display: inline-flex;
+  }
+  .dl-nav-menu {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    padding-top: 0.5rem;
+  }
+  .dl-navbar.aberto .dl-nav-menu {
+    display: flex;
+  }
+  .dl-nav-menu .btn-nav,
+  .dl-nav-menu form,
+  .dl-nav-menu form .btn-nav {
+    width: 100%;
+    text-align: left;
+  }
+  .dl-nav-menu .btn-nav {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.95rem;
+  }
+  .dl-nav-sair-texto {
+    display: inline;
+  }
+  /* O número da fila de entrevistas fica dentro do item, à direita, em vez de pendurado no canto. */
+  .dl-nav-menu .dl-nav-badge {
+    position: static;
+    display: inline-block;
+    margin-left: 0.4rem;
+  }
+}
+
 .dl-brand {
   display: flex;
   align-items: center;
@@ -1264,6 +1335,125 @@ a {
   }
   .dl-marcacoes {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---------- Celular (2026-10-04) ----------
+   Revisão das telas no celular. A regra geral: nada pode ser mais largo que a tela — um único
+   elemento largo (era a barra de navegação) faz a página inteira rolar para o lado e "corta" todos
+   os cartões à direita. */
+
+@media (max-width: 767.98px) {
+  .dl-main {
+    padding: 1.25rem 0 2.5rem;
+  }
+  .dl-container,
+  .dl-container-narrow {
+    padding: 0 0.75rem;
+  }
+  .dl-page-header {
+    margin-bottom: 1rem;
+  }
+  .dl-page-header h1 {
+    font-size: 1.3rem;
+  }
+  .dl-page-header > div:not(:first-child),
+  .dl-page-header > div:not(:first-child) > .d-flex {
+    width: 100%;
+  }
+  .dl-brand-text .dl-brand-subtitle {
+    display: none !important;
+  }
+  /* Busca e campos que tinham largura fixa ocupam a linha toda. */
+  .dl-search {
+    max-width: none;
+    width: 100%;
+  }
+  .form-control,
+  .form-select {
+    max-width: 100% !important;
+  }
+  .dl-card-header {
+    padding: 0.9rem 1rem;
+  }
+  .dl-truncate {
+    max-width: 100%;
+    white-space: normal;
+  }
+  /* Botões em grupo quebram linha em vez de empurrar a tela. */
+  .d-flex.gap-2,
+  .d-flex.gap-3 {
+    flex-wrap: wrap;
+  }
+  .dl-summary-grid {
+    gap: 0.9rem 1.25rem;
+  }
+  .dl-info-strip {
+    gap: 0.6rem 1.25rem;
+  }
+
+  /* Tabelas viram cartões: uma linha = um cartão, com o título da coluna ao lado de cada valor
+     (data-label, copiado do <th> por tabela-responsiva.js). A primeira célula é o título do cartão. */
+  .dl-table-rotulada thead {
+    display: none;
+  }
+  .dl-table-rotulada,
+  .dl-table-rotulada tbody,
+  .dl-table-rotulada tr,
+  .dl-table-rotulada td {
+    display: block;
+    width: 100%;
+  }
+  .dl-table-rotulada tbody tr {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--dl-border);
+  }
+  .dl-table-rotulada tbody tr:last-child {
+    border-bottom: none;
+  }
+  .dl-table-rotulada tbody td,
+  .dl-table-rotulada.text-center tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border: 0;
+    text-align: right;
+  }
+  .dl-table-rotulada tbody td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    max-width: 45%;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--dl-muted);
+    text-align: left;
+  }
+  .dl-table-rotulada tbody td[data-label=""]::before {
+    content: none;
+  }
+  .dl-table-rotulada tbody td[data-label=""] {
+    justify-content: flex-end;
+  }
+  .dl-table-rotulada tbody td:first-child {
+    display: block;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 0.4rem;
+  }
+  .dl-table-rotulada tbody td:first-child::before {
+    content: none;
+  }
+  /* Linha de "nenhum registro" ocupando a tabela toda não ganha rótulo. */
+  .dl-table-rotulada tbody td[colspan] {
+    text-align: center;
+  }
+  .table-responsive {
+    overflow-x: visible;
   }
 }
 

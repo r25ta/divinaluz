@@ -37,7 +37,7 @@
             <div class="dl-checkin-banner" th:if="${sessaoAberta != null and podeSessao}">
                 <span class="dl-checkin-pulse"><i class="bi bi-qr-code-scan"></i></span>
                 <div class="flex-grow-1">
-                    <div class="titulo">Check-in aberto</div>
+                    <div class="titulo">Sessão aberta</div>
                     <div class="dl-muted small">
                         Sessão de <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
                         · <span th:text="${sessaoAberta.diaFrequencia.label}"></span>

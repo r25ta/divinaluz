@@ -47,6 +47,9 @@ public class SecurityConfig {
                         // ver o cartão DE OUTRO é checado no ProntuarioController
                         // (exigirAcessoAoCartao), que exige CONSULTA.
                         .requestMatchers("/prontuario/*/cartao", "/prontuario/*/cartao/qrcode.png").authenticated()
+                        // QR da sessão escaneado pelo celular (2026-10-04): qualquer autenticado marca a
+                        // PRÓPRIA presença — a identidade vem do login, não da URL (PresencaController).
+                        .requestMatchers("/presenca/**").authenticated()
                         // Ver a escala é de todos (inclusive do perfil ASSISTIDO); montá-la, não.
                         .requestMatchers(HttpMethod.GET, "/prelecao").authenticated()
                         .requestMatchers("/prelecao/**").hasAuthority(Permissao.PRELECAO.getAuthority())
@@ -92,7 +95,7 @@ public class SecurityConfig {
                     .successHandler((request, response, authentication) -> {
                         Assistido logado = assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
                             .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
-                        response.sendRedirect(request.getContextPath() + "/prontuario/" + logado.getId() + "/cartao");
+                        response.sendRedirect(DestinoAposLogin.url(request, response, logado));
                     })
                         .failureUrl("/login?erro=true")
                         .permitAll())

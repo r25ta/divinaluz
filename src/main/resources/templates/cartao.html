@@ -150,11 +150,12 @@
                     <span class="dl-eyebrow">Check-in</span>
                     <div class="titulo">Apresente este QR na recepção</div>
                     <p class="dl-muted small mb-0">
-                        A recepção escaneia o código para carimbar sua presença na sessão.
+                        A recepção escaneia o código para carimbar sua presença na sessão — ou, com a sessão
+                        aberta, escaneie <strong>você</strong> o QR da sessão que está na recepção, com a câmera do celular.
                     </p>
                     <div class="dl-badge dl-badge-success mt-2" th:if="${sessaoAberta != null}">
                         <i class="bi bi-broadcast"></i>
-                        Check-in aberto — <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
+                        Sessão aberta — <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
                     </div>
                     <div class="dl-badge dl-badge-neutral mt-2" th:if="${sessaoAberta == null}">
                         <i class="bi bi-slash-circle"></i> Nenhuma sessão em andamento

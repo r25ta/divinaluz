@@ -137,6 +137,7 @@ public class SessaoService {
         if (sessao.isCancelada()) {
             throw new RegraNegocioException("Esta sessão já está cancelada.");
         }
+        exigirNaoEncerrada(sessao);
         int desfeitas = tratamentoService.desfazerPresencasDaData(sessao.getData());
         if (sessao.isCheckinAberto()) {
             sessao.setCheckinFechadoEm(LocalDateTime.now());
@@ -165,9 +166,37 @@ public class SessaoService {
     @Transactional
     public int excluir(Long sessaoId) {
         SessaoAssistencia sessao = buscar(sessaoId);
+        exigirNaoEncerrada(sessao);
         int desfeitas = tratamentoService.desfazerPresencasDaData(sessao.getData());
         sessaoAssistenciaRepository.delete(sessao);
         return desfeitas;
+    }
+
+    /**
+     * Sessão encerrada é dia consolidado (2026-10-04): presenças, escala e preletor não mudam mais.
+     * Para corrigir no próprio dia, "Reabrir sessão" (ver CheckinService.reabrirSessao).
+     */
+    private static void exigirNaoEncerrada(SessaoAssistencia sessao) {
+        if (sessao.isEncerrada()) {
+            throw new RegraNegocioException("Esta sessão já foi encerrada e o dia está consolidado."
+                    + " Para corrigir algo, reabra a sessão (só no próprio dia).");
+        }
+    }
+
+    /**
+     * Remove a presença de quem foi marcado por engano (lista "Assistidos Presentes"). Só com a sessão
+     * aberta: depois de encerrada, o dia está consolidado. O cartão é recalculado pelo
+     * {@link TratamentoService#desfazerPresenca}.
+     */
+    @Transactional
+    public Assistido removerPresenca(Long sessaoId, Long assistidoId) {
+        SessaoAssistencia sessao = checkinService.exigirCheckinAberto(sessaoId);
+        Assistido assistido = assistidoRepository.findById(assistidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+        if (!tratamentoService.desfazerPresenca(assistidoId, sessao.getData())) {
+            throw new RegraNegocioException(assistido.getNome() + " não tem presença nesta sessão.");
+        }
+        return assistido;
     }
 
     /** Data da sessão de assistência de hoje ou, se hoje não é Domingo/Terça, da próxima. */
@@ -208,6 +237,7 @@ public class SessaoService {
     @Transactional
     public SessaoAssistencia trocarPreletor(Long sessaoId, Long trabalhadorId, String tema) {
         SessaoAssistencia sessao = buscar(sessaoId);
+        exigirNaoEncerrada(sessao);
         sessao.setPreletorSubstituto(trabalhadorId != null ? buscarTrabalhador(trabalhadorId) : null);
         sessao.setTemaSubstituto(preenchido(tema) ? tema.trim() : null);
         return sessaoAssistenciaRepository.save(sessao);
@@ -221,6 +251,7 @@ public class SessaoService {
             throw new RegraNegocioException("Escolha a posição e o trabalhador.");
         }
         SessaoAssistencia sessao = buscar(sessaoId);
+        exigirNaoEncerrada(sessao);
         Trabalhador trabalhador = buscarTrabalhador(trabalhadorId);
 
         boolean jaEscalado = sessao.getEscala().stream()
@@ -242,6 +273,7 @@ public class SessaoService {
     @Transactional
     public void removerDaEscala(Long sessaoId, Long escalaId) {
         SessaoAssistencia sessao = buscar(sessaoId);
+        exigirNaoEncerrada(sessao);
         sessao.getEscala().removeIf(e -> e.getId().equals(escalaId));
         sessaoAssistenciaRepository.save(sessao);
     }

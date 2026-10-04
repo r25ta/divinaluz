@@ -25,7 +25,7 @@
             <div class="dl-checkin-banner" th:if="${sessaoAberta != null}">
                 <span class="dl-checkin-pulse"><i class="bi bi-qr-code-scan"></i></span>
                 <div class="flex-grow-1">
-                    <div class="titulo">Check-in aberto</div>
+                    <div class="titulo">Sessão aberta</div>
                     <div class="dl-muted small">
                         Sessão de <span th:text="${#temporals.format(sessaoAberta.data, 'dd/MM/yyyy')}"></span>
                         · <span th:text="${sessaoAberta.diaFrequencia.label}"></span>
@@ -45,9 +45,10 @@
                 </div>
                 <div class="dl-card-body">
                     <p class="dl-muted small">
-                        A sessão acontece aos Domingos (08h) e às Terças-feiras (19h). Abra a sessão de hoje para
-                        marcar presenças ou uma sessão futura para montar a escala com antecedência. O check-in
-                        só pode ser aberto no próprio dia.
+                        A sessão acontece aos Domingos (08h) e às Terças-feiras (19h). Abrir a sessão de hoje já
+                        libera a marcação de presença (busca, QR do cartão e QR da sessão no celular); uma data
+                        futura só cria a sessão, para montar a escala com antecedência. Ao terminar o trabalho,
+                        <strong>encerre a sessão</strong> no painel: isso consolida o dia.
                     </p>
                     <form th:action="@{/sessao}" method="post" class="d-flex flex-wrap align-items-end gap-2">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -75,7 +76,7 @@
                                 <th>Data</th>
                                 <th>Sessão</th>
                                 <th>Semana</th>
-                                <th>Check-in</th>
+                                <th>Situação</th>
                                 <th>Escala</th>
                                 <th class="text-center">Ações</th>
                             </tr>
@@ -95,13 +96,20 @@
                                     </span>
                                     <th:block th:unless="${s.cancelada}">
                                         <span class="dl-badge dl-badge-success" th:if="${s.checkinAberto}">
-                                            <i class="bi bi-broadcast"></i> Aberto
+                                            <i class="bi bi-broadcast"></i> Aberta
                                         </span>
-                                        <span class="dl-badge dl-badge-neutral" th:if="${!s.checkinAberto and s.checkinFechadoEm != null}">
-                                            <i class="bi bi-lock-fill"></i> Encerrado
+                                        <span class="dl-badge dl-badge-neutral" th:if="${s.encerrada}"
+                                              th:title="'Encerrada em ' + ${#temporals.format(s.encerradaEm, 'dd/MM/yyyy HH:mm')}">
+                                            <i class="bi bi-lock-fill"></i> Encerrada
                                         </span>
-                                        <span class="dl-badge dl-badge-neutral" th:if="${s.checkinAbertoEm == null}">
-                                            Não aberto
+                                        <span class="dl-badge dl-badge-warning"
+                                              th:if="${!s.checkinAberto and !s.encerrada and s.data.isBefore(hoje)}"
+                                              title="Ficou sem encerrar: abra o painel para conferir">
+                                            Não encerrada
+                                        </span>
+                                        <span class="dl-badge dl-badge-neutral"
+                                              th:if="${!s.checkinAberto and !s.encerrada and !s.data.isBefore(hoje)}">
+                                            Não aberta
                                         </span>
                                     </th:block>
                                 </td>

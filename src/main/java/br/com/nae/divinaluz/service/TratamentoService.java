@@ -306,7 +306,34 @@ public class TratamentoService {
                 .filter(s -> s.getAssistido() != null)
                 .collect(Collectors.groupingBy(s -> s.getAssistido().getId(), LinkedHashMap::new, Collectors.toList()));
 
-        List<String> comAtendimento = porAssistido.values().stream()
+        recusarSeHaAtendimentoPosterior(porAssistido.values(), data);
+        porAssistido.values().forEach(linhas -> apagarERecalcular(linhas, data));
+        return porAssistido.size();
+    }
+
+    /**
+     * Desfaz a presença (efetiva e/ou de ouvinte) de <strong>uma</strong> pessoa numa data — o botão
+     * de remover da lista "Assistidos Presentes", para quando a recepção marcou a pessoa errada
+     * (2026-10-04). Mesmas regras de {@link #desfazerPresencasDaData}: o cartão é recalculado e nada é
+     * apagado se ela já teve Avaliação ou Entrevista nesta data ou depois.
+     *
+     * @return {@code false} se ela não tinha presença nesta data
+     */
+    @Transactional
+    public boolean desfazerPresenca(Long assistidoId, LocalDate data) {
+        List<SessaoTratamento> linhas = sessaoRepository.findByDataConsulta(data).stream()
+                .filter(s -> s.getAssistido() != null && assistidoId.equals(s.getAssistido().getId()))
+                .toList();
+        if (linhas.isEmpty()) {
+            return false;
+        }
+        recusarSeHaAtendimentoPosterior(List.of(linhas), data);
+        apagarERecalcular(linhas, data);
+        return true;
+    }
+
+    private void recusarSeHaAtendimentoPosterior(java.util.Collection<List<SessaoTratamento>> porPessoa, LocalDate data) {
+        List<String> comAtendimento = porPessoa.stream()
                 .filter(linhas -> linhas.stream().anyMatch(s -> !s.isOuvinte()))
                 .map(linhas -> linhas.get(0).getAssistido())
                 .filter(a -> avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(a.getId(), data) > 0
@@ -314,20 +341,19 @@ public class TratamentoService {
                 .map(Assistido::getNome)
                 .toList();
         if (!comAtendimento.isEmpty()) {
-            throw new RegraNegocioException("Não é possível desfazer as presenças de " + data.format(FORMATO_DATA)
+            throw new RegraNegocioException("Não é possível desfazer a presença de " + data.format(FORMATO_DATA)
                     + ": " + String.join(", ", comAtendimento) + " já passou por Avaliação ou Entrevista nesta"
                     + " data ou depois, e esses atendimentos dependem das presenças.");
         }
+    }
 
-        porAssistido.values().forEach(linhas -> {
-            Assistido assistido = linhas.get(0).getAssistido();
-            boolean tinhaEfetiva = linhas.stream().anyMatch(s -> !s.isOuvinte());
-            sessaoRepository.deleteAll(linhas);
-            if (tinhaEfetiva) {
-                recalcularCartaoAposDesfazer(assistido, data);
-            }
-        });
-        return porAssistido.size();
+    private void apagarERecalcular(List<SessaoTratamento> linhas, LocalDate data) {
+        Assistido assistido = linhas.get(0).getAssistido();
+        boolean tinhaEfetiva = linhas.stream().anyMatch(s -> !s.isOuvinte());
+        sessaoRepository.deleteAll(linhas);
+        if (tinhaEfetiva) {
+            recalcularCartaoAposDesfazer(assistido, data);
+        }
     }
 
     private void recalcularCartaoAposDesfazer(Assistido assistido, LocalDate data) {

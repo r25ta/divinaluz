@@ -892,8 +892,12 @@ try {
         $r = Invoke-CurlForm -Url "$cartaoUrl/qrcode.png"
         Check "QR code do cartão responde 200 como imagem PNG" ($r.StatusCode -eq 200 -and $r.Body -match "image/png")
 
+        # A sessão de hoje pode vir de uma execução anterior (ou da V37, que marcou como encerradas as
+        # sessões com check-in fechado): o teste começa com ela limpa — nem aberta, nem encerrada.
+        Invoke-Sql "UPDATE sessao_assistencia SET checkin_aberto_em = NULL, checkin_fechado_em = NULL, encerrada_em = NULL, cancelada_em = NULL, motivo_cancelamento = NULL WHERE id = $sessaoHojeId;" | Out-Null
+
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
-        Check "Scan sem check-in aberto avisa que falta abrir a sessão" ($r.StatusCode -eq 200 -and $r.Body -match "Nenhuma sessão está com o check-in aberto")
+        Check "Scan sem sessão aberta avisa que falta abrir a sessão" ($r.StatusCode -eq 200 -and $r.Body -match "Nenhuma sessão está aberta")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/qr-que-nao-existe"
         Check "QR desconhecido não resolve nenhum cartão" ($r.Body -match "não corresponde a nenhum cartão")
@@ -901,17 +905,26 @@ try {
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = "08/01/2024" }
         Check "Segunda-feira não vira sessão (volta para a lista)" ($r.StatusCode -eq 302 -and $r.Location -match "sessao$")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoAntigaId/checkin/abrir"
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoAntigaId/abrir"
         $abertoAntiga = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoAntigaId;"
-        Check "Check-in não abre em sessão de outra data" ($abertoAntiga -eq "NULL")
+        Check "Sessão de outra data não abre" ($abertoAntiga -eq "NULL")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/checkin/abrir"
-        Check "Abrir check-in da sessão de hoje volta para o painel da sessão" ($r.StatusCode -eq 302 -and $r.Location -match "sessao/$sessaoHojeId$")
-        $abertoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
-        Check "Janela de check-in registrada como aberta" ($abertoHoje -ne "NULL")
+        # 2026-10-04: abrir a sessão de hoje (pela lista, informando a data) já abre o check-in.
+        $hojeTexto = (Get-Date).ToString("dd/MM/yyyy")
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao" -Form @{ data = $hojeTexto }
+        if ((Get-Date).DayOfWeek -in @([DayOfWeek]::Sunday, [DayOfWeek]::Tuesday)) {
+            Check "Abrir a sessão de hoje pela lista já abre o check-in" ($r.StatusCode -eq 302 -and $r.Location -match "sessao/$sessaoHojeId$")
+        } else {
+            # Hoje não é Domingo/Terça: a tela recusa a data (com razão), e o teste segue pelo painel.
+            $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/abrir"
+            Check "Abrir a sessão de hoje pelo painel volta para o painel" ($r.StatusCode -eq 302 -and $r.Location -match "sessao/$sessaoHojeId$")
+        }
+        $abertoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_aberto_em::text, 'NULL') || '|' || COALESCE(checkin_segredo, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
+        Check "Sessão aberta com o check-in e o segredo do QR da sessão" ($abertoHoje -notmatch "NULL")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
         Check "Painel da sessão abre com indicadores e escala" ($r.StatusCode -eq 200 -and $r.Body -match "Indicadores" -and $r.Body -match "Câmara de Passe")
+        Check "Painel aberto oferece o QR da sessão e Encerrar sessão" ($r.Body -match "QR da sessão" -and $r.Body -match "Encerrar sessão")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
         Check "Scan com check-in aberto mostra o assistido e o botão de carimbar" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Carimbar presença")
@@ -952,13 +965,119 @@ try {
         $ouvintesHoje = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE AND ouvinte = true;"
         Check "As duas presenças extras do dia ficaram como ouvinte" ($ouvintesHoje -eq "2")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/checkin/fechar"
-        $fechadoHoje = Invoke-SqlScalar "SELECT COALESCE(checkin_fechado_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
-        Check "Encerrar check-in registra o fechamento da janela" ($fechadoHoje -ne "NULL")
+        # 16a. "Assistidos Presentes" com o botão de remover quem foi marcado por engano. A presença de
+        # hoje era a do reinício em P2: removê-la também desfaz o reinício (o ciclo expirado volta).
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        Check "Lista se chama 'Assistidos Presentes' e tem o botão de remover" (
+            $r.Body -match "Assistidos Presentes" -and $r.Body -match "presenca/$assistidoId/remover")
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/presenca/$assistidoId/remover"
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $restantesHoje = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE;"
+        Check "Remover tira todas as presenças da pessoa nesta sessão e avisa" ($restantesHoje -eq "0" -and $r.Body -match "removida desta sessão")
+
+        # 16b-QR. QR da sessão: o assistido escaneia com o celular e marca a PRÓPRIA presença. O código
+        # muda a cada minuto (HMAC do segredo da sessão com o minuto) — calculado aqui como o servidor.
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/qrcode"
+        Check "Tela do QR da sessão abre para a recepção" ($r.StatusCode -eq 200 -and $r.Body -match "Marque sua presença pelo celular")
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/qrcode.png"
+        Check "QR da sessão responde como imagem PNG" ($r.StatusCode -eq 200 -and $r.Body -match "image/png")
+
+        $segredoSessao = Invoke-SqlScalar "SELECT checkin_segredo FROM sessao_assistencia WHERE id = $sessaoHojeId;"
+        $minuto = [math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 60)
+        $hmac = New-Object System.Security.Cryptography.HMACSHA256 (, [Text.Encoding]::UTF8.GetBytes($segredoSessao))
+        $assinatura = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$minuto))
+        $codigoQr = ([Convert]::ToBase64String($assinatura).TrimEnd('=').Replace('+', '-').Replace('/', '_')).Substring(0, 16)
+        $urlPresenca = "$BaseUrl/presenca/$sessaoHojeId/$codigoQr"
+
+        $jarRecepcao = $script:CookieJar
+        $csrfRecepcao = $script:CsrfToken
+        $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-celular-$PID.txt"
+        if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+        try {
+            # Sem login no celular: vai para o login e, depois de entrar, VOLTA para a confirmação.
+            $r = Invoke-CurlForm -Url $urlPresenca
+            Check "QR da sessão sem login leva ao login" ($r.StatusCode -eq 302 -and $r.Location -match "/login")
+            # Login na MESMA sessão do celular (o Login-Como zera o cookie jar, e com ele o pedido
+            # guardado — que é justamente o que leva de volta à confirmação).
+            $paginaLogin = Invoke-CurlForm -Url "$BaseUrl/login"
+            $script:CsrfToken = $null
+            $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/login" -Form @{ username = $loginTeste; password = "senha123"; "_csrf" = (Extract-Csrf $paginaLogin.Body) }
+            Check "Depois do login, volta para a confirmação de presença (e não para o cartão)" (
+                $r.StatusCode -eq 302 -and $r.Location -match "/presenca/$sessaoHojeId/")
+
+            $r = Invoke-CurlForm -Url $urlPresenca
+            Check "Celular mostra quem é e o botão de confirmar" ($r.Body -match "Confirmar minha presença" -and $r.Body -match [regex]::Escape($nomeEditado))
+            $presencasAntes = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE;"
+            Check "Só abrir o link (GET) não marca presença" ($presencasAntes -eq "0")
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/presenca/$sessaoHojeId/AAAAAAAAAAAAAAAA"
+            Check "Código vencido/inválido é recusado explicando que o QR muda a cada minuto" ($r.Body -match "muda a cada minuto")
+
+            # A última presença efetiva voltou a ser de 2024: regra dos 21 dias. O próprio assistido não
+            # reinicia em P2 — o cartão expira e ele é mandado à recepção.
+            $script:CsrfToken = Extract-Csrf (Invoke-CurlForm -Url $urlPresenca).Body
+            $r = Invoke-CurlForm -Method POST -Url $urlPresenca
+            $statusCelular = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+            Check "Pelo celular, cartão vencido (21 dias) não marca: expira e manda à recepção" (
+                $r.Body -match "Procure a recepção" -and $statusCelular -eq "INCOMPLETO_POR_TEMPO")
+        } finally {
+            if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+            $script:CookieJar = $jarRecepcao
+            $script:CsrfToken = $csrfRecepcao
+        }
+
+        # A recepção reinicia em P2 e carimba; depois disso o celular só confirma que já está marcada.
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/presenca/$assistidoId" -Form @{ reiniciarP2 = "true" } | Out-Null
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-celular-$PID.txt"
+        try {
+            Login-Como $loginTeste "senha123" | Out-Null
+            $script:CsrfToken = Extract-Csrf (Invoke-CurlForm -Url $urlPresenca).Body
+            $r = Invoke-CurlForm -Method POST -Url $urlPresenca
+            $presencasDepois = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE;"
+            Check "Marcar de novo pelo celular não duplica: avisa que já estava marcada" (
+                $r.Body -match "já estava marcada" -and $presencasDepois -eq "1")
+        } finally {
+            if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+            $script:CookieJar = $jarRecepcao
+            $script:CsrfToken = $csrfRecepcao
+        }
+
+        # 16c. Encerrar sessão: consolida o dia. Depois disso nada se marca nem se remove, o QR da
+        # sessão para de funcionar, e "Reabrir" só no próprio dia.
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/encerrar"
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $encerradaHoje = Invoke-SqlScalar "SELECT COALESCE(encerrada_em::text, 'NULL') || '|' || COALESCE(checkin_fechado_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
+        Check "Encerrar sessão grava o encerramento e fecha o check-in" ($encerradaHoje -notmatch "NULL")
+        Check "Painel encerrado mostra o resumo e oferece Reabrir, sem remover nem escalar" (
+            $r.Body -match "Sessão encerrada" -and $r.Body -match "Reabrir sessão" -and
+            $r.Body -notmatch "presenca/$assistidoId/remover" -and $r.Body -notmatch 'name="posicao"')
+
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/presenca/$assistidoId/remover"
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $aindaPresente = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE;"
+        Check "Sessão encerrada não deixa remover presença" ($aindaPresente -eq "1" -and $r.Body -match "encerrada")
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/qrcode.png"
+        Check "QR da sessão para de funcionar depois de encerrada (409)" ($r.StatusCode -eq 409)
 
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/checkin/$codigoCartao"
         $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoCartao"
-        Check "Com o check-in fechado o QR não carimba mais presença" ($r.Body -match "Nenhuma sessão está com o check-in aberto")
+        Check "Com a sessão encerrada o QR do cartão não carimba mais presença" ($r.Body -match "Nenhuma sessão está aberta")
+
+        $script:CsrfToken = Extract-Csrf (Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId").Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/reabrir"
+        $reaberta = Invoke-SqlScalar "SELECT COALESCE(encerrada_em::text, 'NULL') || '|' || COALESCE(checkin_fechado_em::text, 'NULL') FROM sessao_assistencia WHERE id = $sessaoHojeId;"
+        Check "Reabrir no próprio dia volta a abrir a sessão" ($reaberta -eq "NULL|NULL")
+        Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId" | Out-Null  # consome o flash
+        $script:CsrfToken = Extract-Csrf (Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId").Body
+        Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/encerrar" | Out-Null
+        Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId" | Out-Null
     }
 
     # 16b. Cancelar / excluir a sessão (2026-10-03). Usa um domingo de 2099, vazio de propósito:
@@ -1028,7 +1147,7 @@ try {
     if ($script:sessaoHojeCriada) {
         Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoHojeCriada);" | Out-Null
     } else {
-        Invoke-Sql "UPDATE sessao_assistencia SET checkin_aberto_em = NULL, checkin_fechado_em = NULL WHERE data = CURRENT_DATE;" | Out-Null
+        Invoke-Sql "UPDATE sessao_assistencia SET checkin_aberto_em = NULL, checkin_fechado_em = NULL, encerrada_em = NULL WHERE data = CURRENT_DATE;" | Out-Null
     }
     if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
 }

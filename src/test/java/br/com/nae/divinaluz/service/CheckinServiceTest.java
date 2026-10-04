@@ -126,6 +126,120 @@ class CheckinServiceTest {
         checkinService.abrirCheckin(10L, DOMINGO);
 
         assertNotNull(esquecida.getCheckinFechadoEm(), "a janela antiga deveria ter sido fechada");
+        assertNotNull(esquecida.getEncerradaEm(), "a sessão esquecida aberta fica encerrada");
+    }
+
+    // ---------------------------------------------------------------- abrir / encerrar / reabrir (2026-10-04)
+
+    @Test
+    void abrirSessaoGeraOSegredoDoQr() {
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
+
+        checkinService.abrirCheckin(10L, DOMINGO);
+
+        assertNotNull(sessaoDeDomingo.getCheckinSegredo());
+    }
+
+    @Test
+    void encerrarConsolidaOFimDoDia() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
+
+        checkinService.encerrarSessao(10L);
+
+        assertTrue(sessaoDeDomingo.isEncerrada());
+        assertTrue(!sessaoDeDomingo.isCheckinAberto());
+    }
+
+    @Test
+    void sessaoEncerradaNaoReabrePeloAbrirNemEmOutroDia() {
+        sessaoDeDomingo.setEncerradaEm(LocalDateTime.now());
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+
+        assertThrows(RegraNegocioException.class, () -> checkinService.abrirCheckin(10L, DOMINGO));
+        assertThrows(RegraNegocioException.class, () -> checkinService.reabrirSessao(10L, DOMINGO.plusDays(1)));
+        assertTrue(sessaoDeDomingo.isEncerrada());
+    }
+
+    @Test
+    void reabrirNoProprioDiaVoltaAAbrir() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now().minusHours(2));
+        sessaoDeDomingo.setCheckinFechadoEm(LocalDateTime.now().minusHours(1));
+        sessaoDeDomingo.setEncerradaEm(LocalDateTime.now().minusHours(1));
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
+
+        checkinService.reabrirSessao(10L, DOMINGO);
+
+        assertTrue(!sessaoDeDomingo.isEncerrada());
+        assertTrue(sessaoDeDomingo.isCheckinAberto());
+    }
+
+    // ---------------------------------------------------------------- QR da sessão (autoatendimento)
+
+    private String qrValido() {
+        sessaoDeDomingo.setCheckinAbertoEm(LocalDateTime.now());
+        sessaoDeDomingo.setCheckinSegredo(CodigoQrSessao.novoSegredo());
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        return CodigoQrSessao.codigo(sessaoDeDomingo.getCheckinSegredo(), java.time.Instant.now());
+    }
+
+    @Test
+    void autoCheckinComCodigoVencidoOuSessaoFechadaERecusado() {
+        qrValido();
+        assertThrows(RegraNegocioException.class,
+                () -> checkinService.registrarAutoCheckin(10L, "AAAAAAAAAAAAAAAA", assistido));
+
+        sessaoDeDomingo.setCheckinFechadoEm(LocalDateTime.now());
+        String codigo = CodigoQrSessao.codigo(sessaoDeDomingo.getCheckinSegredo(), java.time.Instant.now());
+        assertThrows(RegraNegocioException.class, () -> checkinService.registrarAutoCheckin(10L, codigo, assistido));
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
+    }
+
+    @Test
+    void autoCheckinSoComOCartaoEmTratamento() {
+        String codigo = qrValido();
+        assistido.setAtivo(true);
+        assistido.setStatusCartao(br.com.nae.divinaluz.model.CartaoStatus.AGUARDANDO_ENTREVISTA);
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class,
+                () -> checkinService.registrarAutoCheckin(10L, codigo, assistido));
+
+        assertTrue(erro.getMessage().contains("recepção"));
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
+    }
+
+    @Test
+    void autoCheckinPassaPelasRegrasDoCartaoSemReiniciarEmP2() {
+        String codigo = qrValido();
+        assistido.setAtivo(true);
+        assistido.setStatusCartao(br.com.nae.divinaluz.model.CartaoStatus.EM_TRATAMENTO);
+        when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
+                .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));
+
+        CheckinService.ResultadoAutoCheckin resultado = checkinService.registrarAutoCheckin(10L, codigo, assistido);
+
+        assertTrue(!resultado.jaEstavaPresente());
+        assertEquals(DOMINGO, resultado.presenca().getDataConsulta());
+        // confirmarReinicio = false: reiniciar em P2 é decisão da recepção, nunca do próprio assistido.
+        verify(tratamentoService).registrarSessao(any(SessaoTratamento.class), eq(false));
+    }
+
+    @Test
+    void autoCheckinRepetidoNaMesmaSessaoNaoDuplica() {
+        String codigo = qrValido();
+        assistido.setAtivo(true);
+        SessaoTratamento existente = new SessaoTratamento();
+        existente.setAssistido(assistido);
+        existente.setDataConsulta(DOMINGO);
+        when(sessaoRepository.findByDataConsulta(DOMINGO)).thenReturn(java.util.List.of(existente));
+
+        CheckinService.ResultadoAutoCheckin resultado = checkinService.registrarAutoCheckin(10L, codigo, assistido);
+
+        assertTrue(resultado.jaEstavaPresente());
+        verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
     @Test
@@ -136,7 +250,7 @@ class CheckinServiceTest {
         RegraNegocioException erro = assertThrows(RegraNegocioException.class,
                 () -> checkinService.registrarPresenca("codigo-do-cartao"));
 
-        assertTrue(erro.getMessage().contains("check-in aberto"));
+        assertTrue(erro.getMessage().contains("Nenhuma sessão está aberta"));
         verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 
@@ -180,7 +294,7 @@ class CheckinServiceTest {
         RegraNegocioException erro = assertThrows(RegraNegocioException.class,
                 () -> checkinService.registrarPresenca(10L, 5L, false));
 
-        assertTrue(erro.getMessage().contains("não está aberto"));
+        assertTrue(erro.getMessage().contains("não está aberta"));
         verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
     }
 

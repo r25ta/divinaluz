@@ -506,6 +506,25 @@ class TratamentoServiceTest {
     }
 
     @Test
+    void removerUmaPresencaSoMexeNaquelaPessoa() {
+        // A lista "Assistidos Presentes" remove quem foi marcado por engano; os outros ficam.
+        LocalDate data = LocalDate.of(2026, 9, 13);
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 6));
+        Assistido outro = new Assistido();
+        outro.setId(2L);
+        SessaoTratamento minha = presenca(data, 2);
+        SessaoTratamento dele = new SessaoTratamento();
+        dele.setAssistido(outro);
+        dele.setDataConsulta(data);
+        when(sessaoRepository.findByDataConsulta(data)).thenReturn(List.of(minha, dele));
+
+        assertTrue(tratamentoService.desfazerPresenca(1L, data));
+
+        verify(sessaoRepository).deleteAll(List.of(minha));
+        assertFalse(tratamentoService.desfazerPresenca(99L, data), "quem não tem presença na data");
+    }
+
+    @Test
     void desfazerPresencaRecusaQuemJaTemAvaliacaoDepois() {
         assistido.setNome("Fulano");
         LocalDate data = LocalDate.of(2026, 9, 27);

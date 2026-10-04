@@ -1,6 +1,7 @@
 package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.config.AutoridadesAssistido;
+import br.com.nae.divinaluz.config.DestinoAposLogin;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.service.CodigoAcessoService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -75,7 +76,7 @@ public class LoginCodigoController {
 
     @PostMapping("/entrar/codigo")
     public String conferirCodigo(@RequestParam String codigo, HttpSession sessao, Model model,
-            HttpServletRequest request, HttpServletResponse response) {
+            HttpServletRequest request, HttpServletResponse response) throws java.io.IOException {
         String email = (String) sessao.getAttribute(SESSAO_EMAIL);
         if (email == null || email.isBlank()) {
             return "redirect:/entrar";
@@ -102,8 +103,11 @@ public class LoginCodigoController {
         autenticar(assistido, request, response);
         sessao.removeAttribute(SESSAO_EMAIL);
 
-        // Mesmo destino do login por senha: todo mundo entra pelo próprio cartão (ver SecurityConfig).
-        return "redirect:/prontuario/" + assistido.getId() + "/cartao";
+        // Mesmo destino do login por senha (DestinoAposLogin): o próprio cartão, ou a confirmação de
+        // presença de quem chegou aqui pelo QR da sessão. A URL já vem com o context path, por isso o
+        // redirect é direto na resposta e não um "redirect:" (que prefixaria o contexto de novo).
+        response.sendRedirect(DestinoAposLogin.url(request, response, assistido));
+        return null;
     }
 
     /**

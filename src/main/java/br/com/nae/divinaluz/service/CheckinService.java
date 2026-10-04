@@ -3,6 +3,7 @@ package br.com.nae.divinaluz.service;
 import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
+import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -29,7 +30,7 @@ public class CheckinService {
 
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     public static final String SEM_SESSAO_ABERTA =
-            "Nenhuma sessão está com o check-in aberto. Abra o check-in da sessão de hoje no painel da Sessão.";
+            "Nenhuma sessão está aberta. Abra a sessão de hoje no módulo Sessão.";
 
     private final SessaoAssistenciaRepository sessaoAssistenciaRepository;
     private final PrelecaoRepository prelecaoRepository;
@@ -59,15 +60,23 @@ public class CheckinService {
      * hoje que recebe presença. Uma janela esquecida aberta em outra data é fechada aqui, senão ela
      * travaria o check-in de hoje.
      */
+    /**
+     * "Abrir sessão" no dia dela: desde 2026-10-04 abrir a sessão e abrir o check-in são um passo só.
+     * Gera o segredo do QR da sessão na primeira abertura. Uma sessão esquecida aberta em outra data
+     * é encerrada aqui, senão travaria o check-in de hoje.
+     */
     @Transactional
     public SessaoAssistencia abrirCheckin(Long sessaoId, LocalDate hoje) {
         SessaoAssistencia sessao = buscarSessao(sessaoId);
 
         if (sessao.isCancelada()) {
-            throw new RegraNegocioException("Esta sessão foi cancelada. Reative-a antes de abrir o check-in.");
+            throw new RegraNegocioException("Esta sessão foi cancelada. Reative-a antes de abrir.");
+        }
+        if (sessao.isEncerrada()) {
+            throw new RegraNegocioException("Esta sessão já foi encerrada. Use \"Reabrir sessão\" se foi engano.");
         }
         if (!hoje.equals(sessao.getData())) {
-            throw new RegraNegocioException("O check-in só pode ser aberto no dia da sessão ("
+            throw new RegraNegocioException("A sessão só pode ser aberta no próprio dia ("
                     + sessao.getData().format(FORMATO_DATA) + ").");
         }
         if (sessao.isCheckinAberto()) {
@@ -76,23 +85,130 @@ public class CheckinService {
 
         sessaoComCheckinAberto()
                 .filter(aberta -> !aberta.getId().equals(sessaoId))
-                .ifPresent(this::fechar);
+                .ifPresent(this::encerrar);
 
+        if (sessao.getCheckinSegredo() == null) {
+            sessao.setCheckinSegredo(CodigoQrSessao.novoSegredo());
+        }
         sessao.setCheckinAbertoEm(LocalDateTime.now());
         sessao.setCheckinFechadoEm(null);
         return sessaoAssistenciaRepository.save(sessao);
     }
 
+    /**
+     * "Encerrar sessão" (2026-10-04): consolida o dia — fecha o check-in e marca a sessão como
+     * encerrada. A partir daí presenças, escala e preletor ficam travados.
+     */
     @Transactional
-    public SessaoAssistencia fecharCheckin(Long sessaoId) {
-        return fechar(buscarSessao(sessaoId));
+    public SessaoAssistencia encerrarSessao(Long sessaoId) {
+        SessaoAssistencia sessao = buscarSessao(sessaoId);
+        if (sessao.isCancelada()) {
+            throw new RegraNegocioException("Esta sessão foi cancelada; não há o que encerrar.");
+        }
+        return encerrar(sessao);
     }
 
-    private SessaoAssistencia fechar(SessaoAssistencia sessao) {
+    /**
+     * Desfaz um encerramento feito cedo demais. Só no próprio dia, como a abertura: encerrar é o fim do
+     * trabalho, e reabrir uma sessão de outro dia mexeria em presenças que já foram consolidadas.
+     */
+    @Transactional
+    public SessaoAssistencia reabrirSessao(Long sessaoId, LocalDate hoje) {
+        SessaoAssistencia sessao = buscarSessao(sessaoId);
+        if (!sessao.isEncerrada()) {
+            return sessao;
+        }
+        if (!hoje.equals(sessao.getData())) {
+            throw new RegraNegocioException("Só dá para reabrir a sessão no próprio dia ("
+                    + sessao.getData().format(FORMATO_DATA) + ").");
+        }
+        sessao.setEncerradaEm(null);
+        sessaoAssistenciaRepository.save(sessao);
+        return abrirCheckin(sessaoId, hoje);
+    }
+
+    private SessaoAssistencia encerrar(SessaoAssistencia sessao) {
+        LocalDateTime agora = LocalDateTime.now();
         if (sessao.isCheckinAberto()) {
-            sessao.setCheckinFechadoEm(LocalDateTime.now());
+            sessao.setCheckinFechadoEm(agora);
+        }
+        if (sessao.getEncerradaEm() == null) {
+            sessao.setEncerradaEm(agora);
         }
         return sessaoAssistenciaRepository.save(sessao);
+    }
+
+    // ---------------------------------------------------------------- QR da sessão (autoatendimento)
+
+    /** Resultado de quem marcou a própria presença pelo QR da sessão. */
+    public record ResultadoAutoCheckin(SessaoAssistencia sessao, Assistido assistido, SessaoTratamento presenca,
+            boolean ouvinte, boolean jaEstavaPresente) {}
+
+    /** Código atual do QR da sessão (muda a cada minuto). Só existe com a sessão aberta. */
+    public String codigoQrAtual(Long sessaoId) {
+        SessaoAssistencia sessao = exigirCheckinAberto(sessaoId);
+        return CodigoQrSessao.codigo(sessao.getCheckinSegredo(), java.time.Instant.now());
+    }
+
+    /**
+     * Confere o código do QR da sessão escaneado pelo celular. Devolve a sessão quando ele vale; senão
+     * explica o motivo em linguagem de quem está na fila da recepção.
+     */
+    public SessaoAssistencia conferirQrDaSessao(Long sessaoId, String codigo) {
+        SessaoAssistencia sessao = sessaoAssistenciaRepository.findById(sessaoId)
+                .orElseThrow(() -> new RegraNegocioException("Este QR code não é de uma sessão da casa."));
+        if (!sessao.isCheckinAberto()) {
+            throw new RegraNegocioException("A sessão de " + sessao.getData().format(FORMATO_DATA)
+                    + " não está aberta. Procure a recepção.");
+        }
+        if (!CodigoQrSessao.valido(sessao.getCheckinSegredo(), codigo, java.time.Instant.now())) {
+            throw new RegraNegocioException("Este QR code expirou — ele muda a cada minuto. "
+                    + "Escaneie de novo o QR que está na recepção.");
+        }
+        return sessao;
+    }
+
+    /**
+     * O próprio assistido marca a presença escaneando o QR da sessão com o celular (2026-10-04). Passa
+     * por TODAS as regras do cartão no {@link TratamentoService}: só com o cartão Em Tratamento, regra
+     * dos 21 dias (sem o reinício em P2, que é decisão da recepção), dia de assistência e uma presença
+     * efetiva por semana. Marcar duas vezes na mesma sessão não cria outra linha.
+     */
+    @Transactional(noRollbackFor = CartaoExpiradoException.class)
+    public ResultadoAutoCheckin registrarAutoCheckin(Long sessaoId, String codigo, Assistido assistido) {
+        SessaoAssistencia sessao = conferirQrDaSessao(sessaoId, codigo);
+        exigirCartaoUtilizavel(assistido);
+
+        Optional<SessaoTratamento> jaPresente = sessaoRepository.findByDataConsulta(sessao.getData()).stream()
+                .filter(s -> s.getAssistido() != null && assistido.getId().equals(s.getAssistido().getId()))
+                .findFirst();
+        if (jaPresente.isPresent()) {
+            return new ResultadoAutoCheckin(sessao, assistido, jaPresente.get(), jaPresente.get().isOuvinte(), true);
+        }
+
+        CartaoStatus status = assistido.getStatusCartao();
+        if (status == CartaoStatus.AGUARDANDO_AVALIACAO || status == CartaoStatus.AGUARDANDO_ENTREVISTA) {
+            throw new RegraNegocioException("Seu cartão está " + status.getLabel().toLowerCase()
+                    + ". Procure a recepção para ser encaminhado(a).");
+        }
+        if (status == CartaoStatus.INCOMPLETO_POR_TEMPO) {
+            throw new RegraNegocioException("Seu cartão expirou por ausência (3 semanas ou mais sem sessão). "
+                    + "Procure a recepção para reiniciar o tratamento.");
+        }
+
+        try {
+            TratamentoService.ResultadoSessao resultado =
+                    tratamentoService.registrarSessao(novaPresenca(assistido, sessao), false);
+            return new ResultadoAutoCheckin(sessao, assistido, resultado.sessao(), resultado.ouvinte(), false);
+        } catch (CartaoExpiradoException e) {
+            // Continua sendo CartaoExpiradoException: o status INCOMPLETO_POR_TEMPO gravado pelo
+            // TratamentoService precisa sobreviver (noRollbackFor). Reiniciar é decisão da recepção.
+            throw new CartaoExpiradoException("Seu cartão expirou por ausência (3 semanas ou mais sem sessão). "
+                    + "Procure a recepção para reiniciar o tratamento.");
+        } catch (RegraNegocioException e) {
+            // Ex.: dia de assistência diferente — a recepção resolve (ouvinte ou mudança de dia).
+            throw new RegraNegocioException(e.getMessage() + " Procure a recepção.");
+        }
     }
 
     /**
@@ -180,8 +296,9 @@ public class CheckinService {
     public SessaoAssistencia exigirCheckinAberto(Long sessaoId) {
         SessaoAssistencia sessao = buscarSessao(sessaoId);
         if (!sessao.isCheckinAberto()) {
-            throw new RegraNegocioException("O check-in desta sessão ("
-                    + sessao.getData().format(FORMATO_DATA) + ") não está aberto.");
+            throw new RegraNegocioException(sessao.isEncerrada()
+                    ? "A sessão de " + sessao.getData().format(FORMATO_DATA) + " já foi encerrada e o dia está consolidado."
+                    : "A sessão de " + sessao.getData().format(FORMATO_DATA) + " não está aberta.");
         }
         return sessao;
     }

@@ -56,6 +56,15 @@ public class SessaoAssistencia {
     @Column(name = "motivo_cancelamento")
     private String motivoCancelamento;
 
+    /** "Encerrar sessão" (V37): o dia foi consolidado — check-in fechado, presenças e escala travadas. */
+    @Column(name = "encerrada_em")
+    private LocalDateTime encerradaEm;
+
+    /** Semente do QR da sessão que muda a cada minuto (V37). Nunca vai para a tela. */
+    @Column(name = "checkin_segredo", length = 64)
+    @ToString.Exclude
+    private String checkinSegredo;
+
     @OneToMany(mappedBy = "sessao", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("posicao, id")
     @ToString.Exclude
@@ -73,6 +82,17 @@ public class SessaoAssistencia {
     @Transient
     public boolean isCancelada() {
         return canceladaEm != null;
+    }
+
+    @Transient
+    public boolean isEncerrada() {
+        return encerradaEm != null;
+    }
+
+    /** Ainda dá para mexer: nem cancelada nem encerrada. */
+    @Transient
+    public boolean isEditavel() {
+        return !isCancelada() && !isEncerrada();
     }
 
     /** Semana do ano contada de Domingo a Sábado, a mesma janela da regra de presença semanal. */

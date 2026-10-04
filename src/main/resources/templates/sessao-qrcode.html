@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('QR da Sessão')}"></head>
+<body>
+<div class="dl-app">
+    <!--/* Tela para deixar num tablet/monitor na recepção, de frente para a fila. Sem navbar de
+           propósito: quem olha é o assistido, e a tela fica limpa. O código do QR muda a cada minuto
+           (CodigoQrSessao), por isso a imagem é recarregada sozinha. */-->
+    <main class="dl-main">
+        <div class="dl-container-narrow text-center">
+            <span class="dl-eyebrow" th:text="'Sessão · ' + ${sessao.diaFrequencia.label}">Sessão</span>
+            <h1 class="h3 mb-1" th:text="${#temporals.format(sessao.data, 'dd/MM/yyyy')}">04/10/2026</h1>
+            <p class="mb-3">Marque sua presença pelo celular</p>
+
+            <div class="dl-card d-inline-block">
+                <div class="dl-card-body p-3">
+                    <img id="qrSessao" th:src="@{/sessao/{id}/qrcode.png(id=${sessao.id})}"
+                         th:attr="data-src=@{/sessao/{id}/qrcode.png(id=${sessao.id})}"
+                         alt="QR code para marcar presença nesta sessão"
+                         style="width: min(78vw, 420px); height: auto; image-rendering: pixelated;">
+                </div>
+            </div>
+
+            <ol class="text-start mx-auto mt-3" style="max-width: 420px;">
+                <li>Aponte a câmera do celular para o código.</li>
+                <li>Se pedir, entre com o seu login.</li>
+                <li>Toque em <strong>Confirmar minha presença</strong>.</li>
+            </ol>
+            <p class="dl-muted small" id="qrAviso">
+                O código muda a cada minuto. Cartão aguardando avaliação/entrevista, expirado ou de outro dia:
+                procure a recepção.
+            </p>
+
+            <a th:href="@{/sessao/{id}(id=${sessao.id})}" class="btn btn-outline-teal btn-sm mt-2">
+                <i class="bi bi-arrow-left"></i> Voltar ao painel
+            </a>
+        </div>
+    </main>
+</div>
+<script>
+    (function () {
+        var img = document.getElementById('qrSessao');
+        var aviso = document.getElementById('qrAviso');
+        var base = img.getAttribute('data-src');
+        // Bem antes do código vencer (ele vale alguns minutos): quem está na fila sempre vê um válido.
+        setInterval(function () { img.src = base + (base.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now(); }, 30000);
+        img.addEventListener('error', function () {
+            img.style.opacity = '0.15';
+            aviso.textContent = 'A sessão não está mais aberta. Volte ao painel.';
+        });
+    })();
+</script>
+</body>
+</html>

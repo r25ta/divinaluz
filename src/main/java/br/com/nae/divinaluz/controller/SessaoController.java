@@ -6,9 +6,17 @@ import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.PosicaoSessao;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.service.CheckinService;
+import br.com.nae.divinaluz.service.CodigoQrSessao;
+import br.com.nae.divinaluz.service.QrCodeService;
 import br.com.nae.divinaluz.service.SessaoService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,10 +40,12 @@ public class SessaoController {
 
     private final SessaoService sessaoService;
     private final CheckinService checkinService;
+    private final QrCodeService qrCodeService;
 
-    public SessaoController(SessaoService sessaoService, CheckinService checkinService) {
+    public SessaoController(SessaoService sessaoService, CheckinService checkinService, QrCodeService qrCodeService) {
         this.sessaoService = sessaoService;
         this.checkinService = checkinService;
+        this.qrCodeService = qrCodeService;
     }
 
     @GetMapping("/sessao")
@@ -48,18 +58,30 @@ public class SessaoController {
         return "sessao-lista";
     }
 
-    /** Abre (ou cria, se ainda não existe) a sessão da data e leva ao painel dela. */
+    /**
+     * Abre (ou cria, se ainda não existe) a sessão da data e leva ao painel dela. Desde 2026-10-04,
+     * <strong>no próprio dia</strong> isso já abre o check-in — abrir a sessão e abrir o check-in são
+     * um passo só. Em data futura a sessão só é criada, para montar a escala com antecedência.
+     */
     @PostMapping("/sessao")
     public String abrirSessao(@RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate data,
             RedirectAttributes redirectAttributes) {
         try {
             SessaoAssistencia sessao = sessaoService.garantirSessao(data);
+            LocalDate hoje = LocalDate.now();
+            if (hoje.equals(sessao.getData()) && sessao.isEditavel() && !sessao.isCheckinAberto()) {
+                checkinService.abrirCheckin(sessao.getId(), hoje);
+                redirectAttributes.addFlashAttribute("sucesso", MENSAGEM_SESSAO_ABERTA);
+            }
             return "redirect:/sessao/" + sessao.getId();
         } catch (RegraNegocioException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             return "redirect:/sessao";
         }
     }
+
+    private static final String MENSAGEM_SESSAO_ABERTA = "Sessão aberta. Marque as presenças pela busca, pelo QR"
+            + " do cartão, ou mostre o QR da sessão para cada um marcar a sua pelo celular.";
 
     @GetMapping("/sessao/{sessaoId}")
     public String painel(@PathVariable Long sessaoId, @RequestParam(required = false) String busca, Model model) {
@@ -92,23 +114,89 @@ public class SessaoController {
         return "sessao-painel :: indicadores";
     }
 
-    @PostMapping("/sessao/{sessaoId}/checkin/abrir")
-    public String abrirCheckin(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
+    /** "Abrir sessão" no painel de uma sessão criada antes (ex.: na semana, para montar a escala). */
+    @PostMapping("/sessao/{sessaoId}/abrir")
+    public String abrirNoPainel(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
         try {
             checkinService.abrirCheckin(sessaoId, LocalDate.now());
-            redirectAttributes.addFlashAttribute("sucesso",
-                    "Check-in aberto. Escaneie o QR do cartão ou busque o assistido pelo nome.");
+            redirectAttributes.addFlashAttribute("sucesso", MENSAGEM_SESSAO_ABERTA);
         } catch (RegraNegocioException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
         }
         return "redirect:/sessao/" + sessaoId;
     }
 
-    @PostMapping("/sessao/{sessaoId}/checkin/fechar")
-    public String fecharCheckin(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
-        checkinService.fecharCheckin(sessaoId);
-        redirectAttributes.addFlashAttribute("aviso", "Check-in encerrado. Não é mais possível marcar presença nesta sessão.");
+    /** "Encerrar sessão": consolida o dia (fim do trabalho). Ver CheckinService.encerrarSessao. */
+    @PostMapping("/sessao/{sessaoId}/encerrar")
+    public String encerrar(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
+        try {
+            SessaoAssistencia sessao = checkinService.encerrarSessao(sessaoId);
+            SessaoService.Indicadores ind = sessaoService.indicadores(sessao);
+            redirectAttributes.addFlashAttribute("sucesso", "Sessão encerrada e consolidada: " + ind.totalPresentes()
+                    + " presente(s) — " + ind.efetivas() + " em tratamento e " + ind.ouvintes() + " ouvinte(s).");
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
         return "redirect:/sessao/" + sessaoId;
+    }
+
+    /** Desfaz um encerramento feito cedo demais — só no próprio dia. */
+    @PostMapping("/sessao/{sessaoId}/reabrir")
+    public String reabrir(@PathVariable Long sessaoId, RedirectAttributes redirectAttributes) {
+        try {
+            checkinService.reabrirSessao(sessaoId, LocalDate.now());
+            redirectAttributes.addFlashAttribute("aviso", "Sessão reaberta. Lembre-se de encerrá-la de novo ao terminar.");
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
+        return "redirect:/sessao/" + sessaoId;
+    }
+
+    /** Remove quem foi marcado por engano (lista "Assistidos Presentes"); o cartão é recalculado. */
+    @PostMapping("/sessao/{sessaoId}/presenca/{assistidoId}/remover")
+    public String removerPresenca(@PathVariable Long sessaoId, @PathVariable Long assistidoId,
+            RedirectAttributes redirectAttributes) {
+        try {
+            Assistido removido = sessaoService.removerPresenca(sessaoId, assistidoId);
+            redirectAttributes.addFlashAttribute("sucesso", "Presença de " + removido.getNome()
+                    + " removida desta sessão. O cartão foi recalculado.");
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
+        return "redirect:/sessao/" + sessaoId;
+    }
+
+    /**
+     * Tela do QR da sessão, para deixar num tablet/monitor na recepção: o assistido escaneia com o
+     * celular e marca a própria presença. A imagem é recarregada sozinha, porque o código muda a cada
+     * minuto (ver CodigoQrSessao).
+     */
+    @GetMapping("/sessao/{sessaoId}/qrcode")
+    public String telaQrCode(@PathVariable Long sessaoId, Model model, RedirectAttributes redirectAttributes) {
+        SessaoAssistencia sessao = sessaoService.buscar(sessaoId);
+        if (!sessao.isCheckinAberto()) {
+            redirectAttributes.addFlashAttribute("erro", "O QR da sessão só existe com a sessão aberta.");
+            return "redirect:/sessao/" + sessaoId;
+        }
+        model.addAttribute("sessao", sessao);
+        model.addAttribute("validadeMinutos", CodigoQrSessao.MINUTOS_VALIDOS);
+        return "sessao-qrcode";
+    }
+
+    @GetMapping(value = "/sessao/{sessaoId}/qrcode.png", produces = MediaType.IMAGE_PNG_VALUE)
+    @ResponseBody
+    public ResponseEntity<byte[]> imagemQrCode(@PathVariable Long sessaoId) {
+        String codigo;
+        try {
+            codigo = checkinService.codigoQrAtual(sessaoId);
+        } catch (RegraNegocioException e) {
+            // Sessão encerrada com a tela do QR ainda aberta: a imagem falha e a tela avisa (ver o JS).
+            return ResponseEntity.status(HttpStatus.CONFLICT).cacheControl(CacheControl.noStore()).build();
+        }
+        String url = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/presenca/{sessaoId}/{codigo}").buildAndExpand(sessaoId, codigo).toUriString();
+        // Sem cache: cada recarga precisa trazer o código do minuto atual.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(qrCodeService.png(url, 480));
     }
 
     /** A casa não abriu: a sessão fica registrada como cancelada e as presenças da data são desfeitas. */
@@ -153,10 +241,14 @@ public class SessaoController {
     @PostMapping("/sessao/{sessaoId}/preletor")
     public String trocarPreletor(@PathVariable Long sessaoId, @RequestParam(required = false) Long preletorId,
             @RequestParam(required = false) String tema, RedirectAttributes redirectAttributes) {
-        sessaoService.trocarPreletor(sessaoId, preletorId, tema);
-        redirectAttributes.addFlashAttribute("sucesso", preletorId == null && (tema == null || tema.isBlank())
-                ? "Troca desfeita: vale o preletor da escala de preleções."
-                : "Preletor desta sessão atualizado. A escala de preleções não foi alterada.");
+        try {
+            sessaoService.trocarPreletor(sessaoId, preletorId, tema);
+            redirectAttributes.addFlashAttribute("sucesso", preletorId == null && (tema == null || tema.isBlank())
+                    ? "Troca desfeita: vale o preletor da escala de preleções."
+                    : "Preletor desta sessão atualizado. A escala de preleções não foi alterada.");
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
         return "redirect:/sessao/" + sessaoId;
     }
 
@@ -172,8 +264,13 @@ public class SessaoController {
     }
 
     @PostMapping("/sessao/{sessaoId}/escala/{escalaId}/remover")
-    public String removerDaEscala(@PathVariable Long sessaoId, @PathVariable Long escalaId) {
-        sessaoService.removerDaEscala(sessaoId, escalaId);
+    public String removerDaEscala(@PathVariable Long sessaoId, @PathVariable Long escalaId,
+            RedirectAttributes redirectAttributes) {
+        try {
+            sessaoService.removerDaEscala(sessaoId, escalaId);
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+        }
         return "redirect:/sessao/" + sessaoId + "#escala";
     }
 

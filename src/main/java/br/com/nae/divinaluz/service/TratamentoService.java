@@ -173,10 +173,14 @@ public class TratamentoService {
 
     // Avaliação: dados da avaliação espiritual em si. Data livre (não precisa cair no dia de
     // assistência) — quem fica presa a esse dia é a Entrevista que a segue (ver
-    // registrarEntrevista). Não mexe em Assistido.tratamentoAtual.
+    // registrarEntrevista). Não mexe em Assistido.tratamentoAtual: o tratamento proposto pelo
+    // Avaliador (obrigatório desde a V36) só vale quando a Entrevista o comunica.
     @Transactional
     public Avaliacao registrarAvaliacao(Avaliacao novaAvaliacao) {
         Assistido assistido = novaAvaliacao.getAssistido();
+        if (novaAvaliacao.getTratamentoProposto() == null) {
+            throw new RegraNegocioException("Informe o tratamento proposto para as próximas sessões.");
+        }
 
         long totalAvaliacoesCiclo = contarAvaliacoesDoCiclo(assistido.getId(), assistido.getCicloIniciadoEm());
         novaAvaliacao.setNumeroVez((int) totalAvaliacoesCiclo + 1);

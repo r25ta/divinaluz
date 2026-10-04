@@ -18,6 +18,10 @@
                 </a>
             </div>
 
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+
             <div class="dl-card">
                 <div class="dl-card-body">
 
@@ -55,6 +59,21 @@
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Observações</div>
                             <textarea class="form-control" th:field="*{observacoes}" rows="3" placeholder="Recomendações do médium para o assistido..."></textarea>
+                        </div>
+
+                        <!--/* V36: o Avaliador propõe o novo tratamento; a Entrevista o comunica. Até lá ele
+                               fica reservado a Avaliador, Entrevistador e Dirigente. */-->
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Tratamento Proposto</div>
+                            <select class="form-select" th:field="*{tratamentoProposto}" required>
+                                <option value="">Selecione...</option>
+                                <option th:each="t : ${tratamentos}" th:value="${t.id}"
+                                        th:text="${t.codigo + ' - ' + t.nome}"></option>
+                            </select>
+                            <div class="form-text">
+                                Tratamento das próximas 4 sessões. O entrevistador comunica ao assistido na entrevista
+                                (e pode ajustar). Até lá, só Avaliador, Entrevistador e Dirigente veem esta proposta.
+                            </div>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">

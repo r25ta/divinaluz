@@ -112,7 +112,7 @@ public class ProntuarioController {
     @GetMapping
     public String index(@RequestParam(required = false, defaultValue = "false") boolean mostrarInativos,
             Authentication authentication, Model model) {
-        // Sem CONSULTA (assistido, Expositor/Preletor, Educador...) a listagem não é para a pessoa: o
+        // Sem CONSULTA (assistido, Expositor/Preletor...) a listagem não é para a pessoa: o
         // endereço de entrada leva ao próprio cartão. A listagem em si continua exigindo CONSULTA.
         boolean podeConsultar = authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals(Permissao.CONSULTA.getAuthority()));
@@ -264,18 +264,19 @@ public class ProntuarioController {
     public String editarAssistido(@PathVariable Long id, Authentication authentication, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
-        return exibirEdicao(model, assistido, null, false, ehAdministrador(authentication), null);
+        return exibirEdicao(model, assistido, null, false, authentication, null);
     }
 
     private String exibirEdicao(Model model, Assistido assistido, String loginInformado, boolean criarAcessoMarcado,
-            boolean admin, String erro) {
+            Authentication authentication, String erro) {
         model.addAttribute("assistido", assistido);
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("modoEdicao", true);
         model.addAttribute("loginInformado", loginInformado);
         model.addAttribute("criarAcessoMarcado", criarAcessoMarcado);
-        model.addAttribute("ehAdmin", admin);
-        model.addAttribute("perfis", PerfilAcesso.values());
+        model.addAttribute("podeEditarAcesso", podeEditarAcessoDe(authentication, assistido));
+        model.addAttribute("podeEscolherPerfil", podeEscolherPerfil(authentication));
+        model.addAttribute("perfis", perfisQuePodeConceder(authentication));
         model.addAttribute("emailHabilitado", acessoService.envioDeEmailLigado());
         model.addAttribute("senhaMinima", AcessoService.SENHA_MINIMA);
         if (erro != null) {
@@ -301,8 +302,11 @@ public class ProntuarioController {
     //
     // Acesso ao sistema (2026-10-03), na mesma submissão:
     //  - quem ainda não tem login ganha um marcando "Criar acesso" (qualquer um com CADASTRO);
-    //  - quem já tem só tem o acesso alterado pelo Administrador, e só quando a seção dele veio no
-    //    formulário (alterarAcesso) — um POST só com os dados pessoais nunca mexe no acesso.
+    //  - quem já tem só tem o acesso alterado por quem pode (podeEditarAcessoDe — desde 2026-10-04
+    //    a Recepcionista edita o login de assistidos), e só quando a seção veio no formulário
+    //    (alterarAcesso) — um POST só com os dados pessoais nunca mexe no acesso.
+    // O tratamento só é tocado por quem tem PRONTUARIO (2026-10-04): para os demais o select nem
+    // aparece, e chamar definirTratamento com ele ausente apagaria o tratamento atual.
     // Tudo é validado antes de gravar; um erro devolve o formulário preenchido.
     @PostMapping("/prontuario/{assistidoId}/editar")
     public String salvarEdicaoAssistido(@PathVariable Long assistidoId, @ModelAttribute Assistido dadosForm,
@@ -317,10 +321,11 @@ public class ProntuarioController {
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
 
-        boolean admin = ehAdministrador(authentication);
         boolean temAcesso = assistido.getLogin() != null;
         boolean vaiCriarAcesso = !temAcesso && criarAcesso;
-        boolean vaiAlterarAcesso = temAcesso && admin && alterarAcesso;
+        boolean vaiAlterarAcesso = temAcesso && alterarAcesso && podeEditarAcessoDe(authentication, assistido);
+        // Perfil só de quem pode escolher, e ADMINISTRADOR só concedido por um Administrador.
+        PerfilAcesso perfilPedido = perfil != null && perfisQuePodeConceder(authentication).contains(perfil) ? perfil : null;
         boolean proprioAcesso = temAcesso && assistido.getLogin().equals(authentication.getName());
         String email = AcessoService.normalizarEmail(dadosForm.getEmail());
         String loginLimpo = AcessoService.normalizarLogin(login);
@@ -339,11 +344,11 @@ public class ProntuarioController {
                         acessoService.motivoSenhaObrigatoria(email));
                 if (proprioAcesso && !loginLimpo.equals(assistido.getLogin())) {
                     throw new RegraNegocioException("Você não pode trocar o seu próprio login: a sua sessão "
-                            + "ficaria presa ao login antigo. Peça a outro administrador.");
+                            + "ficaria presa ao login antigo. Peça a outra pessoa com essa permissão.");
                 }
-                if (proprioAcesso && (!acessoAtivo || (perfil != null && perfil != PerfilAcesso.ADMINISTRADOR))) {
-                    throw new RegraNegocioException("Você não pode desativar o seu próprio acesso nem tirar o seu "
-                            + "perfil de Administrador — ficaria sem como desfazer. Peça a outro administrador.");
+                if (proprioAcesso && (!acessoAtivo || (perfilPedido != null && perfilPedido != assistido.getPerfilAcesso()))) {
+                    throw new RegraNegocioException("Você não pode desativar o seu próprio acesso nem trocar o seu "
+                            + "próprio perfil — ficaria sem como desfazer. Peça a outra pessoa com essa permissão.");
                 }
             }
         } catch (RegraNegocioException e) {
@@ -356,7 +361,8 @@ public class ProntuarioController {
             dadosForm.setAcessoAtivo(assistido.isAcessoAtivo());
             dadosForm.setDiaFrequencia(assistido.getDiaFrequencia());
             dadosForm.setSenha(null);
-            return exibirEdicao(model, dadosForm, loginLimpo, vaiCriarAcesso, admin, e.getMessage());
+            dadosForm.setVinculo(assistido.getVinculo());
+            return exibirEdicao(model, dadosForm, loginLimpo, vaiCriarAcesso, authentication, e.getMessage());
         }
 
         assistido.setNome(dadosForm.getNome());
@@ -391,8 +397,8 @@ public class ProntuarioController {
                     if (senha != null && !senha.isBlank()) {
                         acessoService.trocarSenha(assistido, senha);
                     }
-                    if (perfil != null) {
-                        assistido.setPerfilAcesso(perfil);
+                    if (perfilPedido != null) {
+                        assistido.setPerfilAcesso(perfilPedido);
                     }
                     assistido.setAcessoAtivo(acessoAtivo);
                 }
@@ -416,14 +422,55 @@ public class ProntuarioController {
                             + " ele só vai enxergar o próprio cartão. Defina as funções em \"Cadastrar Trabalhador\".");
         }
 
-        try {
-            tratamentoService.definirTratamento(assistido, dadosForm.getTratamentoAtual(), dataPrimeiraSessao);
-        } catch (RegraNegocioException e) {
-            redirectAttributes.addFlashAttribute("erro", e.getMessage());
-            return "redirect:/prontuario/" + assistidoId + "/editar";
+        if (tem(authentication, Permissao.PRONTUARIO)) {
+            try {
+                tratamentoService.definirTratamento(assistido, dadosForm.getTratamentoAtual(), dataPrimeiraSessao);
+            } catch (RegraNegocioException e) {
+                redirectAttributes.addFlashAttribute("erro", e.getMessage());
+                return "redirect:/prontuario/" + assistidoId + "/editar";
+            }
         }
 
         return "redirect:/prontuario/" + assistidoId;
+    }
+
+    private static boolean tem(Authentication authentication, Permissao permissao) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(permissao.getAuthority()));
+    }
+
+    /**
+     * Quem pode alterar um acesso que já existe (login, senha, ativo). Desde 2026-10-04 a Recepcionista
+     * edita o login de <strong>assistidos</strong> ({@code CADASTRO}); o de trabalhadores exige quem
+     * promove trabalhadores ({@code TRABALHADORES}, o Dirigente), e o de um Administrador só outro
+     * Administrador. Sem essa escada, quem troca a senha de alguém com mais acesso entra como ele.
+     */
+    private boolean podeEditarAcessoDe(Authentication authentication, Assistido alvo) {
+        if (ehAdministrador(authentication)) {
+            return true;
+        }
+        PerfilAcesso perfilAlvo = alvo.getPerfilAcesso();
+        if (perfilAlvo == PerfilAcesso.ADMINISTRADOR) {
+            return false;
+        }
+        if (perfilAlvo == PerfilAcesso.TRABALHADOR) {
+            return tem(authentication, Permissao.TRABALHADORES);
+        }
+        return tem(authentication, Permissao.CADASTRO);
+    }
+
+    private boolean podeEscolherPerfil(Authentication authentication) {
+        return ehAdministrador(authentication) || tem(authentication, Permissao.TRABALHADORES);
+    }
+
+    /** O Dirigente escolhe perfil, mas o de Administrador só um Administrador concede. */
+    private List<PerfilAcesso> perfisQuePodeConceder(Authentication authentication) {
+        if (ehAdministrador(authentication)) {
+            return List.of(PerfilAcesso.values());
+        }
+        return podeEscolherPerfil(authentication)
+                ? List.of(PerfilAcesso.ASSISTIDO, PerfilAcesso.TRABALHADOR)
+                : List.of();
     }
 
     private void atualizarResidenciaLegada(Assistido assistido) {
@@ -736,12 +783,14 @@ public class ProntuarioController {
         model.addAttribute("assistido", assistido);
         model.addAttribute("avaliacao", new Avaliacao());
         model.addAttribute("evolucoes", Evolucao.values());
+        model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         return "avaliacao-form";
     }
 
     // Mesmo cuidado do endpoint de sessão: path variable não pode se chamar "id" porque
-    // Avaliacao também tem um campo "id". A Avaliação só registra o diagnóstico (histórico,
-    // observações, evolução) — quem decide/comunica o tratamento é a Entrevista (ver abaixo).
+    // Avaliacao também tem um campo "id". A Avaliação registra o diagnóstico (histórico,
+    // observações, evolução) e, desde a V36, o tratamento PROPOSTO pelo Avaliador — que só passa a
+    // valer quando a Entrevista o comunica (ver abaixo).
     @PostMapping("/prontuario/{assistidoId}/avaliacao")
     public String salvarAvaliacao(@PathVariable Long assistidoId, @ModelAttribute Avaliacao avaliacao,
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
@@ -753,7 +802,12 @@ public class ProntuarioController {
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
         avaliacao.setAssistido(assistido);
 
-        tratamentoService.registrarAvaliacao(avaliacao);
+        try {
+            tratamentoService.registrarAvaliacao(avaliacao);
+        } catch (RegraNegocioException e) {
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/prontuario/" + assistidoId + "/nova-avaliacao";
+        }
 
         return "redirect:/prontuario/" + assistidoId;
     }
@@ -773,8 +827,11 @@ public class ProntuarioController {
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)
                 .orElseThrow(() -> new IllegalArgumentException("Avaliação inválida: " + avaliacaoId));
 
+        // A Entrevista comunica o que o Avaliador propôs (V36); o entrevistador confirma ou ajusta.
+        // Avaliações antigas não têm proposta: aí vale o tratamento atual, como antes.
         Entrevista entrevista = new Entrevista();
-        entrevista.setTratamentoIndicado(assistido.getTratamentoAtual());
+        entrevista.setTratamentoIndicado(avaliacao.getTratamentoProposto() != null
+                ? avaliacao.getTratamentoProposto() : assistido.getTratamentoAtual());
 
         model.addAttribute("assistido", assistido);
         model.addAttribute("avaliacao", avaliacao);

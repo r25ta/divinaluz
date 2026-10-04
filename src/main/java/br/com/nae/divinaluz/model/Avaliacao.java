@@ -39,6 +39,13 @@ public class Avaliacao {
     @Enumerated(EnumType.STRING)
     private Evolucao evolucao;
 
+    // Novo tratamento proposto pelo Avaliador (V36). Enquanto o cartão aguarda a entrevista, só
+    // Avaliador, Entrevistador e Dirigente o enxergam; a Entrevista abre com ele já escolhido.
+    @ManyToOne
+    @JoinColumn(name = "tratamento_proposto_id")
+    @ToString.Exclude
+    private TipoTratamento tratamentoProposto;
+
     @OneToOne(mappedBy = "avaliacao")
     @ToString.Exclude
     private Entrevista entrevista;

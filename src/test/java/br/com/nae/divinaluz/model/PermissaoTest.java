@@ -13,30 +13,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A matriz de visibilidade por função — o que cada perfil de trabalho enxerga. Está em teste porque
  * é uma decisão de negócio da casa (não uma consequência do código): mudá-la deve ser deliberado.
+ * Redefinida pelo responsável do projeto em 2026-10-04.
  */
 class PermissaoTest {
+
+    @Test
+    void catalogoDeFuncoesRedefinidoEm20261004() {
+        assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.RECEPCIONISTA, TipoTrabalhador.AVALIADOR,
+                        TipoTrabalhador.ENTREVISTADOR, TipoTrabalhador.EXPOSITOR_PRELETOR, TipoTrabalhador.PASSISTA),
+                List.of(TipoTrabalhador.values()));
+    }
 
     @Test
     void dirigenteAlcancaTodosOsModulos() {
         assertEquals(EnumSet.allOf(Permissao.class), TipoTrabalhador.DIRIGENTE.getPermissoes());
     }
 
+    // Sessão, consulta, cadastro (dados cadastrais e login) e escala de preleções — mas não altera o
+    // prontuário (tratamento/dia) nem faz avaliação ou entrevista.
     @Test
-    void recepcionistaCadastraEAtendeNaSessaoMasNaoEntrevista() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO),
-                TipoTrabalhador.RECEPCIONISTA.getPermissoes());
-    }
-
-    @Test
-    void entrevistadorConduzEntrevistaMasNaoMexeNoCadastro() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.SESSAO, Permissao.ENTREVISTA),
-                TipoTrabalhador.ENTREVISTADOR.getPermissoes());
-    }
-
-    @Test
-    void secretariaMontaAEscalaDePrelecoes() {
+    void recepcionistaCadastraAtendeNaSessaoEMontaPrelecoesMasNaoAlteraOProntuario() {
         assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO),
-                TipoTrabalhador.SECRETARIA.getPermissoes());
+                TipoTrabalhador.RECEPCIONISTA.getPermissoes());
+        assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.PRONTUARIO));
+    }
+
+    @Test
+    void avaliadorRegistraAAvaliacaoEPropoeOTratamento() {
+        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.AVALIACAO), TipoTrabalhador.AVALIADOR.getPermissoes());
+    }
+
+    @Test
+    void entrevistadorComunicaOTratamentoSemSessaoNemCadastro() {
+        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA), TipoTrabalhador.ENTREVISTADOR.getPermissoes());
     }
 
     @Test
@@ -45,24 +54,28 @@ class PermissaoTest {
     }
 
     @Test
-    void passistaEFacilitadorSomenteConsultam() {
+    void passistaSomenteConsulta() {
         assertEquals(EnumSet.of(Permissao.CONSULTA), TipoTrabalhador.PASSISTA.getPermissoes());
-        assertEquals(EnumSet.of(Permissao.CONSULTA), TipoTrabalhador.FACILITADOR.getPermissoes());
     }
 
-    // Fora do fluxo de assistência espiritual: entra no sistema, mas só alcança o próprio cartão e a
-    // escala de preleções (ambos liberados a qualquer autenticado no SecurityConfig).
+    // O tratamento proposto, enquanto o cartão aguarda a entrevista, só é visto por Avaliador,
+    // Entrevistador e Dirigente — quem tem AVALIACAO ou ENTREVISTA.
     @Test
-    void educadorDeEvangelizacaoNaoRecebeNenhumaPermissao() {
-        assertTrue(TipoTrabalhador.EDUCADOR_EVANGELIZACAO.getPermissoes().isEmpty());
-    }
-
-    @Test
-    void somenteODirigenteAlcancaOModuloDeTrabalhadores() {
-        List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
-                .filter(funcao -> funcao.getPermissoes().contains(Permissao.TRABALHADORES))
+    void soAvaliadorEntrevistadorEDirigenteVeemOTratamentoProposto() {
+        List<TipoTrabalhador> veem = EnumSet.allOf(TipoTrabalhador.class).stream()
+                .filter(f -> f.getPermissoes().contains(Permissao.AVALIACAO) || f.getPermissoes().contains(Permissao.ENTREVISTA))
                 .toList();
-        assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso);
+        assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.AVALIADOR, TipoTrabalhador.ENTREVISTADOR), veem);
+    }
+
+    @Test
+    void somenteODirigenteAlteraOProntuarioEPromoveTrabalhadores() {
+        for (Permissao exclusiva : List.of(Permissao.PRONTUARIO, Permissao.TRABALHADORES)) {
+            List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
+                    .filter(funcao -> funcao.getPermissoes().contains(exclusiva))
+                    .toList();
+            assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso, exclusiva.name());
+        }
     }
 
     @Test
@@ -70,15 +83,13 @@ class PermissaoTest {
         Set<Permissao> permissoes = Permissao.de(
                 List.of(TipoTrabalhador.EXPOSITOR_PRELETOR, TipoTrabalhador.ENTREVISTADOR));
 
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.SESSAO, Permissao.ENTREVISTA, Permissao.PRELECAO),
-                permissoes);
+        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA, Permissao.PRELECAO), permissoes);
     }
 
     @Test
     void semFuncaoNaoHaPermissaoAlguma() {
         assertTrue(Permissao.de(null).isEmpty());
         assertTrue(Permissao.de(List.of()).isEmpty());
-        assertTrue(Permissao.de(List.of(TipoTrabalhador.EDUCADOR_EVANGELIZACAO)).isEmpty());
     }
 
     // O prefixo separa a permissão (o que a pessoa alcança) do ROLE_ do PerfilAcesso (se é staff).

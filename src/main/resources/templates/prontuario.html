@@ -173,7 +173,7 @@
                                 <span th:if="${proprioRegistro}" class="dl-muted small">
                                     <i class="bi bi-person-x"></i> Ninguém conduz o próprio tratamento — outro trabalhador precisa atender.
                                 </span>
-                                <a th:if="${podeEntrevista and !proprioRegistro and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
+                                <a th:if="${podeAvaliacao and !proprioRegistro and statusCartao.name() == 'AGUARDANDO_AVALIACAO'}"
                                    th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}" class="btn btn-warning btn-sm">
                                     <i class="bi bi-clipboard2-pulse"></i> Registrar Avaliação
                                 </a>
@@ -195,7 +195,9 @@
                                 <i class="bi bi-hourglass-split"></i> Ainda não definido — aguardando triagem.
                             </p>
 
-                            <form th:if="${podeCadastro}" th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
+                            <!--/* Alterar o tratamento é dado do prontuário, não cadastral (2026-10-04): a
+                                   Recepcionista cadastra, mas não mexe aqui. */-->
+                            <form th:if="${podeProntuario}" th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
                                   class="pt-2" style="border-top: 1px dashed var(--dl-border);">
                                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                 <div class="d-flex gap-2 flex-wrap">
@@ -242,6 +244,7 @@
                                     <th class="text-center">Data</th>
                                     <th class="text-center">Evolução</th>
                                     <th>Observações</th>
+                                    <th>Tratamento Proposto</th>
                                     <th>Entrevista</th>
                                 </tr>
                             </thead>
@@ -261,6 +264,20 @@
                                     <td>
                                         <span th:if="${av.observacoes}" class="dl-truncate" th:text="${av.observacoes}" th:title="${av.observacoes}"></span>
                                         <span th:unless="${av.observacoes}" class="dl-muted">—</span>
+                                    </td>
+                                    <!--/* O novo tratamento proposto pelo Avaliador fica reservado a Avaliador,
+                                           Entrevistador e Dirigente até a Entrevista comunicá-lo (2026-10-04);
+                                           depois disso ele já é o tratamento atual e deixa de ser segredo. */-->
+                                    <td>
+                                        <th:block th:if="${av.tratamentoProposto != null}">
+                                            <span th:if="${podeVerTratamentoProposto or av.entrevista != null}"
+                                                  class="dl-badge dl-badge-teal" th:text="${av.tratamentoProposto.codigo}"></span>
+                                            <span th:unless="${podeVerTratamentoProposto or av.entrevista != null}"
+                                                  class="dl-muted small" title="Reservado ao Avaliador e ao Entrevistador até a entrevista">
+                                                <i class="bi bi-lock-fill"></i> Reservado até a entrevista
+                                            </span>
+                                        </th:block>
+                                        <span th:if="${av.tratamentoProposto == null}" class="dl-muted">—</span>
                                     </td>
                                     <td>
                                         <div th:if="${av.entrevista != null}">

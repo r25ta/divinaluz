@@ -111,7 +111,9 @@
                                todo cadastro nasce assistido e a promoção a trabalhador é feita no
                                módulo "Cadastrar Trabalhador" (/trabalhadores). */-->
 
-                        <div class="dl-form-section" th:if="${modoEdicao}">
+                        <!--/* Tratamento é dado do prontuário (permissão PRONTUARIO, 2026-10-04): quem só
+                               cadastra (Recepcionista) não vê o bloco, e o servidor também não mexe nele. */-->
+                        <div class="dl-form-section" th:if="${modoEdicao and podeProntuario}">
                             <div class="dl-form-section-title">Tratamento</div>
                             <label class="form-label">Tratamento Atual</label>
                             <select class="form-select" id="tratamentoAtual" th:field="*{tratamentoAtual}"
@@ -138,8 +140,9 @@
                                Quatro situações, decididas aqui e conferidas de novo no ProntuarioController:
                                  1. cadastro novo: o acesso é sempre criado, com o login sugerido pelo nome;
                                  2. edição de quem não tem acesso: "Criar acesso" é opcional;
-                                 3. edição de quem já tem, pelo Administrador: login, senha, perfil e ativo;
-                                 4. edição de quem já tem, por outro staff: só leitura.
+                                 3. edição de quem já tem, por quem pode (podeEditarAcesso): login, senha e
+                                    ativo; perfil só para Administrador/Dirigente (podeEscolherPerfil);
+                                 4. edição de quem já tem, por quem não pode: só leitura.
                                O JS do fim da página consulta /acesso/verificar enquanto se digita — é só
                                conforto, o servidor valida tudo ao salvar. */-->
                         <div class="dl-form-section" id="acesso"
@@ -190,9 +193,9 @@
                                 </div>
                             </th:block>
 
-                            <!--/* 3: o Administrador altera um acesso existente. alterarAcesso diz ao servidor
-                                   que esta seção veio no formulário — sem ele, salvar os dados não mexe no acesso. */-->
-                            <th:block th:if="${modoEdicao and assistido.login != null and ehAdmin}">
+                            <!--/* 3: quem pode altera um acesso existente. alterarAcesso diz ao servidor que esta
+                                   seção veio no formulário — sem ele, salvar os dados não mexe no acesso. */-->
+                            <th:block th:if="${modoEdicao and assistido.login != null and podeEditarAcesso}">
                                 <input type="hidden" name="alterarAcesso" value="true">
                                 <div class="row g-3">
                                     <div class="col-md-4">
@@ -203,13 +206,21 @@
                                                data-auto="false" aria-describedby="loginFeedback">
                                         <div id="loginFeedback" class="form-text" aria-live="polite"></div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-4" th:if="${podeEscolherPerfil}">
                                         <label class="form-label" for="perfil">Perfil</label>
                                         <select id="perfil" name="perfil" class="form-select">
+                                            <!--/* Perfil atual que a pessoa não pode conceder (ex.: ADMINISTRADOR para o
+                                                   Dirigente) aparece só para leitura e não é enviado. */-->
+                                            <option th:unless="${#lists.contains(perfis, assistido.perfilAcesso)}"
+                                                    value="" selected th:text="${assistido.perfilAcesso} + ' (mantido)'"></option>
                                             <option th:each="p : ${perfis}" th:value="${p.name()}" th:text="${p.name()}"
                                                     th:selected="${assistido.perfilAcesso == p}"></option>
                                         </select>
                                         <div class="form-text">Trabalhadores ganham o perfil sozinhos em "Cadastrar Trabalhador".</div>
+                                    </div>
+                                    <div class="col-md-4" th:unless="${podeEscolherPerfil}">
+                                        <label class="form-label">Perfil</label>
+                                        <div class="form-control-plaintext fw-semibold" th:text="${assistido.perfilAcesso}">ASSISTIDO</div>
                                     </div>
                                     <div class="col-md-4 d-flex align-items-center">
                                         <div class="form-check mt-3">
@@ -237,14 +248,17 @@
                                 </div>
                             </th:block>
 
-                            <!--/* 4: outro staff só vê. */-->
-                            <th:block th:if="${modoEdicao and assistido.login != null and !ehAdmin}">
+                            <!--/* 4: quem não pode alterar este acesso só vê. */-->
+                            <th:block th:if="${modoEdicao and assistido.login != null and !podeEditarAcesso}">
                                 <p class="mb-1">
                                     Login <strong th:text="${assistido.login}">login</strong> ·
                                     perfil <strong th:text="${assistido.perfilAcesso}">ASSISTIDO</strong> ·
                                     <span th:text="${assistido.acessoAtivo} ? 'ativo' : 'desativado'">ativo</span>
                                 </p>
-                                <div class="form-text">Só o Administrador altera um acesso que já existe (login, senha, perfil).</div>
+                                <div class="form-text">
+                                    O acesso de um trabalhador só é alterado pelo Dirigente, e o de um Administrador só
+                                    por outro Administrador — quem troca a senha de alguém entra como essa pessoa.
+                                </div>
                             </th:block>
                         </div>
 

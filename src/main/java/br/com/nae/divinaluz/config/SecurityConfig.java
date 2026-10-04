@@ -55,13 +55,20 @@ public class SecurityConfig {
                         .requestMatchers("/sessao", "/sessao/**", "/checkin/**",
                                         "/prontuario/*/nova-sessao", "/prontuario/*/sessao")
                                 .hasAuthority(Permissao.SESSAO.getAuthority())
-                        .requestMatchers("/entrevistas",
-                                        "/prontuario/*/nova-avaliacao", "/prontuario/*/avaliacao",
-                                        "/prontuario/*/nova-entrevista", "/prontuario/*/entrevista")
+                        // Avaliação e Entrevista separadas desde 2026-10-04 (Avaliador x Entrevistador); a
+                        // fila de cartões retidos é de quem faz qualquer uma das duas.
+                        .requestMatchers("/prontuario/*/nova-avaliacao", "/prontuario/*/avaliacao")
+                                .hasAuthority(Permissao.AVALIACAO.getAuthority())
+                        .requestMatchers("/prontuario/*/nova-entrevista", "/prontuario/*/entrevista")
                                 .hasAuthority(Permissao.ENTREVISTA.getAuthority())
+                        .requestMatchers("/entrevistas")
+                                .hasAnyAuthority(Permissao.AVALIACAO.getAuthority(), Permissao.ENTREVISTA.getAuthority())
+                        // Prontuário x cadastro (2026-10-04): trocar tratamento e dia de assistência pelo
+                        // prontuário não é dado cadastral — a Recepcionista cadastra, mas não altera isso.
+                        .requestMatchers("/prontuario/*/dia-frequencia", "/prontuario/*/tratamento")
+                                .hasAuthority(Permissao.PRONTUARIO.getAuthority())
                         .requestMatchers("/novo", "/salvar", "/prontuario/*/editar",
                                         "/prontuario/*/desativar", "/prontuario/*/reativar",
-                                        "/prontuario/*/dia-frequencia", "/prontuario/*/tratamento",
                                         "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo",
                                         "/acesso/verificar")
                                 .hasAuthority(Permissao.CADASTRO.getAuthority())

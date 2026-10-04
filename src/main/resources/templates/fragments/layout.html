@@ -22,7 +22,7 @@
     <!--/* Fragmento de navbar: uso com th:replace="fragments/layout :: navbar" */-->
     <nav class="dl-navbar" th:fragment="navbar">
         <div class="container-fluid d-flex align-items-center justify-content-between gap-3">
-            <!--/* Sem permissão de consulta (perfil Assistido, Preletor, Educador...) a home é o
+            <!--/* Sem permissão de consulta (perfil Assistido, Expositor/Preletor...) a home é o
                    próprio cartão: a listagem daria 403. */-->
             <a th:href="${not podeConsulta and meuAssistidoId != null} ? @{/prontuario/{id}/cartao(id=${meuAssistidoId})} : @{/}" class="dl-brand">
                 <span class="dl-brand-mark"><i class="bi bi-brightness-high-fill"></i></span>
@@ -40,7 +40,7 @@
                 <a th:if="${podeSessao}" th:href="@{/sessao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-speedometer2"></i> Sessão
                 </a>
-                <a th:if="${podeEntrevista}" th:href="@{/entrevistas}" class="btn btn-nav btn-sm position-relative">
+                <a th:if="${podeVerTratamentoProposto}" th:href="@{/entrevistas}" class="btn btn-nav btn-sm position-relative">
                     <i class="bi bi-chat-square-text"></i> Entrevistas
                     <span class="dl-nav-badge" th:if="${filaEntrevistas > 0}" th:text="${filaEntrevistas}"></span>
                 </a>

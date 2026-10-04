@@ -60,11 +60,15 @@
                                         <span th:if="${meuId != null and meuId == assistido.id}" class="dl-muted small">
                                             <i class="bi bi-person-x"></i> É você — outro trabalhador precisa atender
                                         </span>
-                                        <a th:unless="${meuId != null and meuId == assistido.id}"
+                                        <!--/* Avaliação é do Avaliador (2026-10-04); quem só entrevista vê a fila, mas não age aqui. */-->
+                                        <a th:if="${podeAvaliacao and (meuId == null or meuId != assistido.id)}"
                                            th:href="@{/prontuario/{id}/nova-avaliacao(id=${assistido.id})}"
                                            class="btn btn-teal btn-sm text-white">
                                             <i class="bi bi-plus-lg"></i> Registrar Avaliação
                                         </a>
+                                        <span th:if="${!podeAvaliacao and (meuId == null or meuId != assistido.id)}" class="dl-muted small">
+                                            Com o Avaliador
+                                        </span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -93,6 +97,7 @@
                                 <tr>
                                     <th>Assistido</th>
                                     <th>Avaliação</th>
+                                    <th>Tratamento Proposto</th>
                                     <th>Dia de Assistência</th>
                                     <th class="text-end">Ação</th>
                                 </tr>
@@ -111,16 +116,27 @@
                                         </div>
                                         <span th:if="${item.avaliacaoPendente == null}" class="dl-muted">—</span>
                                     </td>
+                                    <!--/* Só Avaliador, Entrevistador e Dirigente chegam a esta tela — os mesmos que
+                                           podem ver o tratamento proposto enquanto o cartão aguarda a entrevista. */-->
+                                    <td>
+                                        <span th:if="${item.avaliacaoPendente != null and item.avaliacaoPendente.tratamentoProposto != null}"
+                                              class="dl-badge dl-badge-teal" th:text="${item.avaliacaoPendente.tratamentoProposto.codigo}"></span>
+                                        <span th:unless="${item.avaliacaoPendente != null and item.avaliacaoPendente.tratamentoProposto != null}"
+                                              class="dl-muted">—</span>
+                                    </td>
                                     <td th:text="${item.assistido.diaFrequencia != null ? item.assistido.diaFrequencia.label : '—'}"></td>
                                     <td class="text-end">
                                         <span th:if="${meuId != null and meuId == item.assistido.id}" class="dl-muted small">
                                             <i class="bi bi-person-x"></i> É você — outro trabalhador precisa atender
                                         </span>
-                                        <a th:if="${(meuId == null or meuId != item.assistido.id) and item.avaliacaoPendente != null}"
+                                        <a th:if="${podeEntrevista and (meuId == null or meuId != item.assistido.id) and item.avaliacaoPendente != null}"
                                            th:href="@{/prontuario/{id}/nova-entrevista(id=${item.assistido.id}, avaliacaoId=${item.avaliacaoPendente.id})}"
                                            class="btn btn-teal btn-sm text-white">
                                             <i class="bi bi-plus-lg"></i> Registrar Entrevista
                                         </a>
+                                        <span th:if="${!podeEntrevista and (meuId == null or meuId != item.assistido.id)}" class="dl-muted small">
+                                            Com o Entrevistador
+                                        </span>
                                     </td>
                                 </tr>
                             </tbody>

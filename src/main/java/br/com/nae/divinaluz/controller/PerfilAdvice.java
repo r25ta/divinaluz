@@ -16,9 +16,6 @@ import java.util.List;
 @ControllerAdvice
 public class PerfilAdvice {
 
-    private static final List<CartaoStatus> STATUS_FILA_ENTREVISTA =
-            List.of(CartaoStatus.AGUARDANDO_AVALIACAO, CartaoStatus.AGUARDANDO_ENTREVISTA);
-
     private final AssistidoRepository assistidoRepository;
 
     public PerfilAdvice(AssistidoRepository assistidoRepository) {
@@ -49,6 +46,25 @@ public class PerfilAdvice {
         return pode(authentication, Permissao.CADASTRO);
     }
 
+    @ModelAttribute("podeProntuario")
+    public boolean podeProntuario(Authentication authentication) {
+        return pode(authentication, Permissao.PRONTUARIO);
+    }
+
+    @ModelAttribute("podeAvaliacao")
+    public boolean podeAvaliacao(Authentication authentication) {
+        return pode(authentication, Permissao.AVALIACAO);
+    }
+
+    /**
+     * Quem enxerga o tratamento proposto pelo Avaliador enquanto o cartão aguarda a entrevista:
+     * Avaliador, Entrevistador e Dirigente (pedido de 2026-10-04). É também quem vê a fila.
+     */
+    @ModelAttribute("podeVerTratamentoProposto")
+    public boolean podeVerTratamentoProposto(Authentication authentication) {
+        return pode(authentication, Permissao.AVALIACAO) || pode(authentication, Permissao.ENTREVISTA);
+    }
+
     @ModelAttribute("podeSessao")
     public boolean podeSessao(Authentication authentication) {
         return pode(authentication, Permissao.SESSAO);
@@ -69,14 +85,19 @@ public class PerfilAdvice {
         return pode(authentication, Permissao.TRABALHADORES);
     }
 
-    // Badge da navbar (link "Entrevistas") com o tamanho da fila, para o link já avisar quanto tem
-    // represado sem precisar entrar. Só para quem conduz entrevistas. Ver EntrevistaController.
+    // Badge da navbar (link "Entrevistas") com o que a pessoa tem para atender: o Avaliador conta os
+    // cartões aguardando avaliação, o Entrevistador os aguardando entrevista, e quem faz as duas
+    // coisas (Dirigente) conta os dois. Ver EntrevistaController.
     @ModelAttribute("filaEntrevistas")
     public long filaEntrevistas(Authentication authentication) {
-        if (!pode(authentication, Permissao.ENTREVISTA)) {
-            return 0;
+        List<CartaoStatus> meus = new java.util.ArrayList<>();
+        if (pode(authentication, Permissao.AVALIACAO)) {
+            meus.add(CartaoStatus.AGUARDANDO_AVALIACAO);
         }
-        return assistidoRepository.countByStatusCartaoInAndAtivoTrue(STATUS_FILA_ENTREVISTA);
+        if (pode(authentication, Permissao.ENTREVISTA)) {
+            meus.add(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        }
+        return meus.isEmpty() ? 0 : assistidoRepository.countByStatusCartaoInAndAtivoTrue(meus);
     }
 
     private boolean pode(Authentication authentication, Permissao permissao) {

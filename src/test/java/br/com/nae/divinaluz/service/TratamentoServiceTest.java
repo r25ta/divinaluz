@@ -352,6 +352,7 @@ class TratamentoServiceTest {
         br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
         av.setAssistido(assistido);
         av.setData(LocalDate.of(2026, 9, 23)); // data livre
+        av.setTratamentoProposto(tratamento);
         tratamentoService.registrarAvaliacao(av);
 
         assertEquals(2, av.getNumeroVez());
@@ -421,6 +422,16 @@ class TratamentoServiceTest {
 
         assertFalse(mudouDeNovo);
         verify(historicoDiaFrequenciaRepository).save(any());
+    }
+
+    @Test
+    void avaliacaoSemTratamentoPropostoERecusada() {
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setAssistido(assistido);
+        av.setData(LocalDate.of(2026, 9, 23));
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarAvaliacao(av));
+        verify(avaliacaoRepository, never()).save(any());
     }
 
     // ---------------------------------------------------------------- sessão cancelada (2026-10-03)

@@ -58,6 +58,11 @@
 
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Tratamento Indicado</div>
+                            <p class="dl-muted small mb-2" th:if="${avaliacao.tratamentoProposto != null}">
+                                <i class="bi bi-clipboard2-pulse"></i> Proposto pelo Avaliador:
+                                <strong th:text="${avaliacao.tratamentoProposto.codigo + ' - ' + avaliacao.tratamentoProposto.nome}">P2</strong>.
+                                Já vem selecionado; ajuste só se for o caso.
+                            </p>
                             <select class="form-select" th:field="*{tratamentoIndicado}" required>
                                 <option value="">Selecione...</option>
                                 <option th:each="t : ${tratamentos}" th:value="${t.id}"

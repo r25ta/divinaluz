@@ -12,27 +12,33 @@ import java.util.Set;
  * <p>Não confundir com {@link PosicaoSessao}, que é a escala de <em>uma</em> sessão (quem trabalha
  * neste domingo/terça): a pessoa pode ser Passista aqui e ser escalada na Câmara de Passe lá.
  *
- * <p>Quem acumula funções soma os acessos, e todo trabalhador — mesmo sem nenhuma permissão, como o
- * Educador de Evangelização — sempre alcança o próprio cartão e a escala de preleções.
+ * <p>Quem acumula funções soma os acessos, e todo trabalhador — mesmo o que tem poucas permissões,
+ * como o Expositor/Preletor — sempre alcança o próprio cartão e a escala de preleções.
+ *
+ * <p><strong>Catálogo redefinido em 2026-10-04</strong> pelo responsável do projeto: entrou o
+ * Avaliador; saíram Secretária (quem tinha virou Recepcionista), Facilitador e Educador de
+ * Evangelização Infantil e Mocidade (V36). Como o {@code @ElementCollection} grava o {@code name()},
+ * <em>remover</em> um valor exige migration — uma linha com nome desconhecido quebraria a leitura do
+ * trabalhador inteiro.
  */
 public enum TipoTrabalhador {
 
     DIRIGENTE(
             "Dirigente",
-            "Responsável pela condução das reuniões gerais, turmas de estudo, preleções e orientação doutrinária das atividades e da casa espírita.",
+            "Responsável pela condução das reuniões gerais, turmas de estudo, preleções e orientação doutrinária das atividades e da casa espírita. Acesso total ao sistema.",
             EnumSet.allOf(Permissao.class)),
     RECEPCIONISTA(
             "Recepcionista",
-            "Recebe o assistido na chegada, consulta o cadastro, marca a presença na sessão e encaminha para a entrevista.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO)),
+            "Recebe o assistido na chegada, consulta e mantém os dados cadastrais e o login, marca a presença na sessão, cuida da escala de preleções e encaminha para a entrevista. Não altera o prontuário.",
+            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO)),
+    AVALIADOR(
+            "Avaliador",
+            "Faz a avaliação espiritual do cartão retido na 4ª sessão e propõe o novo tratamento, que o entrevistador comunica.",
+            EnumSet.of(Permissao.CONSULTA, Permissao.AVALIACAO)),
     ENTREVISTADOR(
             "Entrevistador",
-            "Entrevista os assistidos novos e os que passaram por avaliação espiritual, comunicando as orientações e o tratamento indicado.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.SESSAO, Permissao.ENTREVISTA)),
-    SECRETARIA(
-            "Secretária",
-            "Apoio de secretaria da sessão e dos registros da casa.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO)),
+            "Comunica ao assistido o tratamento proposto na avaliação e devolve o cartão para Em Tratamento.",
+            EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA)),
     EXPOSITOR_PRELETOR(
             "Expositor / Preletor",
             "Membro encarregado de transmitir os ensinamentos evangélico-doutrinário nas palestras públicas e preleções que antecedem a assistência espiritual.",
@@ -40,15 +46,7 @@ public enum TipoTrabalhador {
     PASSISTA(
             "Passista",
             "Voluntário preparado para o atendimento fraterno, aplicação de passes magnéticos e amparo aos frequentadores.",
-            EnumSet.of(Permissao.CONSULTA)),
-    FACILITADOR(
-            "Facilitador",
-            "Atua orientando os grupos de aprofundamento íntimo e vivência.",
-            EnumSet.of(Permissao.CONSULTA)),
-    EDUCADOR_EVANGELIZACAO(
-            "Educador de Evangelização Infantil e Mocidade",
-            "Responsável pelo ensino e moralização cristã voltada para crianças e jovens.",
-            EnumSet.noneOf(Permissao.class));
+            EnumSet.of(Permissao.CONSULTA));
 
     private final String label;
     private final String descricao;

@@ -307,9 +307,17 @@ try {
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão bloqueada com cartão 'Aguardando Avaliação'" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
-    # 10a. Avaliação (diagnóstico) — data livre, não muda tratamento nem destrava sessão sozinha
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR"; historico = "Historico de teste"; observacoes = "Observacoes de teste" }
+    # 10a. Avaliação (diagnóstico) — data livre, não muda tratamento nem destrava sessão sozinha.
+    # Desde a V36 o Avaliador propõe o tratamento nela (obrigatório): sem ele, volta com erro.
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR" }
+    Check "Avaliação sem tratamento proposto volta ao formulário" ($r.StatusCode -eq 302 -and $r.Location -match "nova-avaliacao$")
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-avaliacao"
+    Check "O formulário de avaliação explica o que faltou" ($r.Body -match "tratamento proposto")
+
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR"; historico = "Historico de teste"; observacoes = "Observacoes de teste"; tratamentoProposto = $p3eId }
     Check "Avaliação registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+    $propostoGravado = Invoke-SqlScalar "SELECT COALESCE(tratamento_proposto_id::text, 'NULL') FROM avaliacao WHERE assistido_id = $assistidoId ORDER BY id DESC LIMIT 1;"
+    Check "Tratamento proposto gravado na avaliação" ($propostoGravado -eq $p3eId)
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Prontuário mostra observações da avaliação" ($r.Body -match "Observacoes de teste")
@@ -331,6 +339,13 @@ try {
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Prontuário mostra o botão de Registrar Entrevista com o avaliacaoId certo" ($r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
+    Check "Fila mostra ao Dirigente/Admin o tratamento proposto (P3E)" (
+        (Invoke-CurlForm -Url "$BaseUrl/entrevistas").Body -match ">P3E<")
+
+    # A Entrevista abre com o tratamento proposto pelo Avaliador já escolhido.
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-entrevista?avaliacaoId=$avaliacaoId"
+    Check "Entrevista abre com o tratamento proposto já selecionado" (
+        $r.Body -match "Proposto pelo Avaliador" -and $r.Body -match "value=""$p3eId""\s+selected")
 
     $codigoCartaoEntrevista = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
     if ($codigoCartaoEntrevista) {
@@ -597,7 +612,10 @@ try {
 
         $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$trabalhadorId"
         Check "Formulário de perfis de trabalho responde 200" ($r.StatusCode -eq 200 -and $r.Body -match "Perfis de Trabalho")
-        Check "Formulário oferece os perfis novos (Recepcionista/Entrevistador/Secretária)" ($r.Body -match "func-RECEPCIONISTA" -and $r.Body -match "func-ENTREVISTADOR" -and $r.Body -match "func-SECRETARIA")
+        # Catálogo de 2026-10-04: entrou o Avaliador; Secretária, Facilitador e Educador saíram.
+        Check "Formulário oferece o catálogo atual (com Avaliador, sem Secretária/Facilitador/Educador)" (
+            $r.Body -match "func-RECEPCIONISTA" -and $r.Body -match "func-ENTREVISTADOR" -and $r.Body -match "func-AVALIADOR" -and
+            $r.Body -notmatch "func-SECRETARIA" -and $r.Body -notmatch "func-FACILITADOR" -and $r.Body -notmatch "func-EDUCADOR")
 
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "ENTREVISTADOR" }
         Check "Promover a trabalhador redireciona para o módulo" ($r.StatusCode -eq 302 -and $r.Location -match "trabalhadores$")
@@ -655,6 +673,13 @@ try {
                 $r.Body -notmatch 'href="[^"]*/sessao"' -and $r.Body -notmatch 'href="[^"]*/entrevistas"' -and
                 $r.Body -notmatch 'href="[^"]*/trabalhadores"' -and $r.Body -notmatch "Novo Cadastro")
 
+            # Tratamento proposto ainda não comunicado (avaliação sem entrevista): reservado a Avaliador,
+            # Entrevistador e Dirigente. A avaliação é inserida por SQL e removida logo depois.
+            $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Passista não vê o tratamento proposto antes da entrevista" ($r.Body -match "Reservado até a entrevista")
+            Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
+
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
             Check "Passista abre o prontuário de outro assistido (200)" ($r.StatusCode -eq 200)
             Check "Prontuário não oferece ao Passista editar dados nem alterar tratamento" (
@@ -679,21 +704,72 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
             Check "Passista consulta a escala de preleções (200)" ($r.StatusCode -eq 200)
 
-            # Secretária: ganha CADASTRO, SESSAO e PRELECAO, mas continua sem entrevistar nem
-            # promover trabalhadores — é o que diferencia a matriz de um "staff tudo ou nada".
-            Definir-Funcao $adminJarMatriz $trabalhadorId "SECRETARIA"
+            # Recepcionista (matriz de 2026-10-04): sessão, consulta, dados cadastrais e login, e escala
+            # de preleções — mas não altera o prontuário (tratamento), não avalia, não entrevista e não
+            # promove trabalhadores.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "RECEPCIONISTA"
             Login-Como $loginTrab $senhaTrab | Out-Null
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
-            Check "Secretária monta a escala de preleções (200)" ($r.StatusCode -eq 200)
+            Check "Recepcionista monta a escala de preleções (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/novo"
-            Check "Secretária cadastra assistido (200)" ($r.StatusCode -eq 200)
+            Check "Recepcionista cadastra assistido (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
-            Check "Secretária alcança o Módulo Sessão (200)" ($r.StatusCode -eq 200)
+            Check "Recepcionista alcança o Módulo Sessão (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-            Check "Secretária ainda não entrevista (403)" ($r.StatusCode -eq 403)
+            Check "Recepcionista não alcança a fila de avaliação/entrevista (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-            Check "Secretária não promove trabalhadores (403)" ($r.StatusCode -eq 403)
+            Check "Recepcionista não promove trabalhadores (403)" ($r.StatusCode -eq 403)
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Prontuário não oferece à Recepcionista alterar o tratamento" ($r.Body -notmatch "Alterar Tratamento")
+            $edicao = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/editar"
+            Check "Edição do cadastro não mostra o tratamento à Recepcionista" ($edicao.Body -notmatch 'name="tratamentoAtual"')
+            Check "Recepcionista edita o login de um assistido" ($edicao.Body -match 'name="alterarAcesso"')
+            $script:CsrfToken = Extract-Csrf $edicao.Body
+            $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$assistidoId/tratamento" -Form @{ tratamentoAtual = "" }
+            Check "Recepcionista não altera o tratamento pelo prontuário (403)" ($r.StatusCode -eq 403)
+
+            # O risco que o select oculto criava: salvar a edição sem o campo de tratamento apagaria o
+            # tratamento atual. Quem não tem PRONTUARIO salva os dados e o tratamento fica como estava.
+            $tratamentoAntes = Invoke-SqlScalar "SELECT COALESCE(tratamento_atual_id::text, 'NULL') FROM assistido WHERE id = $assistidoId;"
+            $nomeAtual = Invoke-SqlScalar "SELECT nome FROM assistido WHERE id = $assistidoId;"
+            $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$assistidoId/editar" -Form @{ nome = $nomeAtual; bairro = "Bairro Recepção" }
+            $tratamentoDepois = Invoke-SqlScalar "SELECT COALESCE(tratamento_atual_id::text, 'NULL') FROM assistido WHERE id = $assistidoId;"
+            Check "Recepcionista salva dados cadastrais sem apagar o tratamento" (
+                $r.StatusCode -eq 302 -and $tratamentoDepois -eq $tratamentoAntes -and $tratamentoAntes -ne "NULL")
+
+            # A escada do acesso: trocar a senha de alguém é entrar como essa pessoa, então a
+            # Recepcionista não edita o login do Administrador (nem de outro trabalhador).
+            $adminRowId = Invoke-SqlScalar "SELECT id FROM assistido WHERE login = '$AdminLogin';"
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$adminRowId/editar"
+            Check "Recepcionista não edita o acesso do Administrador (só leitura)" (
+                $r.StatusCode -eq 200 -and $r.Body -notmatch 'name="alterarAcesso"')
+
+            # Avaliador: consulta e registra a Avaliação (propondo o tratamento); não entrevista.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "AVALIADOR"
+            Login-Como $loginTrab $senhaTrab | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+            Check "Avaliador alcança a fila (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
+            Check "Avaliador abre a avaliação, com o campo de tratamento proposto" (
+                $r.StatusCode -eq 200 -and $r.Body -match 'name="tratamentoProposto"')
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-entrevista?avaliacaoId=1"
+            Check "Avaliador não registra entrevista (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+            Check "Avaliador não alcança o Módulo Sessão (403)" ($r.StatusCode -eq 403)
+
+            # Entrevistador: consulta e registra a Entrevista; não avalia nem atua na sessão.
+            Definir-Funcao $adminJarMatriz $trabalhadorId "ENTREVISTADOR"
+            Login-Como $loginTrab $senhaTrab | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
+            Check "Entrevistador alcança a fila (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
+            Check "Entrevistador não registra avaliação (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
+            Check "Entrevistador não alcança mais o Módulo Sessão (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/novo"
+            Check "Entrevistador não cadastra (403)" ($r.StatusCode -eq 403)
 
             # Dirigente: única função que alcança todos os módulos.
             Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
@@ -703,18 +779,6 @@ try {
             Check "Dirigente alcança 'Cadastrar Trabalhador' (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Dirigente alcança a fila de entrevistas (200)" ($r.StatusCode -eq 200)
-
-            # Educador de Evangelização: nenhuma permissão — entra, mas só alcança o próprio cartão.
-            Definir-Funcao $adminJarMatriz $trabalhadorId "EDUCADOR_EVANGELIZACAO"
-            Login-Como $loginTrab $senhaTrab | Out-Null
-
-            $r = Invoke-CurlForm -Url "$BaseUrl/"
-            Check "Educador de Evangelização não consulta a listagem: a entrada leva ao próprio cartão" (
-                $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId/cartao$")
-            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
-            Check "Educador de Evangelização não vê o cartão de outro (403)" ($r.StatusCode -eq 403)
-            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
-            Check "Educador de Evangelização vê o próprio cartão (200)" ($r.StatusCode -eq 200)
 
             # Expositor/Preletor (o caso que motivou a mudança de 2026-10-04): entrava direto num 403,
             # porque o login levava à listagem e ele não tem CONSULTA. Agora entra pelo próprio cartão
@@ -726,6 +790,12 @@ try {
             Check "Cartão do Expositor/Preletor abre e oferece Preleções na barra" ($r.StatusCode -eq 200 -and $r.Body -match "Preleções")
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
             Check "Expositor/Preletor cadastra preleção (200)" ($r.StatusCode -eq 200)
+            # Sem CONSULTA: o endereço de entrada leva ao próprio cartão, e o cartão de outro é 403.
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Sem consulta, a entrada leva ao próprio cartão" (
+                $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId/cartao$")
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
+            Check "Sem consulta, não vê o cartão de outro (403)" ($r.StatusCode -eq 403)
 
             # A outra ponta da separação perfil x função: é o perfil do acesso que torna a pessoa
             # staff, então função de Dirigente com perfil ASSISTIDO não libera módulo nenhum. Desde
@@ -783,7 +853,7 @@ try {
         $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId/nova-avaliacao"
         Check "Trabalhador não abre a própria avaliação (volta ao prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$meuId$")
 
-        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$meuId/avaliacao" -Form @{ data = "07/01/2024"; evolucao = "BOM" }
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$meuId/avaliacao" -Form @{ data = "07/01/2024"; evolucao = "BOM"; tratamentoProposto = $p2Id }
         Check "Trabalhador não registra a própria avaliação" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$meuId$")
 
         $avaliacoesProprias = Invoke-SqlScalar "SELECT count(*) FROM avaliacao WHERE assistido_id = $meuId;"

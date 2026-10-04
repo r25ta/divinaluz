@@ -17,13 +17,33 @@ public enum Permissao {
     /** Abrir a listagem de assistidos, o prontuário e o cartão de terceiros. */
     CONSULTA,
 
-    /** Cadastrar, editar, desativar/reativar um assistido, mudar dia/tratamento e criar o acesso. */
+    /**
+     * Dados cadastrais: cadastrar, editar os dados pessoais, desativar/reativar um assistido e criar
+     * ou editar o login dele. <strong>Não</strong> inclui mexer no tratamento (ver {@link #PRONTUARIO}).
+     */
     CADASTRO,
+
+    /**
+     * Dados do prontuário (2026-10-04): trocar o tratamento e o dia de assistência pelo prontuário.
+     * Separado de {@link #CADASTRO} porque a Recepcionista cadastra e edita dados pessoais, mas não
+     * altera o prontuário. O tratamento novo do ciclo normal vem da Avaliação/Entrevista.
+     */
+    PRONTUARIO,
 
     /** Painel da sessão: check-in, escala, recepção, cadastro rápido e marcação de presença. */
     SESSAO,
 
-    /** Fila de cartões retidos e registro de Avaliação/Entrevista. */
+    /**
+     * Registrar a Avaliação (2026-10-04, antes parte de {@link #ENTREVISTA}) e propor nela o novo
+     * tratamento. Quem tem esta ou {@link #ENTREVISTA} vê a fila de cartões retidos e o tratamento
+     * proposto enquanto o cartão aguarda a entrevista.
+     */
+    AVALIACAO,
+
+    /**
+     * Registrar a Entrevista: comunica ao assistido o tratamento proposto na Avaliação e devolve o
+     * cartão para "Em Tratamento".
+     */
     ENTREVISTA,
 
     /** Montar a escala de preleções (ver a escala é liberado a todos). */

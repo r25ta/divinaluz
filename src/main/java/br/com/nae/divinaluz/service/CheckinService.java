@@ -123,8 +123,30 @@ public class CheckinService {
                     + sessao.getData().format(FORMATO_DATA) + ").");
         }
         sessao.setEncerradaEm(null);
+        sessao.setEncerradaAutomaticamente(false);
         sessaoAssistenciaRepository.save(sessao);
         return abrirCheckin(sessaoId, hoje);
+    }
+
+    /**
+     * Encerramento automático (2026-10-05): a sessão pode ficar aberta até 23:59:59 do próprio dia; a
+     * que ninguém encerrou é encerrada pelo sistema, com esse horário. Chamado à meia-noite e na subida
+     * da aplicação (ver EncerramentoAutomaticoSessoes). Devolve quantas sessões foram encerradas.
+     */
+    @Transactional
+    public int encerrarSessoesVencidas(LocalDate hoje) {
+        var vencidas = sessaoAssistenciaRepository
+                .findByDataBeforeAndCheckinAbertoEmIsNotNullAndEncerradaEmIsNullAndCanceladaEmIsNull(hoje);
+        for (SessaoAssistencia sessao : vencidas) {
+            LocalDateTime fimDoDia = sessao.getData().atTime(23, 59, 59);
+            if (sessao.isCheckinAberto()) {
+                sessao.setCheckinFechadoEm(fimDoDia);
+            }
+            sessao.setEncerradaEm(fimDoDia);
+            sessao.setEncerradaAutomaticamente(true);
+            sessaoAssistenciaRepository.save(sessao);
+        }
+        return vencidas.size();
     }
 
     private SessaoAssistencia encerrar(SessaoAssistencia sessao) {

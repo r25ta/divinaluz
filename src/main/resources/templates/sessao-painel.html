@@ -30,6 +30,7 @@
                     <span class="dl-badge dl-badge-neutral" th:if="${sessao.encerrada}">
                         <i class="bi bi-lock-fill"></i>
                         Encerrada às <span th:text="${#temporals.format(sessao.encerradaEm, 'HH:mm')}">11:30</span>
+                        <th:block th:if="${sessao.encerradaAutomaticamente}">(automático)</th:block>
                     </span>
                     <form th:if="${sessao.editavel and !sessao.checkinAberto and sessao.data.equals(hoje)}"
                           th:action="@{/sessao/{id}/abrir(id=${sessao.id})}" method="post">
@@ -111,6 +112,9 @@
                 <div class="flex-grow-1">
                     <strong>Sessão encerrada</strong>
                     em <span th:text="${#temporals.format(sessao.encerradaEm, 'dd/MM/yyyy HH:mm')}"></span>
+                    <th:block th:if="${sessao.encerradaAutomaticamente}">
+                        <strong>pelo sistema</strong>, porque ninguém a encerrou até o fim do dia
+                    </th:block>
                     — <span th:text="${indicadores.totalPresentes}">0</span> presente(s):
                     <span th:text="${indicadores.efetivas}">0</span> em tratamento e
                     <span th:text="${indicadores.ouvintes}">0</span> ouvinte(s).

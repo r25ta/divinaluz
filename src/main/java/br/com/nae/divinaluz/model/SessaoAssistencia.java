@@ -60,6 +60,10 @@ public class SessaoAssistencia {
     @Column(name = "encerrada_em")
     private LocalDateTime encerradaEm;
 
+    /** Encerrada pelo sistema às 23:59:59 do dia, porque ninguém a encerrou (V39). */
+    @Column(name = "encerrada_automaticamente", nullable = false)
+    private boolean encerradaAutomaticamente = false;
+
     /** Semente do QR da sessão que muda a cada minuto (V37). Nunca vai para a tela. */
     @Column(name = "checkin_segredo", length = 64)
     @ToString.Exclude

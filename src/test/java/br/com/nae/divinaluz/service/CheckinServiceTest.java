@@ -86,6 +86,51 @@ class CheckinServiceTest {
     }
 
     @Test
+    void sessaoQueNinguemEncerrouEhEncerradaPeloSistemaAs235959DoDia() {
+        sessaoDeDomingo.setCheckinAbertoEm(DOMINGO.atTime(7, 40));
+        when(sessaoAssistenciaRepository
+                .findByDataBeforeAndCheckinAbertoEmIsNotNullAndEncerradaEmIsNullAndCanceladaEmIsNull(DOMINGO.plusDays(1)))
+                .thenReturn(java.util.List.of(sessaoDeDomingo));
+
+        int encerradas = checkinService.encerrarSessoesVencidas(DOMINGO.plusDays(1));
+
+        assertEquals(1, encerradas);
+        assertEquals(DOMINGO.atTime(23, 59, 59), sessaoDeDomingo.getEncerradaEm());
+        assertEquals(DOMINGO.atTime(23, 59, 59), sessaoDeDomingo.getCheckinFechadoEm());
+        assertTrue(sessaoDeDomingo.isEncerradaAutomaticamente());
+        assertTrue(!sessaoDeDomingo.isCheckinAberto());
+        verify(sessaoAssistenciaRepository).save(sessaoDeDomingo);
+    }
+
+    @Test
+    void encerramentoAutomaticoSoOlhaDiasAnteriores() {
+        // A busca é por data ANTERIOR a hoje: a sessão de hoje fica aberta até 23:59:59.
+        when(sessaoAssistenciaRepository
+                .findByDataBeforeAndCheckinAbertoEmIsNotNullAndEncerradaEmIsNullAndCanceladaEmIsNull(DOMINGO))
+                .thenReturn(java.util.List.of());
+
+        assertEquals(0, checkinService.encerrarSessoesVencidas(DOMINGO));
+        verify(sessaoAssistenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void reabrirNoDiaDesfazAMarcaDeEncerramentoAutomatico() {
+        sessaoDeDomingo.setCheckinAbertoEm(DOMINGO.atTime(7, 40));
+        sessaoDeDomingo.setCheckinFechadoEm(DOMINGO.atTime(23, 59, 59));
+        sessaoDeDomingo.setEncerradaEm(DOMINGO.atTime(23, 59, 59));
+        sessaoDeDomingo.setEncerradaAutomaticamente(true);
+        when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
+        when(sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull())
+                .thenReturn(Optional.empty());
+        when(sessaoAssistenciaRepository.save(any(SessaoAssistencia.class))).thenAnswer(i -> i.getArgument(0));
+
+        checkinService.reabrirSessao(10L, DOMINGO);
+
+        assertTrue(!sessaoDeDomingo.isEncerradaAutomaticamente());
+        assertTrue(sessaoDeDomingo.isCheckinAberto());
+    }
+
+    @Test
     void checkinSoAbreNaDataDaSessao() {
         when(sessaoAssistenciaRepository.findById(10L)).thenReturn(Optional.of(sessaoDeDomingo));
 

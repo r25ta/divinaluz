@@ -207,7 +207,8 @@ ficam no menu **Prontuário** (no celular, atrás do botão ☰).
 3. Marcou alguém por engano: na lista **Assistidos Presentes**, o ícone de lixeira remove a presença e o
    cartão da pessoa é recalculado.
 4. Ao terminar o trabalho: **Encerrar sessão**. Isso consolida o dia — presenças, escala e preletor não
-   mudam mais. Se encerrou cedo demais, **Reabrir sessão** funciona só no próprio dia.
+   mudam mais. Se encerrou cedo demais, **Reabrir sessão** funciona só no próprio dia. Se ninguém
+   encerrar, o sistema encerra sozinho, valendo 23:59:59 do dia da sessão (aparece como "automático").
 5. A casa não abriu (feriado, chuva): **Cancelar ou excluir esta sessão** → informe o motivo. Essa semana
    não conta como falta na regra dos 21 dias.
 

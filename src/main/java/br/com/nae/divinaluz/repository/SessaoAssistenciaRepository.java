@@ -20,4 +20,7 @@ public interface SessaoAssistenciaRepository extends JpaRepository<SessaoAssiste
     // Janela de check-in aberta: a abertura só é permitida na própria data e fecha a janela
     // esquecida de outra data, então na prática isto devolve no máximo uma linha.
     Optional<SessaoAssistencia> findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull();
+
+    /** Sessões de dias anteriores que foram abertas e ninguém encerrou (encerramento automático). */
+    List<SessaoAssistencia> findByDataBeforeAndCheckinAbertoEmIsNotNullAndEncerradaEmIsNullAndCanceladaEmIsNull(LocalDate hoje);
 }

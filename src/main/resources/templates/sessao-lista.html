@@ -99,16 +99,14 @@
                                             <i class="bi bi-broadcast"></i> Aberta
                                         </span>
                                         <span class="dl-badge dl-badge-neutral" th:if="${s.encerrada}"
-                                              th:title="'Encerrada em ' + ${#temporals.format(s.encerradaEm, 'dd/MM/yyyy HH:mm')}">
-                                            <i class="bi bi-lock-fill"></i> Encerrada
+                                              th:title="'Encerrada em ' + ${#temporals.format(s.encerradaEm, 'dd/MM/yyyy HH:mm')}
+                                                        + (${s.encerradaAutomaticamente} ? ' pelo sistema (ninguém encerrou até o fim do dia)' : '')">
+                                            <i class="bi bi-lock-fill"></i> Encerrada<th:block th:if="${s.encerradaAutomaticamente}"> (automático)</th:block>
                                         </span>
-                                        <span class="dl-badge dl-badge-warning"
-                                              th:if="${!s.checkinAberto and !s.encerrada and s.data.isBefore(hoje)}"
-                                              title="Ficou sem encerrar: abra o painel para conferir">
-                                            Não encerrada
-                                        </span>
+                                        <!--/* Desde o encerramento automático (2026-10-05), sessão aberta de dia anterior
+                                               não fica mais "Não encerrada": quem sobra aqui nunca foi aberta. */-->
                                         <span class="dl-badge dl-badge-neutral"
-                                              th:if="${!s.checkinAberto and !s.encerrada and !s.data.isBefore(hoje)}">
+                                              th:if="${!s.checkinAberto and !s.encerrada}">
                                             Não aberta
                                         </span>
                                     </th:block>

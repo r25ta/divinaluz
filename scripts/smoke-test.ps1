@@ -995,9 +995,11 @@ try {
         $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-celular-$PID.txt"
         if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
         try {
-            # Sem login no celular: vai para o login e, depois de entrar, VOLTA para a confirmação.
+            # Sem login e sem celular vinculado (2026-10-05): a tela oferece entrar ou vincular na
+            # recepção — e, depois de entrar, VOLTA para a confirmação.
             $r = Invoke-CurlForm -Url $urlPresenca
-            Check "QR da sessão sem login leva ao login" ($r.StatusCode -eq 302 -and $r.Location -match "/login")
+            Check "QR da sessão sem login nem vínculo oferece entrar ou vincular o celular" (
+                $r.StatusCode -eq 200 -and $r.Body -match "ainda não está vinculado" -and $r.Body -match "Entrar com login")
             # Login na MESMA sessão do celular (o Login-Como zera o cookie jar, e com ele o pedido
             # guardado — que é justamente o que leva de volta à confirmação).
             $paginaLogin = Invoke-CurlForm -Url "$BaseUrl/login"
@@ -1007,7 +1009,8 @@ try {
                 $r.StatusCode -eq 302 -and $r.Location -match "/presenca/$sessaoHojeId/")
 
             $r = Invoke-CurlForm -Url $urlPresenca
-            Check "Celular mostra quem é e o botão de confirmar" ($r.Body -match "Confirmar minha presença" -and $r.Body -match [regex]::Escape($nomeEditado))
+            Check "Celular mostra quem é e o botão de confirmar" ($r.Body -match "Confirmar presença" -and $r.Body -match [regex]::Escape($nomeEditado))
+            Check "Logado, oferece lembrar o celular para as próximas vezes" ($r.Body -match 'name="lembrar"')
             $presencasAntes = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE;"
             Check "Só abrir o link (GET) não marca presença" ($presencasAntes -eq "0")
 
@@ -1045,6 +1048,58 @@ try {
             $script:CookieJar = $jarRecepcao
             $script:CsrfToken = $csrfRecepcao
         }
+
+        # 16b-Celular. Celular vinculado ao cartão (2026-10-05): a recepção mostra o QR de vínculo no
+        # prontuário, a pessoa vincula o celular uma vez e passa a marcar presença SEM login.
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        Check "Prontuário oferece vincular celular (nenhum vinculado ainda)" (
+            $r.Body -match "Vincular Celular" -and $r.Body -match "Celular p/ Presença[\s\S]*?Nenhum")
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$assistidoId/celular/convite"
+        $urlConvite = $null
+        if ($r.Body -match 'id="linkConvite"[^>]*>([^<]+)<') { $urlConvite = $Matches[1].Trim() }
+        Check "Recepção gera o QR de vínculo (imagem + link)" (
+            $r.StatusCode -eq 200 -and $r.Body -match "data:image/png;base64," -and $urlConvite -match "/presenca/vincular/")
+        $hashConvite = Invoke-SqlScalar "SELECT COALESCE(convite_celular_hash, '') FROM assistido WHERE id = $assistidoId;"
+        Check "Só o hash do convite vai para o banco" ($hashConvite.Length -eq 64 -and $urlConvite -notmatch $hashConvite)
+
+        $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-celular-$PID.txt"
+        if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+        try {
+            $r = Invoke-CurlForm -Url $urlConvite
+            $script:CsrfToken = Extract-Csrf $r.Body
+            Check "Celular sem login abre o convite e vê de quem é o cartão" (
+                $r.StatusCode -eq 200 -and $r.Body -match "Vincular este celular" -and $r.Body -match [regex]::Escape($nomeEditado))
+            $r = Invoke-CurlForm -Method POST -Url $urlConvite
+            $vinculados = Invoke-SqlScalar "SELECT count(*) FROM celular_vinculado WHERE assistido_id = $assistidoId;"
+            Check "Vincular grava o vínculo e o cookie do celular" (
+                $r.Body -match "Celular vinculado!" -and $vinculados -eq "1" -and (Get-Content $script:CookieJar -Raw) -match "dl-celular")
+            $r = Invoke-CurlForm -Method POST -Url $urlConvite
+            Check "O convite é de uso único" ($r.Body -match "não vale mais")
+
+            # Sem login nenhum neste jar: quem identifica é o cookie do celular.
+            $r = Invoke-CurlForm -Url $urlPresenca
+            $script:CsrfToken = Extract-Csrf $r.Body
+            Check "Celular vinculado vê o próprio nome e confirma sem login" (
+                $r.Body -match "Confirmar presença" -and $r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -notmatch 'name="lembrar"')
+            $r = Invoke-CurlForm -Method POST -Url $urlPresenca
+            Check "Celular vinculado chega à regra do cartão sem login (já estava marcada)" ($r.Body -match "já estava marcada")
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
+            Check "O celular vinculado NÃO abre o cartão nem o sistema (pede login)" ($r.StatusCode -eq 302 -and $r.Location -match "/login")
+        } finally {
+            if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
+            $script:CookieJar = $jarRecepcao
+            $script:CsrfToken = $csrfRecepcao
+        }
+
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        Check "Prontuário mostra o celular vinculado" ($r.Body -match "Celular p/ Presença[\s\S]*?1 vinculado")
+        Invoke-CurlForm -Method POST -Url "$BaseUrl/prontuario/$assistidoId/celular/desvincular" | Out-Null
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+        $vinculados = Invoke-SqlScalar "SELECT count(*) FROM celular_vinculado WHERE assistido_id = $assistidoId;"
+        Check "Recepção desvincula os celulares da pessoa" ($vinculados -eq "0" -and $r.Body -match "celular desvinculado")
+        $script:CsrfToken = Extract-Csrf $r.Body
 
         # 16c. Encerrar sessão: consolida o dia. Depois disso nada se marca nem se remove, o QR da
         # sessão para de funcionar, e "Reabrir" só no próprio dia.

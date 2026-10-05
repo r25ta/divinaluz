@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Vincular Celular')}"></head>
+<body>
+<div class="dl-app">
+    <!--/* QR de vínculo que a recepção mostra à pessoa (CelularController). Abre em outra aba, sem
+           navbar, como o QR da sessão: quem olha é o assistido. Uso único e 10 minutos. */-->
+    <main class="dl-main">
+        <div class="dl-container-narrow text-center">
+            <span class="dl-eyebrow">Vincular celular</span>
+            <h1 class="h4 mb-1" th:text="${assistido.nome}">Nome</h1>
+            <p class="mb-3">Escaneie com a câmera do <strong>seu</strong> celular</p>
+
+            <div class="dl-card d-inline-block">
+                <div class="dl-card-body p-3">
+                    <img th:src="${qrDataUri}" alt="QR code para vincular o celular ao cartão"
+                         style="width: min(78vw, 360px); height: auto; image-rendering: pixelated;">
+                </div>
+            </div>
+
+            <ol class="text-start mx-auto mt-3" style="max-width: 420px;">
+                <li>Aponte a câmera do celular para o código e abra o link.</li>
+                <li>Toque em <strong>Vincular este celular</strong>.</li>
+                <li>Pronto: nas próximas sessões, escaneie o QR da recepção e confirme a presença — sem login.</li>
+            </ol>
+            <p class="dl-muted small">
+                Vale por <span th:text="${validadeMinutos}">10</span> minutos e uma única vez. O celular só marca a
+                presença desta pessoa; não dá acesso ao prontuário nem ao resto do sistema.
+                <th:block th:if="${vinculados > 0}">
+                    Ela já tem <span th:text="${vinculados}">1</span> celular(es) vinculado(s); este será mais um.
+                </th:block>
+            </p>
+
+            <details class="small mb-2">
+                <summary class="dl-muted">A câmera não leu? Mostrar o link</summary>
+                <code class="d-block mt-2 text-break" id="linkConvite" th:text="${url}">link</code>
+            </details>
+
+            <button type="button" class="btn btn-outline-teal btn-sm mt-2" onclick="window.close()">
+                <i class="bi bi-x-lg"></i> Fechar
+            </button>
+        </div>
+    </main>
+</div>
+</body>
+</html>

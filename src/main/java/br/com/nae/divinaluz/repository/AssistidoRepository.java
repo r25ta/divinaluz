@@ -19,6 +19,7 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     List<Assistido> findByLoginIsNotNullOrderByLoginAsc();
     Optional<Assistido> findByCodigoCartao(String codigoCartao);
     Optional<Assistido> findByTokenDefinicaoSenha(String tokenDefinicaoSenha);
+    Optional<Assistido> findByConviteCelularHash(String conviteCelularHash);
 
     // Entrada por código de e-mail (ver CodigoAcessoService): ignora caixa porque o login é o e-mail
     // digitado no cadastro, e quem for pedir o código vai digitá-lo de novo, sem garantia de bater a

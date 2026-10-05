@@ -47,9 +47,11 @@ public class SecurityConfig {
                         // ver o cartão DE OUTRO é checado no ProntuarioController
                         // (exigirAcessoAoCartao), que exige CONSULTA.
                         .requestMatchers("/prontuario/*/cartao", "/prontuario/*/cartao/qrcode.png").authenticated()
-                        // QR da sessão escaneado pelo celular (2026-10-04): qualquer autenticado marca a
-                        // PRÓPRIA presença — a identidade vem do login, não da URL (PresencaController).
-                        .requestMatchers("/presenca/**").authenticated()
+                        // QR da sessão escaneado pelo celular (2026-10-04): cada um marca a PRÓPRIA
+                        // presença. Público desde 2026-10-05 porque a identidade pode vir do login OU do
+                        // celular vinculado ao cartão (cookie) — e sem nenhum dos dois o
+                        // PresencaController não marca nada. Inclui o vínculo do celular (/presenca/vincular).
+                        .requestMatchers("/presenca/**").permitAll()
                         // Ver a escala é de todos (inclusive do perfil ASSISTIDO); montá-la, não.
                         .requestMatchers(HttpMethod.GET, "/prelecao").authenticated()
                         .requestMatchers("/prelecao/**").hasAuthority(Permissao.PRELECAO.getAuthority())
@@ -73,6 +75,7 @@ public class SecurityConfig {
                         .requestMatchers("/novo", "/salvar", "/prontuario/*/editar",
                                         "/prontuario/*/desativar", "/prontuario/*/reativar",
                                         "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo",
+                                        "/prontuario/*/celular/**",
                                         "/acesso/verificar")
                                 .hasAuthority(Permissao.CADASTRO.getAuthority())
                         // "/" é o endereço que se abre ao chegar (inclusive já lembrado pelo remember-me):

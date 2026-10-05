@@ -26,6 +26,16 @@
                                senha do sistema — não repetir o markup dele aqui. */-->
                         <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
                     </div>
+                    <!--/* Até 2026-10-05 só a entrada por código tinha esta opção, e quem entra por senha
+                           (a maioria, sem e-mail) caía no login a cada visita. Desmarcado por padrão aqui:
+                           a senha é digitada também no computador da recepção. */-->
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" value="true" id="remember-me" name="remember-me">
+                        <label class="form-check-label" for="remember-me">
+                            Lembrar deste aparelho
+                            <span class="d-block small text-muted">Marque só no seu celular, nunca em computador compartilhado.</span>
+                        </label>
+                    </div>
                     <button type="submit" class="btn btn-teal text-white w-100">
                         <i class="bi bi-box-arrow-in-right"></i> Entrar
                     </button>

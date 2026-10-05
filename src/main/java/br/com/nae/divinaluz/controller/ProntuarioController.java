@@ -22,6 +22,7 @@ import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import br.com.nae.divinaluz.service.AcessoService;
+import br.com.nae.divinaluz.service.CelularVinculadoService;
 import br.com.nae.divinaluz.service.CheckinService;
 import br.com.nae.divinaluz.service.CodigoAcessoService;
 import br.com.nae.divinaluz.service.QrCodeService;
@@ -84,6 +85,7 @@ public class ProntuarioController {
     private final CartaoEncerradoRepository cartaoEncerradoRepository;
 
     private final CodigoAcessoService codigoAcessoService;
+    private final CelularVinculadoService celularVinculadoService;
 
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
@@ -93,8 +95,10 @@ public class ProntuarioController {
             CheckinService checkinService, QrCodeService qrCodeService,
             AcessoService acessoService,
             CartaoEncerradoRepository cartaoEncerradoRepository,
-            CodigoAcessoService codigoAcessoService) {
+            CodigoAcessoService codigoAcessoService,
+            CelularVinculadoService celularVinculadoService) {
         this.codigoAcessoService = codigoAcessoService;
+        this.celularVinculadoService = celularVinculadoService;
         this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.avaliacaoRepository = avaliacaoRepository;
@@ -562,6 +566,8 @@ public class ProntuarioController {
         model.addAttribute("avaliacaoPendenteEntrevista",
                 avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(id).orElse(null));
         model.addAttribute("proprioRegistro", ehOProprioRegistro(id, usuarioLogado));
+        // Celulares que marcam a presença desta pessoa pelo QR da sessão, sem login (CelularController).
+        model.addAttribute("celularesVinculados", celularVinculadoService.quantosVinculados(id));
 
         return "prontuario"; // Nome do novo arquivo HTML
     }

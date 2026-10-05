@@ -196,9 +196,14 @@ ficam no menu **Prontuário** (no celular, atrás do botão ☰).
    - **busca por nome** no painel da sessão;
    - a recepção escaneia o **QR do cartão** da pessoa;
    - **QR da sessão** (botão no painel, abre numa nova aba): deixe essa tela num tablet ou monitor de
-     frente para a fila; cada pessoa escaneia com o celular, entra com o próprio login se pedir e toca em
-     **Confirmar minha presença**. O código muda a cada minuto, para uma foto dele não servir de casa.
-     Cartão retido, expirado ou de outro dia: a pessoa é orientada a procurar a recepção.
+     frente para a fila; cada pessoa escaneia com o celular e toca em **Confirmar presença**. O código
+     muda a cada minuto, para uma foto dele não servir de casa. Cartão retido, expirado ou de outro dia:
+     a pessoa é orientada a procurar a recepção.
+   - **Sem login, com o celular vinculado:** na primeira vez, abra o prontuário da pessoa e toque em
+     **Vincular Celular** — abre um QR numa nova aba; ela escaneia com o próprio celular e confirma. Daí em
+     diante, aquele celular marca a presença dela sem login (e só isso: não abre o sistema). Vale para a
+     família toda no mesmo celular — vincule cada um. Celular perdido: **Desvincular Celulares** no prontuário.
+     Quem tem login também pode vincular sozinho, marcando "Este celular é meu" ao confirmar a presença.
 3. Marcou alguém por engano: na lista **Assistidos Presentes**, o ícone de lixeira remove a presença e o
    cartão da pessoa é recalculado.
 4. Ao terminar o trabalho: **Encerrar sessão**. Isso consolida o dia — presenças, escala e preletor não

@@ -116,6 +116,15 @@ public class Assistido {
     @Column(name = "codigo_acesso_enviado_em")
     private LocalDateTime codigoAcessoEnviadoEm;
 
+    // Convite para vincular um celular ao cartão (ver CelularVinculadoService): a recepção mostra um
+    // QR com ele, de uso único e 10 minutos. Guarda o SHA-256, nunca o convite.
+    @ToString.Exclude
+    @Column(name = "convite_celular_hash", length = 64)
+    private String conviteCelularHash;
+
+    @Column(name = "convite_celular_expira_em")
+    private LocalDateTime conviteCelularExpiraEm;
+
     @Transient
     public Integer getIdade() {
         return dataNascimento != null ? Period.between(dataNascimento, LocalDate.now()).getYears() : null;

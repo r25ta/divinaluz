@@ -22,10 +22,16 @@
                         <a th:if="${podePrelecao}" th:href="@{/prelecao/novo}" class="btn btn-teal btn-sm text-white">
                             <i class="bi bi-plus-lg"></i> Nova Preleção
                         </a>
+                        <a th:if="${podePrelecao}" th:href="@{/prelecao/convidados}" class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-person-badge"></i> Preletores convidados
+                        </a>
                     </div>
                 </div>
             </div>
 
+            <div class="alert alert-success" th:if="${sucesso}">
+                <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
+            </div>
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
             </div>
@@ -79,7 +85,8 @@
                                 <div class="tema" th:text="${item.prelecao.tema}">Tema da preleção</div>
                                 <div class="dl-muted small">
                                     <i class="bi bi-person-badge"></i>
-                                    <span th:text="${item.prelecao.preletor.assistido.nome}">Preletor</span>
+                                    <span th:text="${item.prelecao.nomePreletor}">Preletor</span>
+                                    <span class="dl-badge dl-badge-info" th:if="${item.prelecao.preletorConvidado}">Convidado</span>
                                     <span class="mx-1">·</span>
                                     <span th:text="${item.prelecao.dataApresentacao.dayOfWeek.name() == 'SUNDAY' ? 'Domingo, 08h' : 'Terça-feira, 19h'}">Domingo, 08h</span>
                                 </div>
@@ -107,6 +114,10 @@
                     <i class="bi bi-check-circle-fill"></i> Realizadas
                     <span class="dl-filtro-contagem" th:text="${totalRealizadas}">0</span>
                 </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="CANCELADA" th:if="${totalCanceladas > 0}">
+                    <i class="bi bi-x-octagon-fill"></i> Canceladas
+                    <span class="dl-filtro-contagem" th:text="${totalCanceladas}">0</span>
+                </button>
             </div>
 
             <div class="dl-card">
@@ -124,26 +135,31 @@
                             </thead>
                             <tbody>
                             <tr th:each="item : ${escala}" class="linha-prelecao"
-                                th:classappend="${item.situacao.name() == 'REALIZADA' ? 'linha-realizada' : (item.situacao.name() == 'ESTA_SEMANA' ? 'linha-semana' : '')}"
-                                th:attr="data-situacao=${item.situacao.name()},data-busca=${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy') + ' ' + item.prelecao.preletor.assistido.nome + ' ' + item.prelecao.tema}">
+                                th:classappend="${item.situacao.name() == 'REALIZADA' or item.situacao.name() == 'CANCELADA' ? 'linha-realizada' : (item.situacao.name() == 'ESTA_SEMANA' ? 'linha-semana' : '')}"
+                                th:attr="data-situacao=${item.situacao.name()},data-busca=${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy') + ' ' + item.prelecao.nomePreletor + ' ' + item.prelecao.tema}">
                                 <td>
                                     <span class="dl-badge" th:classappend="${item.situacao.badgeClasse}"
                                           th:title="${item.situacao.label}">
                                         <i class="bi" th:classappend="${item.situacao.icone}"></i>
                                         <span th:text="${item.situacao.label}">Situação</span>
                                     </span>
+                                    <div class="dl-muted small mt-1" th:if="${item.prelecao.motivoCancelamento}"
+                                         th:text="${item.prelecao.motivoCancelamento}">motivo</div>
                                 </td>
                                 <td class="fw-semibold text-nowrap">
                                     <span th:text="${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy')}"></span>
                                     <div class="dl-muted small"
                                          th:text="${item.prelecao.dataApresentacao.dayOfWeek.name() == 'SUNDAY' ? 'Domingo, 08h' : 'Terça-feira, 19h'}">Domingo, 08h</div>
                                 </td>
-                                <td th:text="${item.prelecao.preletor.assistido.nome}"></td>
+                                <td>
+                                    <span th:text="${item.prelecao.nomePreletor}"></span>
+                                    <span class="dl-badge dl-badge-info" th:if="${item.prelecao.preletorConvidado}">Convidado</span>
+                                </td>
                                 <td th:text="${item.prelecao.tema}"></td>
                                 <td class="text-center" th:if="${podePrelecao or podeSessao}">
                                     <div class="d-flex justify-content-center gap-2">
                                         <!-- A sessão de hoje (check-in, escala, indicadores) fica no painel da Sessão. -->
-                                        <form th:if="${podeSessao and item.prelecao.dataApresentacao.equals(hoje)}"
+                                        <form th:if="${podeSessao and item.prelecao.dataApresentacao.equals(hoje) and !item.prelecao.cancelada}"
                                               th:action="@{/sessao}" method="post">
                                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                             <input type="hidden" name="data" th:value="${#temporals.format(item.prelecao.dataApresentacao, 'dd/MM/yyyy')}">
@@ -151,12 +167,29 @@
                                                 <i class="bi bi-speedometer2"></i> Sessão
                                             </button>
                                         </form>
-                                        <a th:if="${podePrelecao}" th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${item.prelecao.id})}" class="btn btn-outline-teal btn-sm">
+                                        <a th:if="${podePrelecao}" th:href="@{/prelecao/{prelecaoId}/editar(prelecaoId=${item.prelecao.id})}"
+                                           class="btn btn-outline-teal btn-sm" title="Alterar">
                                             <i class="bi bi-pencil"></i>
                                         </a>
+                                        <!--/* Cancelar: fica na escala com o motivo (pedido no prompt) e libera a data. */-->
+                                        <form th:if="${podePrelecao and !item.prelecao.cancelada}" class="dl-form-cancelar-prelecao"
+                                              th:action="@{/prelecao/{prelecaoId}/cancelar(prelecaoId=${item.prelecao.id})}" method="post">
+                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                            <input type="hidden" name="motivo" value="">
+                                            <button type="submit" class="btn btn-outline-warning btn-sm" title="Cancelar">
+                                                <i class="bi bi-x-octagon"></i>
+                                            </button>
+                                        </form>
+                                        <form th:if="${podePrelecao and item.prelecao.cancelada}"
+                                              th:action="@{/prelecao/{prelecaoId}/reativar(prelecaoId=${item.prelecao.id})}" method="post">
+                                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                            <button type="submit" class="btn btn-outline-teal btn-sm" title="Reativar">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        </form>
                                         <form th:if="${podePrelecao}" th:action="@{/prelecao/{prelecaoId}/excluir(prelecaoId=${item.prelecao.id})}" method="post" onsubmit="return confirm('Deseja excluir esta preleção?');">
                                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Excluir">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </form>
@@ -202,6 +235,18 @@
         }
 
         if (busca) busca.addEventListener('input', aplicar);
+
+        // Cancelar pede o motivo (opcional); "Cancelar" no prompt desiste.
+        document.querySelectorAll('.dl-form-cancelar-prelecao').forEach(function (form) {
+            form.addEventListener('submit', function (evento) {
+                var motivo = window.prompt('Cancelar esta preleção? Ela fica na escala como cancelada e a data fica livre.\n\nMotivo (opcional):', '');
+                if (motivo === null) {
+                    evento.preventDefault();
+                    return;
+                }
+                form.querySelector('input[name="motivo"]').value = motivo;
+            });
+        });
 
         chips.forEach(function (chip) {
             chip.addEventListener('click', function () {

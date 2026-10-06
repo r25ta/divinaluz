@@ -73,8 +73,11 @@ public class SessaoService {
         this.checkinService = checkinService;
     }
 
-    /** Preletor e tema efetivos da sessão: o da escala de preleções ou o substituto emergencial. */
-    public record PreletorDaSessao(Prelecao prelecaoDaEscala, Trabalhador preletor, String tema,
+    /**
+     * Preletor e tema efetivos da sessão: o da escala de preleções ou o substituto emergencial. O
+     * preletor vai pelo nome porque, desde a V40, o da escala pode ser um convidado (não trabalhador).
+     */
+    public record PreletorDaSessao(Prelecao prelecaoDaEscala, String preletor, String tema,
             boolean substituido) {}
 
     /** Uma posição da escala com quem está escalado nela e quantos faltam para o mínimo. */
@@ -220,11 +223,12 @@ public class SessaoService {
     // ---------------------------------------------------------------- preletor
 
     public PreletorDaSessao preletorDaSessao(SessaoAssistencia sessao) {
-        Prelecao daEscala = prelecaoRepository.findByDataApresentacao(sessao.getData()).orElse(null);
+        Prelecao daEscala = prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(sessao.getData()).orElse(null);
         Trabalhador substituto = sessao.getPreletorSubstituto();
         String temaSubstituto = preenchido(sessao.getTemaSubstituto()) ? sessao.getTemaSubstituto() : null;
 
-        Trabalhador preletor = substituto != null ? substituto : (daEscala != null ? daEscala.getPreletor() : null);
+        String preletor = substituto != null ? substituto.getAssistido().getNome()
+                : (daEscala != null ? daEscala.getNomePreletor() : null);
         String tema = temaSubstituto != null ? temaSubstituto : (daEscala != null ? daEscala.getTema() : null);
         return new PreletorDaSessao(daEscala, preletor, tema, substituto != null || temaSubstituto != null);
     }

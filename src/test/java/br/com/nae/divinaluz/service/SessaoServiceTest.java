@@ -227,21 +227,37 @@ class SessaoServiceTest {
     // ------------------------------------------------------------ preletor
 
     @Test
+    void preletorConvidadoDaEscalaApareceNaSessao() {
+        br.com.nae.divinaluz.model.PreletorConvidado convidado = new br.com.nae.divinaluz.model.PreletorConvidado();
+        convidado.setNome("Divaldo Convidado");
+        Prelecao daEscala = new Prelecao();
+        daEscala.setDataApresentacao(DOMINGO);
+        daEscala.setConvidado(convidado);
+        daEscala.setTema("Caridade");
+        when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(DOMINGO)).thenReturn(Optional.of(daEscala));
+
+        SessaoService.PreletorDaSessao preletor = sessaoService.preletorDaSessao(sessao);
+
+        assertEquals("Divaldo Convidado", preletor.preletor());
+        assertEquals("Caridade", preletor.tema());
+    }
+
+    @Test
     void preletorDaEscalaValeAteUmaTrocaEmergencial() {
         Prelecao daEscala = new Prelecao();
         daEscala.setDataApresentacao(DOMINGO);
         daEscala.setPreletor(trabalhador(30L, "Paulo"));
         daEscala.setTema("Evangelho no Lar");
-        when(prelecaoRepository.findByDataApresentacao(DOMINGO)).thenReturn(Optional.of(daEscala));
+        when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(DOMINGO)).thenReturn(Optional.of(daEscala));
 
         SessaoService.PreletorDaSessao semTroca = sessaoService.preletorDaSessao(sessao);
-        assertEquals("Paulo", semTroca.preletor().getAssistido().getNome());
+        assertEquals("Paulo", semTroca.preletor());
         assertEquals("Evangelho no Lar", semTroca.tema());
         assertFalse(semTroca.substituido());
 
         sessao.setPreletorSubstituto(trabalhador(31L, "Kalvin"));
         SessaoService.PreletorDaSessao comTroca = sessaoService.preletorDaSessao(sessao);
-        assertEquals("Kalvin", comTroca.preletor().getAssistido().getNome());
+        assertEquals("Kalvin", comTroca.preletor());
         assertEquals("Evangelho no Lar", comTroca.tema(), "sem tema novo, mantém o da escala");
         assertTrue(comTroca.substituido());
         assertSame(daEscala, comTroca.prelecaoDaEscala());

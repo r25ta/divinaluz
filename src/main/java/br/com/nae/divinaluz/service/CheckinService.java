@@ -317,7 +317,7 @@ public class CheckinService {
         SessaoTratamento nova = new SessaoTratamento();
         nova.setAssistido(assistido);
         nova.setDataConsulta(sessao.getData());
-        nova.setPrelecao(prelecaoRepository.findByDataApresentacao(sessao.getData()).orElse(null));
+        nova.setPrelecao(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(sessao.getData()).orElse(null));
         return nova;
     }
 

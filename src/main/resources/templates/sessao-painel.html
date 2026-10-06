@@ -462,10 +462,12 @@
                         <div class="dl-card-body">
                             <div th:if="${preletor.preletor != null or preletor.tema != null}">
                                 <div class="fw-semibold"
-                                     th:text="${preletor.preletor != null ? preletor.preletor.assistido.nome : 'Preletor não definido'}">Preletor</div>
+                                     th:text="${preletor.preletor ?: 'Preletor não definido'}">Preletor</div>
+                                <span class="dl-badge dl-badge-info"
+                                      th:if="${!preletor.substituido and preletor.prelecaoDaEscala != null and preletor.prelecaoDaEscala.preletorConvidado}">Convidado</span>
                                 <div class="dl-muted" th:text="${preletor.tema ?: 'Tema não definido'}">Tema</div>
                                 <div class="dl-muted small mt-1" th:if="${preletor.substituido and preletor.prelecaoDaEscala != null}">
-                                    Na escala: <span th:text="${preletor.prelecaoDaEscala.preletor.assistido.nome}"></span>
+                                    Na escala: <span th:text="${preletor.prelecaoDaEscala.nomePreletor}"></span>
                                     · <span th:text="${preletor.prelecaoDaEscala.tema}"></span>
                                 </div>
                             </div>

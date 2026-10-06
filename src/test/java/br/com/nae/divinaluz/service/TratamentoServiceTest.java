@@ -167,7 +167,7 @@ class TratamentoServiceTest {
         Prelecao prelecao = new Prelecao();
         prelecao.setDataApresentacao(data);
         prelecao.setTema("Evangelho no Lar");
-        when(prelecaoRepository.findByDataApresentacao(data)).thenReturn(Optional.of(prelecao));
+        when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(data)).thenReturn(Optional.of(prelecao));
 
         tratamentoService.iniciarTratamentoInicial(assistido, tratamento, data);
 

@@ -9,6 +9,9 @@ import java.util.Optional;
 
 public interface PrelecaoRepository extends JpaRepository<Prelecao, Long> {
     List<Prelecao> findAllByOrderByDataApresentacaoAsc();
-    Optional<Prelecao> findByDataApresentacao(LocalDate dataApresentacao);
 
+    /** A preleção (não cancelada) da data — a cancelada fica na escala, mas não vale para a sessão. */
+    Optional<Prelecao> findByDataApresentacaoAndCanceladaEmIsNull(LocalDate dataApresentacao);
+
+    boolean existsByConvidadoId(Long convidadoId);
 }

@@ -40,6 +40,6 @@ class SituacaoPrelecaoTest {
 
     @Test
     void dataNulaNaoQuebraAClassificacao() {
-        assertEquals(SituacaoPrelecao.REALIZADA, SituacaoPrelecao.de(null, HOJE));
+        assertEquals(SituacaoPrelecao.REALIZADA, SituacaoPrelecao.de((java.time.LocalDate) null, HOJE));
     }
 }

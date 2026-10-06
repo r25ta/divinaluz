@@ -13,7 +13,9 @@ public enum SituacaoPrelecao {
 
     ESTA_SEMANA("Esta semana", "dl-badge-teal", "bi-broadcast"),
     AGENDADA("Agendada", "dl-badge-info", "bi-calendar-event"),
-    REALIZADA("Realizada", "dl-badge-neutral", "bi-check-circle-fill");
+    REALIZADA("Realizada", "dl-badge-neutral", "bi-check-circle-fill"),
+    /** Não vem da data: é a preleção cancelada (V40), que fica na escala como registro. */
+    CANCELADA("Cancelada", "dl-badge-danger", "bi-x-octagon-fill");
 
     private final String label;
     private final String badgeClasse;
@@ -23,6 +25,10 @@ public enum SituacaoPrelecao {
         this.label = label;
         this.badgeClasse = badgeClasse;
         this.icone = icone;
+    }
+
+    public static SituacaoPrelecao de(Prelecao prelecao, LocalDate hoje) {
+        return prelecao.isCancelada() ? CANCELADA : de(prelecao.getDataApresentacao(), hoje);
     }
 
     public static SituacaoPrelecao de(LocalDate dataApresentacao, LocalDate hoje) {

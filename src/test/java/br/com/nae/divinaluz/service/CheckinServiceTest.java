@@ -315,7 +315,7 @@ class CheckinServiceTest {
     @Test
     void presencaPeloQrUsaADataDaSessaoAbertaEAPrelecaoDaMesmaData() {
         comSessaoAberta();
-        when(prelecaoRepository.findByDataApresentacao(DOMINGO)).thenReturn(Optional.of(prelecaoDeDomingo));
+        when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(DOMINGO)).thenReturn(Optional.of(prelecaoDeDomingo));
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
         when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
                 .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));
@@ -334,7 +334,7 @@ class CheckinServiceTest {
     @Test
     void sessaoSemPrelecaoCadastradaAindaCarimbaPresenca() {
         comSessaoAberta();
-        when(prelecaoRepository.findByDataApresentacao(DOMINGO)).thenReturn(Optional.empty());
+        when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(DOMINGO)).thenReturn(Optional.empty());
         when(assistidoRepository.findByCodigoCartao("codigo-do-cartao")).thenReturn(Optional.of(assistido));
         when(tratamentoService.registrarSessao(any(SessaoTratamento.class), eq(false)))
                 .thenAnswer(i -> new TratamentoService.ResultadoSessao(i.getArgument(0), false, false));

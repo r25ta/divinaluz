@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SessaoRepository extends JpaRepository<SessaoTratamento, Long> {
+    /** Há presença ligada a esta preleção? Então ela não pode ser excluída (só cancelada). */
+    boolean existsByPrelecaoId(Long prelecaoId);
+
     List<SessaoTratamento> findByAssistidoIdOrderByDataConsultaDesc(Long assistidoId);
     Optional<SessaoTratamento> findFirstByAssistidoIdOrderByDataConsultaDesc(Long assistidoId);
     long countByAssistidoId(Long assistidoId);

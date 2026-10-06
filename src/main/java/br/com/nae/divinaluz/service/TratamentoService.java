@@ -421,7 +421,7 @@ public class TratamentoService {
         primeiraSessao.setAssistido(assistido);
         primeiraSessao.setNumeroSerie(1);
         primeiraSessao.setDataConsulta(dataPrimeiraSessao);
-        Prelecao prelecao = prelecaoRepository.findByDataApresentacao(dataPrimeiraSessao).orElse(null);
+        Prelecao prelecao = prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(dataPrimeiraSessao).orElse(null);
         primeiraSessao.setPrelecao(prelecao);
         sessaoRepository.save(primeiraSessao);
     }

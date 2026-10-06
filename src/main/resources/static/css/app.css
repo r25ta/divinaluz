@@ -1736,3 +1736,43 @@ a {
   color: var(--dl-muted);
   text-align: center;
 }
+
+/* ---------- Envio único e toque (2026-10-05) ----------
+   .dl-enviando: o botão do formulário já enviado (envio-unico.js), para o segundo toque não gravar
+   de novo e a pessoa ver que algo está acontecendo. */
+.dl-enviando,
+.dl-enviando:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Telas de toque (celular, tablet): alvos de pelo menos 44px, o mínimo recomendado para o dedo.
+   Os botões pequenos (btn-sm, ~31px) servem bem ao mouse e ficam como estão no computador — a regra
+   vale só onde o ponteiro é o dedo, não pela largura da tela (um notebook com tela estreita continua
+   com mouse, e um tablet deitado é largo e continua com dedo). */
+@media (pointer: coarse) {
+  .btn-sm,
+  .btn-nav,
+  .dl-filtro-chip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+  }
+  .dl-btn-icone {
+    width: 44px;
+    height: 44px;
+  }
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+  .form-check-input {
+    width: 1.35em;
+    height: 1.35em;
+  }
+  .form-check-label {
+    padding-left: 0.2em;
+  }
+}

@@ -106,6 +106,24 @@ public class SessaoController {
         return "sessao-painel";
     }
 
+    /**
+     * Só os resultados da busca da recepção (2026-10-05): o painel filtra enquanto se digita, sem
+     * recarregar a página inteira — indicadores, escala e preletor não precisam ser recalculados a
+     * cada letra.
+     */
+    @GetMapping("/sessao/{sessaoId}/busca")
+    public String resultadosBusca(@PathVariable Long sessaoId, @RequestParam(required = false) String busca,
+            Model model) {
+        SessaoAssistencia sessao = sessaoService.buscar(sessaoId);
+        model.addAttribute("sessao", sessao);
+        model.addAttribute("busca", busca);
+        model.addAttribute("resultados", sessaoService.buscarAssistidos(busca));
+        model.addAttribute("presentesIds", sessaoService.indicadores(sessao).presentes().stream()
+                .map(p -> p.assistido().getId())
+                .collect(Collectors.toSet()));
+        return "sessao-painel :: resultadosBusca";
+    }
+
     /** Só o bloco de indicadores + presentes, que o painel recarrega sozinho a cada poucos segundos. */
     @GetMapping("/sessao/{sessaoId}/indicadores")
     public String indicadores(@PathVariable Long sessaoId, Model model) {
@@ -340,11 +358,11 @@ public class SessaoController {
             redirectAttributes.addFlashAttribute("homonimoNome", nome);
             redirectAttributes.addFlashAttribute("homonimoNascimento", dataNascimento);
             redirectAttributes.addFlashAttribute("homonimoSexo", sexo);
-            return voltarAoPainel(sessaoId, nome) + "#recepcao";
+            return voltarAoPainel(sessaoId, nome);
         } catch (RegraNegocioException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
         }
-        return voltarAoPainel(sessaoId, null) + "#recepcao";
+        return voltarAoPainel(sessaoId, null);
     }
 
     private void avisarResultado(CheckinService.ResultadoCheckin resultado, RedirectAttributes redirectAttributes) {
@@ -360,6 +378,9 @@ public class SessaoController {
         if (busca != null && !busca.isBlank()) {
             url.queryParam("busca", busca.trim());
         }
+        // Volta direto à recepção (2026-10-05): antes a página recarregava no topo, e no tablet a
+        // recepcionista rolava a tela de novo a cada pessoa da fila.
+        url.fragment("recepcao");
         return "redirect:" + url.buildAndExpand(sessaoId).encode().toUriString();
     }
 }

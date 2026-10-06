@@ -43,14 +43,9 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.time.LocalDate;
 import java.time.DayOfWeek;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/")
@@ -125,40 +120,11 @@ public class ProntuarioController {
                     .map(logado -> "redirect:/prontuario/" + logado.getId() + "/cartao")
                     .orElseThrow(() -> new AccessDeniedException("Acesso sem cadastro vinculado."));
         }
+        // Só a lista: até 2026-10-05 este método ainda montava o "checklist de frequência do mês" com
+        // UMA consulta ao banco por assistido, e a tela já não o mostrava (300 assistidos = 300
+        // consultas a cada abertura da listagem).
         List<Assistido> assistidos = mostrarInativos ? assistidoRepository.atendidos() : assistidoRepository.atendidosPorAtivo(true);
-
-        // Checklist de frequência do mês corrente (item 4): para cada assistido com dia de
-        // assistência definido, calcula as datas esperadas no mês (todas as terças ou domingos,
-        // conforme o caso) e marca quais delas já têm sessão registrada.
-        LocalDate hoje = LocalDate.now();
-        LocalDate inicioMes = hoje.withDayOfMonth(1);
-        LocalDate fimMes = hoje.withDayOfMonth(hoje.lengthOfMonth());
-
-        Map<Long, List<LocalDate>> diasEsperadosMes = new LinkedHashMap<>();
-        Map<Long, Set<LocalDate>> diasPresentesMes = new LinkedHashMap<>();
-
-        for (Assistido a : assistidos) {
-            if (a.getDiaFrequencia() == null) {
-                continue;
-            }
-            List<LocalDate> esperados = new ArrayList<>();
-            LocalDate data = inicioMes.with(TemporalAdjusters.nextOrSame(a.getDiaFrequencia().getDiaSemana()));
-            while (!data.isAfter(fimMes)) {
-                esperados.add(data);
-                data = data.plusWeeks(1);
-            }
-            diasEsperadosMes.put(a.getId(), esperados);
-
-            Set<LocalDate> presentes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(a.getId()).stream()
-                    .map(sessao -> sessao.getDataConsulta())
-                    .filter(d -> !d.isBefore(inicioMes) && !d.isAfter(fimMes))
-                    .collect(Collectors.toSet());
-            diasPresentesMes.put(a.getId(), presentes);
-        }
-
         model.addAttribute("assistidos", assistidos);
-        model.addAttribute("diasEsperadosMes", diasEsperadosMes);
-        model.addAttribute("diasPresentesMes", diasPresentesMes);
         model.addAttribute("mostrarInativos", mostrarInativos);
         return "index";
     }

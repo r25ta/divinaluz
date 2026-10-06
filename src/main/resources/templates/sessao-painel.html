@@ -65,13 +65,13 @@
                 </div>
             </div>
 
-            <div class="alert alert-success" th:if="${sucesso}">
+            <div class="alert alert-success dl-alerta-sessao" th:if="${sucesso}">
                 <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
             </div>
-            <div class="alert alert-warning" th:if="${aviso}">
+            <div class="alert alert-warning dl-alerta-sessao" th:if="${aviso}">
                 <i class="bi bi-info-circle-fill"></i> <span th:text="${aviso}"></span>
             </div>
-            <div class="alert alert-danger" th:if="${erro}">
+            <div class="alert alert-danger dl-alerta-sessao" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
                 <!-- Cartão expirado (21 dias): só a recepção decide reiniciar em P2. -->
                 <form th:if="${expiradoId != null and sessao.checkinAberto}" class="mt-2"
@@ -297,7 +297,10 @@
                                     disponíveis com a sessão aberta.</span>
                             </p>
 
-                            <form th:action="@{/sessao/{id}(id=${sessao.id})}" method="get" class="d-flex gap-2 mb-3">
+                            <!--/* Filtra enquanto se digita (fetch em /sessao/{id}/busca, só os resultados); o
+                                   botão continua para quem tecla Enter ou se o JS não carregar. */-->
+                            <form th:action="@{/sessao/{id}(id=${sessao.id})} + '#recepcao'" method="get" class="d-flex gap-2 mb-3"
+                                  id="formBuscaRecepcao" th:attr="data-url-busca=@{/sessao/{id}/busca(id=${sessao.id})}">
                                 <div class="dl-search flex-grow-1">
                                     <i class="bi bi-search"></i>
                                     <input type="search" name="busca" class="form-control" th:value="${busca}"
@@ -306,6 +309,7 @@
                                 <button type="submit" class="btn btn-teal text-white">Buscar</button>
                             </form>
 
+                            <div id="resultadosBusca" th:fragment="resultadosBusca">
                             <div th:if="${busca != null and !#strings.isEmpty(busca)}">
                                 <!-- Lista em cartões (não tabela): no celular os botões de ação precisam ficar visíveis sem rolar para o lado. -->
                                 <div class="dl-resultados" th:if="${not #lists.isEmpty(resultados)}">
@@ -388,6 +392,7 @@
                                     Ninguém encontrado com "<span th:text="${busca}"></span>" (digite ao menos 2 letras).
                                     Se é a primeira vez na casa, use o cadastro rápido abaixo.
                                 </p>
+                            </div>
                             </div>
 
                             <!-- Cadastro rápido: 1ª vez na casa -->
@@ -599,7 +604,57 @@
                 })
                 .catch(() => {});
         }
-        setInterval(atualizar, INTERVALO_MS);
+        // Com a aba escondida ou a tela do tablet apagada não há quem veja os números: pausa (poupa
+        // bateria e dados) e atualiza na hora em que a tela volta.
+        setInterval(() => { if (document.visibilityState === 'visible') atualizar(); }, INTERVALO_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') atualizar();
+        });
+    })();
+
+    // Voltando de uma ação da recepção (#recepcao, 2026-10-05): a mensagem (presença marcada, erro,
+    // cartão expirado com o "Reiniciar em P2") vem para dentro do bloco da recepção, onde a pessoa
+    // está olhando — senão ficaria no topo, fora da tela.
+    (function () {
+        if (location.hash !== '#recepcao') return;
+        const recepcao = document.getElementById('recepcao');
+        const corpo = recepcao && recepcao.querySelector('.dl-card-body');
+        if (!corpo) return;
+        Array.from(document.querySelectorAll('.dl-alerta-sessao')).reverse().forEach(a => corpo.prepend(a));
+        recepcao.scrollIntoView();
+    })();
+
+    // Busca da recepção enquanto se digita: só o bloco de resultados vem do servidor (rota /busca),
+    // sem recarregar o painel. Ignora respostas atrasadas (a pessoa já digitou outra coisa).
+    (function () {
+        const form = document.getElementById('formBuscaRecepcao');
+        const campo = form && form.querySelector('input[name="busca"]');
+        if (!campo) return;
+        let temporizador = null;
+        let ultimo = campo.value.trim();
+        let pedido = 0;
+        campo.addEventListener('input', () => {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(buscar, 300);
+        });
+        function buscar() {
+            const termo = campo.value.trim();
+            if (termo === ultimo || (termo.length > 0 && termo.length < 2)) return;
+            ultimo = termo;
+            const meu = ++pedido;
+            const url = form.dataset.urlBusca + (termo ? '?busca=' + encodeURIComponent(termo) : '');
+            fetch(url, {headers: {'X-Requested-With': 'fetch'}, credentials: 'same-origin'})
+                .then(r => r.ok && !r.redirected ? r.text() : null)
+                .then(html => {
+                    if (!html || meu !== pedido) return;
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = html.trim();
+                    const novo = tmp.querySelector('#resultadosBusca');
+                    const atual = document.getElementById('resultadosBusca');
+                    if (novo && atual) atual.replaceWith(novo);
+                })
+                .catch(() => {});
+        }
     })();
 </script>
 </body>

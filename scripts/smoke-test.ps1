@@ -1019,6 +1019,25 @@ try {
         $ouvintesHoje = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento WHERE assistido_id = $assistidoId AND data_consulta = CURRENT_DATE AND ouvinte = true;"
         Check "As duas presenças extras do dia ficaram como ouvinte" ($ouvintesHoje -eq "2")
 
+        # 16-UX (2026-10-05). Recepção: a busca filtra enquanto se digita (só o bloco de resultados vem
+        # do servidor) e cada ação volta direto ao bloco da recepção. Desempenho: páginas compactadas,
+        # CSS com versão no nome e cache longo, e o envio único carregado em todas as páginas.
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/busca?busca=$([uri]::EscapeDataString($nomeEditado))"
+        Check "Busca da recepção devolve só o bloco de resultados" (
+            $r.StatusCode -eq 200 -and $r.Body -match 'id="resultadosBusca"' -and
+            $r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -notmatch "dl-navbar")
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"
+        $script:CsrfToken = Extract-Csrf $r.Body
+        $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/sessao/$sessaoHojeId/ouvinte/$assistidoId" -Form @{ busca = $nomeEditado }
+        Check "Ação da recepção volta direto ao bloco da recepção (#recepcao)" ($r.StatusCode -eq 302 -and $r.Location -match "#recepcao$")
+        $pagina = (Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId").Body
+        Check "Páginas carregam o envio único (toque duplo não grava duas vezes)" ($pagina -match "envio-unico")
+        $cabecalhos = (& curl.exe -s -D - -o NUL -H "Accept-Encoding: gzip" -b $script:CookieJar "$BaseUrl/sessao/$sessaoHojeId") -join "`n"
+        Check "Páginas saem compactadas (gzip)" ($cabecalhos -match "(?im)^Content-Encoding:\s*gzip")
+        $cssVersionado = if ($pagina -match 'href="([^"]*/css/app-[0-9a-f]{32}\.css)"') { $Matches[1] } else { $null }
+        $cabecalhosCss = if ($cssVersionado) { (& curl.exe -s -D - -o NUL "$(([Uri]$BaseUrl).GetLeftPart('Authority'))$cssVersionado") -join "`n" } else { "" }
+        Check "CSS com versão no nome e cache de 1 ano" ($cssVersionado -and $cabecalhosCss -match "max-age=31536000")
+
         # 16a. "Assistidos Presentes" com o botão de remover quem foi marcado por engano. A presença de
         # hoje era a do reinício em P2: removê-la também desfaz o reinício (o ciclo expirado volta).
         $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId"

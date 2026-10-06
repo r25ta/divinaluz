@@ -332,6 +332,21 @@ Se alguém disser que o código não chegou, abra o prontuário da pessoa e use 
 - Nenhum dos dois promete disponibilidade. Para um piloto, serve; para a casa depender disso todos os
   domingos, o passo seguinte é um plano pago de uns poucos dólares no Render, que elimina a hibernação.
 
+### Manter o sistema acordado (sem o minuto de espera)
+
+Depois de 15 minutos sem uso o Render põe o sistema para dormir, e quem chega primeiro espera cerca de
+um minuto. Com um único serviço na conta (o `divinaluz-demo` já foi apagado), ficar ligado o mês todo
+dá ~744 horas, dentro das 750 do plano gratuito. Um "despertador" externo e grátis resolve:
+
+1. Crie uma conta em **https://uptimerobot.com** (ou em https://cron-job.org).
+2. **Add New Monitor** → tipo **HTTP(s)**.
+3. URL: o endereço do sistema seguido de **`/actuator/health`** (ex.: `https://divinaluz.onrender.com/actuator/health`).
+4. Intervalo: **10 minutos** (menos que os 15 da hibernação). Salve.
+
+Ele chama o sistema a cada 10 minutos, e de quebra avisa por e-mail se o sistema cair. Se um dia houver
+um segundo serviço na conta do Render, as horas deixam de caber: aí desligue o monitor ou passe para o
+plano pago.
+
 ## Para desligar tudo
 
 1. **Render** → serviço `divinaluz` → **Settings** → **Delete Service**.

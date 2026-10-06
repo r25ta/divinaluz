@@ -42,7 +42,7 @@
                             </div>
 
                             <!--/* Trabalhador da casa (T:id) ou convidado (C:id) no mesmo campo. O convidado é
-                                   cadastrado no Novo Cadastro (V41). O nome do campo não é "preletor" de
+                                   cadastrado em Preletores convidados (V41). O nome do campo não é "preletor" de
                                    propósito — ver o javadoc do PrelecaoController. */-->
                             <div class="col-md-6">
                                 <label class="form-label" for="preletorEscolhido">Preletor</label>
@@ -64,7 +64,7 @@
                                 <div class="form-text">
                                     Convidado é quem vem de fora e não é assistido da casa.
                                     <a th:if="${podeCadastro}" th:href="@{/convidados/novo}">Cadastrar convidado</a>
-                                    <span th:unless="${podeCadastro}">Para cadastrar um, peça à recepção (Novo Cadastro).</span>
+                                    <span th:unless="${podeCadastro}">Para cadastrar um, peça à recepção.</span>
                                 </div>
                             </div>
 

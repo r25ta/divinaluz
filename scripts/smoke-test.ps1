@@ -801,7 +801,7 @@ try {
             $script:CookieJar = $adminJarMatriz
             try {
                 $r = Invoke-CurlForm -Url "$BaseUrl/novo"
-                Check "Novo Cadastro oferece o tipo Preletor convidado" ($r.Body -match "convidados/novo")
+                Check "Cadastro de assistido não tem mais o atalho do convidado" ($r.StatusCode -eq 200 -and $r.Body -notmatch "convidados/novo")
                 $r = Invoke-CurlForm -Url "$BaseUrl/convidados/novo"
                 $script:CsrfToken = Extract-Csrf $r.Body
                 $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/convidados" -Form @{

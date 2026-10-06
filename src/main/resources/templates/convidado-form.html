@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: pageHead(${convidado.id != null} ? 'Editar Convidado' : 'Novo Cadastro')}"></head>
+<head th:replace="~{fragments/layout :: pageHead(${convidado.id != null} ? 'Editar Convidado' : 'Novo Convidado')}"></head>
 <body>
 <div class="dl-app">
     <nav th:replace="~{fragments/layout :: navbar}"></nav>
 
-    <!--/* Preletor convidado no Novo Cadastro (V41, ConvidadoController): só contato — sem tratamento,
+    <!--/* Preletor convidado (V41, ConvidadoController; aberto pela escala de preleções): só contato — sem tratamento,
            1ª sessão, cartão ou login — e fora da listagem de prontuários. */-->
     <main class="dl-main">
         <div class="dl-container-narrow">
@@ -17,11 +17,6 @@
                 <a th:href="@{/convidados}" class="btn btn-outline-teal btn-sm">
                     <i class="bi bi-person-badge"></i> Convidados
                 </a>
-            </div>
-
-            <div class="dl-filtro-chips" th:if="${convidado.id == null}">
-                <a th:href="@{/novo}" class="dl-filtro-chip"><i class="bi bi-person"></i> Assistido</a>
-                <a th:href="@{/convidados/novo}" class="dl-filtro-chip active"><i class="bi bi-person-badge"></i> Preletor convidado</a>
             </div>
 
             <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>

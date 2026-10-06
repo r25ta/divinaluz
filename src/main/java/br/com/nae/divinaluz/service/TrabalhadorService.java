@@ -94,7 +94,7 @@ public class TrabalhadorService {
         if (busca.length() < 2) {
             return List.of();
         }
-        return assistidoRepository.findByAtivo(true).stream()
+        return assistidoRepository.atendidosPorAtivo(true).stream()
                 .filter(a -> normalizar(a.getNome()).contains(busca))
                 .sorted(Comparator.comparing(Assistido::getNome, String.CASE_INSENSITIVE_ORDER))
                 .limit(MAXIMO_RESULTADOS_BUSCA)

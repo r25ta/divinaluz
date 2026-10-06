@@ -224,27 +224,58 @@ public class SessaoService {
 
     public PreletorDaSessao preletorDaSessao(SessaoAssistencia sessao) {
         Prelecao daEscala = prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(sessao.getData()).orElse(null);
-        Trabalhador substituto = sessao.getPreletorSubstituto();
         String temaSubstituto = preenchido(sessao.getTemaSubstituto()) ? sessao.getTemaSubstituto() : null;
+        // O substituto pode ser um trabalhador ou, desde a V41, um convidado.
+        String substituto = sessao.getPreletorSubstituto() != null
+                ? sessao.getPreletorSubstituto().getAssistido().getNome()
+                : (sessao.getConvidadoSubstituto() != null ? sessao.getConvidadoSubstituto().getNome() : null);
 
-        String preletor = substituto != null ? substituto.getAssistido().getNome()
-                : (daEscala != null ? daEscala.getNomePreletor() : null);
+        String preletor = substituto != null ? substituto : (daEscala != null ? daEscala.getNomePreletor() : null);
         String tema = temaSubstituto != null ? temaSubstituto : (daEscala != null ? daEscala.getTema() : null);
         return new PreletorDaSessao(daEscala, preletor, tema, substituto != null || temaSubstituto != null);
     }
 
+    /** Preletores convidados ativos (cadastro com vínculo CONVIDADO), para a troca emergencial. */
+    public List<Assistido> convidadosDisponiveis() {
+        return assistidoRepository.findByVinculoAndAtivoTrueOrderByNomeAsc(Assistido.VINCULO_CONVIDADO);
+    }
+
     /**
      * Troca emergencial do preletor (e, se informado, do tema) só nesta sessão — a escala de
-     * preleções continua registrando quem estava escalado. Sem trabalhador e sem tema, volta a valer
-     * o que está na escala.
+     * preleções continua registrando quem estava escalado. O preletor vem como {@code T:<id>}
+     * (trabalhador) ou {@code C:<id>} (convidado, V41). Sem preletor e sem tema, volta a valer o que
+     * está na escala.
      */
     @Transactional
-    public SessaoAssistencia trocarPreletor(Long sessaoId, Long trabalhadorId, String tema) {
+    public SessaoAssistencia trocarPreletor(Long sessaoId, String preletorEscolhido, String tema) {
         SessaoAssistencia sessao = buscar(sessaoId);
         exigirNaoEncerrada(sessao);
-        sessao.setPreletorSubstituto(trabalhadorId != null ? buscarTrabalhador(trabalhadorId) : null);
+        sessao.setPreletorSubstituto(null);
+        sessao.setConvidadoSubstituto(null);
+        if (preenchido(preletorEscolhido)) {
+            Long id = idDaEscolha(preletorEscolhido);
+            if (preletorEscolhido.startsWith("C:")) {
+                Assistido convidado = assistidoRepository.findById(id)
+                        .filter(Assistido::isConvidado)
+                        .orElseThrow(() -> new RegraNegocioException("Preletor convidado não encontrado."));
+                sessao.setConvidadoSubstituto(convidado);
+            } else {
+                sessao.setPreletorSubstituto(buscarTrabalhador(id));
+            }
+        }
         sessao.setTemaSubstituto(preenchido(tema) ? tema.trim() : null);
         return sessaoAssistenciaRepository.save(sessao);
+    }
+
+    private static Long idDaEscolha(String escolha) {
+        if (escolha.length() > 2 && (escolha.startsWith("T:") || escolha.startsWith("C:"))) {
+            try {
+                return Long.valueOf(escolha.substring(2));
+            } catch (NumberFormatException e) {
+                // cai no erro abaixo
+            }
+        }
+        throw new RegraNegocioException("Escolha um preletor válido.");
     }
 
     // ---------------------------------------------------------------- escala
@@ -373,7 +404,7 @@ public class SessaoService {
         if (busca.length() < 2) {
             return List.of();
         }
-        return assistidoRepository.findByAtivo(true).stream()
+        return assistidoRepository.atendidosPorAtivo(true).stream()
                 .filter(a -> normalizar(a.getNome()).contains(busca))
                 .sorted(Comparator.comparing(Assistido::getNome, String.CASE_INSENSITIVE_ORDER))
                 .limit(MAXIMO_RESULTADOS_BUSCA)
@@ -412,7 +443,7 @@ public class SessaoService {
         String nomeLimpo = nome.trim().replaceAll("\\s+", " ");
         if (!confirmarHomonimo) {
             String normalizado = normalizar(nomeLimpo);
-            boolean homonimo = assistidoRepository.findByAtivo(true).stream()
+            boolean homonimo = assistidoRepository.atendidosPorAtivo(true).stream()
                     .anyMatch(a -> normalizar(a.getNome()).equals(normalizado));
             if (homonimo) {
                 throw new HomonimoException("Já existe um cadastro ativo com o nome \"" + nomeLimpo

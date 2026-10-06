@@ -41,7 +41,21 @@ public class Assistido {
     // daqui. Só serve para o prontuário avisar a recepção; salvar a edição do cadastro limpa.
     @Column(name = "email_conflito")
     private String emailConflito;
-    private String vinculo; // ASSISTIDO, TRABALHADOR, ALUNO
+    private String vinculo; // ASSISTIDO, TRABALHADOR, ALUNO, CONVIDADO
+
+    /**
+     * Preletor convidado (V41): cadastrado pelo "Novo Cadastro" só com dados de contato — sem
+     * tratamento, cartão nem login — e fora da listagem de prontuários e da recepção.
+     */
+    public static final String VINCULO_CONVIDADO = "CONVIDADO";
+
+    // Contato do convidado (V41). Os assistidos em geral não usam estes campos.
+    @Column(length = 30)
+    private String telefone;
+
+    /** Casa espírita ou instituição de onde vem o convidado. */
+    @Column(length = 150)
+    private String origem;
 
     // Dia da semana em que o assistido comparece à casa espírita (terça 19h ou domingo 08h).
     // Só é alterado via rota dedicada (ver HistoricoDiaFrequencia), nunca pelo formulário de
@@ -124,6 +138,11 @@ public class Assistido {
 
     @Column(name = "convite_celular_expira_em")
     private LocalDateTime conviteCelularExpiraEm;
+
+    @Transient
+    public boolean isConvidado() {
+        return VINCULO_CONVIDADO.equals(vinculo);
+    }
 
     @Transient
     public Integer getIdade() {

@@ -3,6 +3,8 @@ package br.com.nae.divinaluz.repository;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -10,6 +12,21 @@ import java.util.Optional;
 
 public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     List<Assistido> findByAtivo(boolean ativo);
+
+    /**
+     * As pessoas atendidas pela casa — todo cadastro MENOS o preletor convidado (V41), que fica fora
+     * da listagem de prontuários, da busca da recepção e da promoção a trabalhador. {@code IS NULL}
+     * porque cadastros antigos podem não ter vínculo, e {@code <>} sozinho os descartaria.
+     */
+    @Query("select a from Assistido a where a.ativo = :ativo and (a.vinculo is null or a.vinculo <> 'CONVIDADO')")
+    List<Assistido> atendidosPorAtivo(@Param("ativo") boolean ativo);
+
+    @Query("select a from Assistido a where a.vinculo is null or a.vinculo <> 'CONVIDADO'")
+    List<Assistido> atendidos();
+
+    List<Assistido> findByVinculoOrderByNomeAsc(String vinculo);
+
+    List<Assistido> findByVinculoAndAtivoTrueOrderByNomeAsc(String vinculo);
     List<Assistido> findAllByOrderByNomeAsc();
     Optional<Assistido> findByLoginAndAcessoAtivoTrue(String login);
     // Sem o filtro de acesso ativo: a redefinição de senha do admin (ver SenhaAdminInicial) é

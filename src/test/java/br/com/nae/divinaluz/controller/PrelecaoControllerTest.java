@@ -2,11 +2,10 @@ package br.com.nae.divinaluz.controller;
 
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Prelecao;
-import br.com.nae.divinaluz.model.PreletorConvidado;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
+import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
-import br.com.nae.divinaluz.repository.PreletorConvidadoRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import br.com.nae.divinaluz.service.CheckinService;
@@ -47,7 +46,7 @@ class PrelecaoControllerTest {
     private TrabalhadorRepository trabalhadorRepository;
 
     @Mock
-    private PreletorConvidadoRepository convidadoRepository;
+    private AssistidoRepository assistidoRepository;
 
     @Mock
     private SessaoRepository sessaoRepository;
@@ -61,7 +60,7 @@ class PrelecaoControllerTest {
     private static final LocalDate DOMINGO = LocalDate.of(2026, 10, 11);
 
     private Trabalhador preletor;
-    private PreletorConvidado convidado;
+    private Assistido convidado;
 
     @BeforeEach
     void setUp() {
@@ -73,12 +72,14 @@ class PrelecaoControllerTest {
         preletor.setAssistido(assistido);
         preletor.setFuncoes(Set.of(TipoTrabalhador.EXPOSITOR_PRELETOR));
 
-        convidado = new PreletorConvidado();
+        // Convidado (V41): um cadastro com vínculo CONVIDADO, feito no Novo Cadastro.
+        convidado = new Assistido();
         convidado.setId(20L);
         convidado.setNome("Divaldo Convidado");
+        convidado.setVinculo(Assistido.VINCULO_CONVIDADO);
 
         lenient().when(trabalhadorRepository.findById(10L)).thenReturn(Optional.of(preletor));
-        lenient().when(convidadoRepository.findById(20L)).thenReturn(Optional.of(convidado));
+        lenient().when(assistidoRepository.findById(20L)).thenReturn(Optional.of(convidado));
         lenient().when(prelecaoRepository.findByDataApresentacaoAndCanceladaEmIsNull(any())).thenReturn(Optional.empty());
     }
 
@@ -95,7 +96,7 @@ class PrelecaoControllerTest {
         ExtendedModelMap model = new ExtendedModelMap();
 
         String resultado = prelecaoController.salvarPrelecao(prelecao(LocalDate.of(2026, 9, 23), "Tema teste"),
-                "T:10", null, null, null, redirectAttributes, model);
+                "T:10", redirectAttributes, model);
 
         assertEquals("prelecao-form", resultado);
         assertEquals("Tema teste", ((Prelecao) model.get("prelecao")).getTema());
@@ -116,7 +117,7 @@ class PrelecaoControllerTest {
         ExtendedModelMap model = new ExtendedModelMap();
 
         String resultado = prelecaoController.salvarPrelecao(prelecao(LocalDate.of(2026, 9, 22), "Tema 2"),
-                "T:10", null, null, null, redirectAttributes, model);
+                "T:10", redirectAttributes, model);
 
         assertEquals("prelecao-form", resultado);
         assertEquals("Tema 2", ((Prelecao) model.get("prelecao")).getTema());
@@ -125,9 +126,9 @@ class PrelecaoControllerTest {
     }
 
     @Test
-    void preletorConvidadoExistenteEntraNaEscalaSemSerTrabalhador() {
+    void preletorConvidadoEntraNaEscalaSemSerTrabalhador() {
         String resultado = prelecaoController.salvarPrelecao(prelecao(DOMINGO, "Caridade"),
-                "C:20", null, null, null, new RedirectAttributesModelMap(), new ExtendedModelMap());
+                "C:20", new RedirectAttributesModelMap(), new ExtendedModelMap());
 
         assertEquals("redirect:/prelecao", resultado);
         ArgumentCaptor<Prelecao> salva = ArgumentCaptor.forClass(Prelecao.class);
@@ -139,40 +140,14 @@ class PrelecaoControllerTest {
     }
 
     @Test
-    void convidadoNovoEhCadastradoJuntoComAPrelecao() {
-        String resultado = prelecaoController.salvarPrelecao(prelecao(DOMINGO, "Fé"),
-                "NOVO", "  Maria Convidada  ", "11 99999-0000", "Centro Espírita Luz",
-                new RedirectAttributesModelMap(), new ExtendedModelMap());
-
-        assertEquals("redirect:/prelecao", resultado);
-        ArgumentCaptor<PreletorConvidado> novo = ArgumentCaptor.forClass(PreletorConvidado.class);
-        verify(convidadoRepository).save(novo.capture());
-        assertEquals("Maria Convidada", novo.getValue().getNome());
-        assertEquals("Centro Espírita Luz", novo.getValue().getOrigem());
-        ArgumentCaptor<Prelecao> salva = ArgumentCaptor.forClass(Prelecao.class);
-        verify(prelecaoRepository).save(salva.capture());
-        assertSame(novo.getValue(), salva.getValue().getConvidado());
-    }
-
-    @Test
-    void erroNaPrelecaoNaoDeixaConvidadoNovoSolto() {
-        ExtendedModelMap model = new ExtendedModelMap();
-        String resultado = prelecaoController.salvarPrelecao(prelecao(LocalDate.of(2026, 10, 7), "Fé"),
-                "NOVO", "Maria Convidada", null, null, new RedirectAttributesModelMap(), model);
-
-        assertEquals("prelecao-form", resultado);
-        verify(convidadoRepository, never()).save(any());
-        assertEquals("Maria Convidada", ((PrelecaoController.NovoConvidado) model.get("novoConvidado")).nome(),
-                "o formulário volta com o que foi digitado");
-    }
-
-    @Test
-    void convidadoNovoSemNomeEhRecusado() {
+    void cadastroQueNaoEhConvidadoNaoPodeSerPreletorConvidado() {
+        convidado.setVinculo("ASSISTIDO");
         RedirectAttributes redirectAttributes = new RedirectAttributesModelMap();
-        prelecaoController.salvarPrelecao(prelecao(DOMINGO, "Fé"), "NOVO", " ", null, null,
-                redirectAttributes, new ExtendedModelMap());
 
-        assertTrue(((String) redirectAttributes.getFlashAttributes().get("erro")).contains("nome do preletor convidado"));
+        prelecaoController.salvarPrelecao(prelecao(DOMINGO, "Caridade"), "C:20", redirectAttributes,
+                new ExtendedModelMap());
+
+        assertNotNull(redirectAttributes.getFlashAttributes().get("erro"));
         verify(prelecaoRepository, never()).save(any());
     }
 
@@ -212,14 +187,5 @@ class PrelecaoControllerTest {
 
         verify(prelecaoRepository, never()).deleteById(any());
         assertTrue(((String) redirectAttributes.getFlashAttributes().get("erro")).contains("Cancelar"));
-    }
-
-    @Test
-    void naoExcluiConvidadoQueJaEstaNaEscala() {
-        when(prelecaoRepository.existsByConvidadoId(20L)).thenReturn(true);
-
-        prelecaoController.excluirConvidado(20L, new RedirectAttributesModelMap());
-
-        verify(convidadoRepository, never()).delete(any());
     }
 }

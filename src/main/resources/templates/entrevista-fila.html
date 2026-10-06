@@ -48,7 +48,7 @@
                             <tbody>
                                 <tr th:each="assistido : ${aguardandoAvaliacao}">
                                     <td>
-                                        <a th:href="@{/prontuario/{id}(id=${assistido.id})}" th:text="${assistido.nome}"></a>
+                                        <span th:text="${assistido.nome}"></span>
                                     </td>
                                     <td>
                                         <span th:if="${assistido.tratamentoAtual != null}" class="dl-badge dl-badge-teal"
@@ -105,7 +105,7 @@
                             <tbody>
                                 <tr th:each="item : ${aguardandoEntrevista}">
                                     <td>
-                                        <a th:href="@{/prontuario/{id}(id=${item.assistido.id})}" th:text="${item.assistido.nome}"></a>
+                                        <span th:text="${item.assistido.nome}"></span>
                                     </td>
                                     <td>
                                         <div th:if="${item.avaliacaoPendente != null}">

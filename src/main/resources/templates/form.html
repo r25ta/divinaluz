@@ -18,6 +18,13 @@
                 </a>
             </div>
 
+            <!--/* Tipo de cadastro (V41): o preletor convidado também nasce aqui, no Novo Cadastro, mas
+                   num formulário só de contato (ConvidadoController). */-->
+            <div class="dl-filtro-chips" th:unless="${modoEdicao}">
+                <a th:href="@{/novo}" class="dl-filtro-chip active"><i class="bi bi-person"></i> Assistido</a>
+                <a th:href="@{/convidados/novo}" class="dl-filtro-chip"><i class="bi bi-person-badge"></i> Preletor convidado</a>
+            </div>
+
             <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
 
             <div class="dl-card">

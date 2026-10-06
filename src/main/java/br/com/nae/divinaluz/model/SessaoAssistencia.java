@@ -40,6 +40,12 @@ public class SessaoAssistencia {
     @ToString.Exclude
     private Trabalhador preletorSubstituto;
 
+    /** Troca emergencial por um preletor convidado (V41); no máximo um entre este e o trabalhador. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "convidado_substituto_id")
+    @ToString.Exclude
+    private Assistido convidadoSubstituto;
+
     @Column(name = "tema_substituto")
     private String temaSubstituto;
 

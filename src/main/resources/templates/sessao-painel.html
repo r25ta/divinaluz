@@ -67,9 +67,6 @@
 
             <div class="alert alert-success" th:if="${sucesso}">
                 <i class="bi bi-check-circle-fill"></i> <span th:text="${sucesso}"></span>
-                <a th:if="${novoAssistidoId}" th:href="@{/prontuario/{id}(id=${novoAssistidoId})}" class="alert-link ms-1">
-                    Abrir prontuário
-                </a>
             </div>
             <div class="alert alert-warning" th:if="${aviso}">
                 <i class="bi bi-info-circle-fill"></i> <span th:text="${aviso}"></span>
@@ -238,7 +235,7 @@
                                             <!--/* Selos sempre numa linha própria, abaixo do nome: assim todas as linhas
                                                    ficam iguais, em vez de quebrar só quando o nome é comprido. */-->
                                             <td>
-                                                <a th:href="@{/prontuario/{id}(id=${p.assistido.id})}" th:text="${p.assistido.nome}">Nome</a>
+                                                <span th:text="${p.assistido.nome}">Nome</span>
                                                 <div class="dl-presente-selos" th:if="${p.novo or p.assistido.vinculo == 'TRABALHADOR'}">
                                                     <span class="dl-badge dl-badge-info" th:if="${p.novo}"
                                                           title="Primeira vez na casa: encaminhar para entrevista (opcional)">
@@ -319,7 +316,7 @@
                                                   presente=${presentesIds.contains(a.id)}">
                                         <div class="dl-resultado-topo">
                                             <div>
-                                                <a class="fw-semibold" th:href="@{/prontuario/{id}(id=${a.id})}" th:text="${a.nome}">Nome</a>
+                                                <span class="fw-semibold" th:text="${a.nome}">Nome</span>
                                                 <div class="dl-muted small">
                                                     <span th:text="${a.tratamentoAtual != null ? a.tratamentoAtual.codigo : 'Sem tratamento'}">P2</span>
                                                     · <span th:text="${a.diaFrequencia != null ? a.diaFrequencia.label : 'Dia não definido'}">Domingo, 08h</span>
@@ -481,11 +478,19 @@
                                 <summary class="small fw-semibold">Trocar preletor nesta sessão</summary>
                                 <form th:action="@{/sessao/{id}/preletor(id=${sessao.id})}" method="post" class="mt-2">
                                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                    <label for="preletorId" class="form-label">Preletor</label>
-                                    <select id="preletorId" name="preletorId" class="form-select mb-2">
+                                    <!--/* Trabalhador (T:id) ou convidado (C:id, cadastrado no Novo Cadastro). */-->
+                                    <label for="preletorEscolhido" class="form-label">Preletor</label>
+                                    <select id="preletorEscolhido" name="preletorEscolhido" class="form-select mb-2">
                                         <option value="">— o da escala —</option>
-                                        <option th:each="t : ${trabalhadores}" th:value="${t.id}" th:text="${t.assistido.nome}"
-                                                th:selected="${sessao.preletorSubstituto != null and sessao.preletorSubstituto.id == t.id}">Nome</option>
+                                        <optgroup label="Trabalhadores da casa">
+                                            <option th:each="t : ${trabalhadores}" th:value="'T:' + ${t.id}" th:text="${t.assistido.nome}"
+                                                    th:selected="${sessao.preletorSubstituto != null and sessao.preletorSubstituto.id == t.id}">Nome</option>
+                                        </optgroup>
+                                        <optgroup label="Convidados" th:if="${!convidados.isEmpty()}">
+                                            <option th:each="c : ${convidados}" th:value="'C:' + ${c.id}"
+                                                    th:text="${c.nome} + (${c.origem != null} ? ' — ' + ${c.origem} : '')"
+                                                    th:selected="${sessao.convidadoSubstituto != null and sessao.convidadoSubstituto.id == c.id}">Nome</option>
+                                        </optgroup>
                                     </select>
                                     <label for="tema" class="form-label">Tema (opcional)</label>
                                     <input type="text" id="tema" name="tema" class="form-control mb-2"

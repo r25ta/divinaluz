@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead(${convidado.id != null} ? 'Editar Convidado' : 'Novo Cadastro')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <!--/* Preletor convidado no Novo Cadastro (V41, ConvidadoController): só contato — sem tratamento,
+           1ª sessão, cartão ou login — e fora da listagem de prontuários. */-->
+    <main class="dl-main">
+        <div class="dl-container-narrow">
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow" th:text="${convidado.id != null} ? 'Edição' : 'Novo Registro'">Novo Registro</span>
+                    <h1 th:text="${convidado.id != null} ? 'Editar Preletor Convidado' : 'Cadastro de Preletor Convidado'">Cadastro de Preletor Convidado</h1>
+                </div>
+                <a th:href="@{/convidados}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-person-badge"></i> Convidados
+                </a>
+            </div>
+
+            <div class="dl-filtro-chips" th:if="${convidado.id == null}">
+                <a th:href="@{/novo}" class="dl-filtro-chip"><i class="bi bi-person"></i> Assistido</a>
+                <a th:href="@{/convidados/novo}" class="dl-filtro-chip active"><i class="bi bi-person-badge"></i> Preletor convidado</a>
+            </div>
+
+            <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
+
+            <div class="dl-card">
+                <div class="dl-card-body">
+                    <p class="dl-muted small">
+                        Quem vem de fora fazer a preleção. Não é assistido da casa: não tem tratamento, cartão nem
+                        acesso ao sistema, e não aparece na listagem de prontuários.
+                    </p>
+                    <form th:action="${convidado.id != null} ? @{/convidados/{c}(c=${convidado.id})} : @{/convidados}"
+                          th:object="${convidado}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" for="nome">Nome completo</label>
+                                <input id="nome" class="form-control" th:field="*{nome}" maxlength="255" required autofocus>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="telefone">Telefone <span class="dl-muted">(opcional)</span></label>
+                                <input id="telefone" class="form-control" th:field="*{telefone}" maxlength="30" inputmode="tel">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="email">E-mail <span class="dl-muted">(opcional)</span></label>
+                                <input id="email" type="email" class="form-control" th:field="*{email}" maxlength="150">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="origem">Casa espírita / instituição <span class="dl-muted">(opcional)</span></label>
+                                <input id="origem" class="form-control" th:field="*{origem}" maxlength="150">
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a th:href="@{/convidados}" class="btn btn-outline-teal">Cancelar</a>
+                            <button type="submit" class="btn btn-teal text-white">
+                                <i class="bi bi-check-lg"></i> Salvar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+</body>
+</html>

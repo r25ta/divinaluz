@@ -125,7 +125,7 @@ public class ProntuarioController {
                     .map(logado -> "redirect:/prontuario/" + logado.getId() + "/cartao")
                     .orElseThrow(() -> new AccessDeniedException("Acesso sem cadastro vinculado."));
         }
-        List<Assistido> assistidos = mostrarInativos ? assistidoRepository.findAll() : assistidoRepository.findByAtivo(true);
+        List<Assistido> assistidos = mostrarInativos ? assistidoRepository.atendidos() : assistidoRepository.atendidosPorAtivo(true);
 
         // Checklist de frequência do mês corrente (item 4): para cada assistido com dia de
         // assistência definido, calcula as datas esperadas no mês (todas as terças ou domingos,

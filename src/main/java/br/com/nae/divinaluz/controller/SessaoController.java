@@ -98,6 +98,7 @@ public class SessaoController {
         model.addAttribute("quadroEscala", sessaoService.quadroEscala(sessao));
         model.addAttribute("posicoes", PosicaoSessao.values());
         model.addAttribute("trabalhadores", sessaoService.trabalhadoresDisponiveis());
+        model.addAttribute("convidados", sessaoService.convidadosDisponiveis());
         model.addAttribute("indicadores", indicadores);
         model.addAttribute("busca", busca);
         model.addAttribute("resultados", resultados);
@@ -239,11 +240,12 @@ public class SessaoController {
     }
 
     @PostMapping("/sessao/{sessaoId}/preletor")
-    public String trocarPreletor(@PathVariable Long sessaoId, @RequestParam(required = false) Long preletorId,
+    public String trocarPreletor(@PathVariable Long sessaoId, @RequestParam(required = false) String preletorEscolhido,
             @RequestParam(required = false) String tema, RedirectAttributes redirectAttributes) {
         try {
-            sessaoService.trocarPreletor(sessaoId, preletorId, tema);
-            redirectAttributes.addFlashAttribute("sucesso", preletorId == null && (tema == null || tema.isBlank())
+            sessaoService.trocarPreletor(sessaoId, preletorEscolhido, tema);
+            boolean semPreletor = preletorEscolhido == null || preletorEscolhido.isBlank();
+            redirectAttributes.addFlashAttribute("sucesso", semPreletor && (tema == null || tema.isBlank())
                     ? "Troca desfeita: vale o preletor da escala de preleções."
                     : "Preletor desta sessão atualizado. A escala de preleções não foi alterada.");
         } catch (RegraNegocioException e) {
@@ -332,8 +334,7 @@ public class SessaoController {
             redirectAttributes.addFlashAttribute("sucesso", novo.getNome()
                     + " cadastrado(a) em P2 com a 1ª presença marcada nesta sessão.");
             redirectAttributes.addFlashAttribute("aviso",
-                    "Primeira vez na casa: encaminhe para a entrevista (opcional) e complete o cadastro no prontuário.");
-            redirectAttributes.addFlashAttribute("novoAssistidoId", novo.getId());
+                    "Primeira vez na casa: encaminhe para a entrevista (opcional) e complete o cadastro pelo menu Prontuário.");
         } catch (SessaoService.HomonimoException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             redirectAttributes.addFlashAttribute("homonimoNome", nome);

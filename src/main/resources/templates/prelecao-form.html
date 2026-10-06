@@ -41,9 +41,9 @@
                                 <div class="form-text">Aceita somente terça-feira ou domingo.</div>
                             </div>
 
-                            <!--/* Trabalhador da casa (T:id) ou convidado (C:id) no mesmo campo; NOVO
-                                   cadastra o convidado aqui mesmo (PrelecaoController.aplicarPreletor). O
-                                   nome do campo não é "preletor" de propósito — ver o javadoc do controller. */-->
+                            <!--/* Trabalhador da casa (T:id) ou convidado (C:id) no mesmo campo. O convidado é
+                                   cadastrado no Novo Cadastro (V41). O nome do campo não é "preletor" de
+                                   propósito — ver o javadoc do PrelecaoController. */-->
                             <div class="col-md-6">
                                 <label class="form-label" for="preletorEscolhido">Preletor</label>
                                 <select id="preletorEscolhido" class="form-select" name="preletorEscolhido" required>
@@ -54,40 +54,17 @@
                                                 th:text="${p.assistido.nome}"
                                                 th:selected="${preletorEscolhido == 'T:' + p.id}"></option>
                                     </optgroup>
-                                    <optgroup label="Convidados">
+                                    <optgroup label="Convidados" th:if="${!convidados.isEmpty()}">
                                         <option th:each="c : ${convidados}"
                                                 th:value="'C:' + ${c.id}"
                                                 th:text="${c.nome} + (${c.origem != null} ? ' — ' + ${c.origem} : '') + (${c.ativo} ? '' : ' (desativado)')"
                                                 th:selected="${preletorEscolhido == 'C:' + c.id}"></option>
-                                        <option value="NOVO" th:selected="${preletorEscolhido == 'NOVO'}">+ Cadastrar convidado novo...</option>
                                     </optgroup>
                                 </select>
                                 <div class="form-text">
                                     Convidado é quem vem de fora e não é assistido da casa.
-                                    <a th:href="@{/prelecao/convidados}">Gerenciar convidados</a>
-                                </div>
-                            </div>
-
-                            <div class="col-12" id="blocoNovoConvidado" th:classappend="${preletorEscolhido == 'NOVO'} ? '' : 'd-none'">
-                                <div class="border rounded p-3">
-                                    <div class="fw-semibold mb-2"><i class="bi bi-person-plus"></i> Preletor convidado</div>
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label class="form-label small" for="novoConvidadoNome">Nome</label>
-                                            <input id="novoConvidadoNome" name="novoConvidadoNome" class="form-control"
-                                                   maxlength="150" th:value="${novoConvidado.nome}">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small" for="novoConvidadoTelefone">Telefone (opcional)</label>
-                                            <input id="novoConvidadoTelefone" name="novoConvidadoTelefone" class="form-control"
-                                                   maxlength="30" inputmode="tel" th:value="${novoConvidado.telefone}">
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label small" for="novoConvidadoOrigem">Casa espírita / instituição (opcional)</label>
-                                            <input id="novoConvidadoOrigem" name="novoConvidadoOrigem" class="form-control"
-                                                   maxlength="150" th:value="${novoConvidado.origem}">
-                                        </div>
-                                    </div>
+                                    <a th:if="${podeCadastro}" th:href="@{/convidados/novo}">Cadastrar convidado</a>
+                                    <span th:unless="${podeCadastro}">Para cadastrar um, peça à recepção (Novo Cadastro).</span>
                                 </div>
                             </div>
 
@@ -110,22 +87,5 @@
         </div>
     </main>
 </div>
-<script>
-    // Mostra os campos do convidado novo só quando "Cadastrar convidado novo" está escolhido, e só
-    // então o nome passa a ser obrigatório no navegador (o servidor confere de novo).
-    (function () {
-        var select = document.getElementById('preletorEscolhido');
-        var bloco = document.getElementById('blocoNovoConvidado');
-        var nome = document.getElementById('novoConvidadoNome');
-        function ajustar() {
-            var novo = select.value === 'NOVO';
-            bloco.classList.toggle('d-none', !novo);
-            nome.required = novo;
-            if (novo && !nome.value) nome.focus();
-        }
-        select.addEventListener('change', ajustar);
-        ajustar();
-    })();
-</script>
 </body>
 </html>

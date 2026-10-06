@@ -790,19 +790,43 @@ try {
             Check "Cartão do Expositor/Preletor abre e oferece Preleções na barra" ($r.StatusCode -eq 200 -and $r.Body -match "Preleções")
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
             Check "Expositor/Preletor cadastra preleção (200)" ($r.StatusCode -eq 200)
-            Check "Formulário da preleção oferece trabalhadores e convidados" (
-                $r.Body -match 'name="preletorEscolhido"' -and $r.Body -match "Cadastrar convidado novo")
+            Check "Formulário da preleção oferece trabalhadores e manda pedir convidado à recepção" (
+                $r.Body -match 'name="preletorEscolhido"' -and $r.Body -match "peça à recepção")
+            $r = Invoke-CurlForm -Url "$BaseUrl/convidados/novo"
+            Check "Expositor não cadastra convidado: é do Novo Cadastro (403)" ($r.StatusCode -eq 403)
 
-            # Preletor convidado (2026-10-05): não é assistido; o Expositor o cadastra junto com a
-            # preleção, cancela (fica na escala e libera a data), reativa e exclui.
+            # Preletor convidado (V41): cadastrado pelo Novo Cadastro (admin, aqui) só com contato —
+            # vínculo CONVIDADO, sem tratamento nem login, fora da listagem de prontuários.
+            $jarExpositor = $script:CookieJar
+            $script:CookieJar = $adminJarMatriz
+            try {
+                $r = Invoke-CurlForm -Url "$BaseUrl/novo"
+                Check "Novo Cadastro oferece o tipo Preletor convidado" ($r.Body -match "convidados/novo")
+                $r = Invoke-CurlForm -Url "$BaseUrl/convidados/novo"
+                $script:CsrfToken = Extract-Csrf $r.Body
+                $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/convidados" -Form @{
+                    nome = "SMOKE_TEST_CONVIDADO"; origem = "Casa de fora"; telefone = "11 90000-0000" }
+                $convidadoId = Invoke-SqlScalar "SELECT id FROM assistido WHERE nome = 'SMOKE_TEST_CONVIDADO' AND vinculo = 'CONVIDADO' AND login IS NULL AND tratamento_atual_id IS NULL AND ciclo_iniciado_em IS NULL;"
+                $presencasConvidado = Invoke-SqlScalar "SELECT count(*) FROM sessao_tratamento s JOIN assistido a ON a.id = s.assistido_id WHERE a.nome = 'SMOKE_TEST_CONVIDADO';"
+                Check "Convidado é cadastrado só com contato (sem tratamento, presença nem login)" (
+                    $r.StatusCode -eq 302 -and $convidadoId -match '^\d+$' -and $presencasConvidado -eq "0")
+                $r = Invoke-CurlForm -Url "$BaseUrl/"
+                $lista = Invoke-CurlForm -Url "$BaseUrl/convidados"
+                Check "Convidado fica fora da listagem de prontuários e aparece na de convidados" (
+                    $r.Body -notmatch "SMOKE_TEST_CONVIDADO" -and $lista.Body -match "SMOKE_TEST_CONVIDADO")
+            } finally {
+                $script:CookieJar = $jarExpositor
+            }
+
+            # O Expositor escolhe o convidado na escala, cancela (fica na escala e libera a data),
+            # reativa e exclui a preleção.
+            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
+            Check "Formulário da preleção lista o convidado" ($r.Body -match "C:$convidadoId")
             $script:CsrfToken = Extract-Csrf $r.Body
             $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/salvar" -Form @{
-                dataApresentacao = "05/01/2098"; tema = "SMOKE_TEST_PRELECAO_CONVIDADO"; preletorEscolhido = "NOVO"
-                novoConvidadoNome = "SMOKE_TEST_CONVIDADO"; novoConvidadoOrigem = "Casa de fora" }
-            $prelecaoConvidadoId = Invoke-SqlScalar "SELECT id FROM prelecao WHERE tema = 'SMOKE_TEST_PRELECAO_CONVIDADO' AND convidado_id IS NOT NULL AND trabalhador_id IS NULL;"
-            $assistidoConvidado = Invoke-SqlScalar "SELECT count(*) FROM assistido WHERE nome = 'SMOKE_TEST_CONVIDADO';"
-            Check "Expositor cadastra preleção com convidado novo, sem criar assistido" (
-                $r.StatusCode -eq 302 -and $prelecaoConvidadoId -match '^\d+$' -and $assistidoConvidado -eq "0")
+                dataApresentacao = "05/01/2098"; tema = "SMOKE_TEST_PRELECAO_CONVIDADO"; preletorEscolhido = "C:$convidadoId" }
+            $prelecaoConvidadoId = Invoke-SqlScalar "SELECT id FROM prelecao WHERE tema = 'SMOKE_TEST_PRELECAO_CONVIDADO' AND convidado_id = $convidadoId AND trabalhador_id IS NULL;"
+            Check "Expositor cadastra preleção com o convidado" ($r.StatusCode -eq 302 -and $prelecaoConvidadoId -match '^\d+$')
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
             Check "Escala mostra o convidado com a marca 'Convidado'" (
                 $r.Body -match "SMOKE_TEST_CONVIDADO[\s\S]{0,200}Convidado")
@@ -816,19 +840,10 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
             $canceladaEm = Invoke-SqlScalar "SELECT COALESCE(cancelada_em::text, '') FROM prelecao WHERE id = $prelecaoConvidadoId;"
             Check "Reativar devolve a preleção à escala" ($canceladaEm -eq "" -and $r.Body -match "reativada")
-            $convidadoId = Invoke-SqlScalar "SELECT id FROM preletor_convidado WHERE nome = 'SMOKE_TEST_CONVIDADO';"
-            $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/convidados/$convidadoId/excluir"
-            $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/convidados"
-            Check "Convidado que está na escala não é excluído (só desativado)" (
-                $r.StatusCode -eq 200 -and $r.Body -match "não pode ser excluído" -and
-                (Invoke-SqlScalar "SELECT count(*) FROM preletor_convidado WHERE id = $convidadoId;") -eq "1")
             Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/$prelecaoConvidadoId/excluir" | Out-Null
             Invoke-CurlForm -Url "$BaseUrl/prelecao" | Out-Null
-            Invoke-CurlForm -Method POST -Url "$BaseUrl/prelecao/convidados/$convidadoId/excluir" | Out-Null
-            Invoke-CurlForm -Url "$BaseUrl/prelecao/convidados" | Out-Null
-            Check "Expositor exclui a preleção e depois o convidado" (
-                (Invoke-SqlScalar "SELECT count(*) FROM prelecao WHERE id = $prelecaoConvidadoId;") -eq "0" -and
-                (Invoke-SqlScalar "SELECT count(*) FROM preletor_convidado WHERE id = $convidadoId;") -eq "0")
+            Check "Expositor exclui a preleção" (
+                (Invoke-SqlScalar "SELECT count(*) FROM prelecao WHERE id = $prelecaoConvidadoId;") -eq "0")
             # Sem CONSULTA: o endereço de entrada leva ao próprio cartão, e o cartão de outro é 403.
             $r = Invoke-CurlForm -Url "$BaseUrl/"
             Check "Sem consulta, a entrada leva ao próprio cartão" (
@@ -1236,7 +1251,7 @@ try {
     # e se o teste reaproveitou uma preleção que já existia para hoje, a janela dela volta ao estado
     # original (fechada) para não deixar um check-in aberto no banco de dev.
     Invoke-Sql "DELETE FROM prelecao WHERE tema IN ('$temaPrelecaoTeste', '$temaPrelecaoAntiga', 'SMOKE_TEST_PRELECAO_CONVIDADO');" | Out-Null
-    Invoke-Sql "DELETE FROM preletor_convidado WHERE nome LIKE 'SMOKE_TEST_%';" | Out-Null
+    Invoke-Sql "DELETE FROM assistido WHERE nome = 'SMOKE_TEST_CONVIDADO' AND vinculo = 'CONVIDADO' AND login IS NULL;" | Out-Null
     if ($script:sessaoAntigaId) { Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoAntigaId);" | Out-Null }
     if ($script:sessaoCancelarId) { Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoCancelarId);" | Out-Null }
     if ($script:sessaoHojeCriada) {

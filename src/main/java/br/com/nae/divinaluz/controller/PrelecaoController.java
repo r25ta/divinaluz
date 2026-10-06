@@ -1,12 +1,12 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Prelecao;
-import br.com.nae.divinaluz.model.PreletorConvidado;
 import br.com.nae.divinaluz.model.SituacaoPrelecao;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
+import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.PrelecaoRepository;
-import br.com.nae.divinaluz.repository.PreletorConvidadoRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import br.com.nae.divinaluz.service.CheckinService;
@@ -32,35 +32,31 @@ import java.util.Optional;
 /**
  * Escala de preleções (permissão PRELECAO: Dirigente, Recepcionista e Expositor/Preletor).
  *
- * <p>Desde 2026-10-05 o preletor pode ser um <strong>trabalhador da casa</strong> (com a função
- * Expositor/Preletor) ou um <strong>convidado</strong> ({@link PreletorConvidado}), que não é
- * assistido. No formulário os dois aparecem no mesmo select, com o valor {@code T:<id>} ou
- * {@code C:<id>}, e {@code NOVO} cadastra um convidado ali mesmo. O parâmetro se chama
- * {@code preletorEscolhido}, e não {@code preletor}, porque o {@code @ModelAttribute Prelecao}
- * tentaria converter "T:12" no campo {@code preletor} (um Trabalhador) e a requisição daria 400.
- * A preleção também pode ser <strong>cancelada</strong> (fica na escala com o motivo e libera a
- * data) e reativada.</p>
+ * <p>O preletor pode ser um <strong>trabalhador da casa</strong> (com a função Expositor/Preletor)
+ * ou um <strong>convidado</strong> — um cadastro com vínculo CONVIDADO, feito pelo "Novo Cadastro"
+ * (V41; ver ConvidadoController). No formulário os dois aparecem no mesmo select, com o valor
+ * {@code T:<id>} ou {@code C:<id>}. O parâmetro se chama {@code preletorEscolhido}, e não
+ * {@code preletor}, porque o {@code @ModelAttribute Prelecao} tentaria converter "T:12" no campo
+ * {@code preletor} (um Trabalhador) e a requisição daria 400. A preleção também pode ser
+ * <strong>cancelada</strong> (fica na escala com o motivo e libera a data) e reativada.</p>
  */
 @Controller
 public class PrelecaoController {
-
-    /** Valor do select para cadastrar um convidado novo junto com a preleção. */
-    static final String NOVO_CONVIDADO = "NOVO";
 
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final PrelecaoRepository prelecaoRepository;
     private final TrabalhadorRepository trabalhadorRepository;
-    private final PreletorConvidadoRepository convidadoRepository;
+    private final AssistidoRepository assistidoRepository;
     private final SessaoRepository sessaoRepository;
     private final CheckinService checkinService;
 
     public PrelecaoController(PrelecaoRepository prelecaoRepository, TrabalhadorRepository trabalhadorRepository,
-            PreletorConvidadoRepository convidadoRepository, SessaoRepository sessaoRepository,
+            AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             CheckinService checkinService) {
         this.prelecaoRepository = prelecaoRepository;
         this.trabalhadorRepository = trabalhadorRepository;
-        this.convidadoRepository = convidadoRepository;
+        this.assistidoRepository = assistidoRepository;
         this.sessaoRepository = sessaoRepository;
         this.checkinService = checkinService;
     }
@@ -71,9 +67,6 @@ public class PrelecaoController {
      * histórico, da mais recente para a mais antiga, e as canceladas no fim.
      */
     public record ItemEscala(Prelecao prelecao, SituacaoPrelecao situacao) {}
-
-    /** O convidado novo digitado no próprio formulário da preleção. */
-    public record NovoConvidado(String nome, String telefone, String origem) {}
 
     @GetMapping("/prelecao")
     public String listarPrelecoes(Model model) {
@@ -118,37 +111,33 @@ public class PrelecaoController {
 
     @GetMapping("/prelecao/novo")
     public String novaPrelecao(Model model) {
-        prepararFormulario(model, new Prelecao(), null, null);
+        prepararFormulario(model, new Prelecao(), null);
         return "prelecao-form";
     }
 
     @GetMapping("/prelecao/{prelecaoId}/editar")
     public String editarPrelecao(@PathVariable Long prelecaoId, Model model) {
         Prelecao prelecao = buscar(prelecaoId);
-        prepararFormulario(model, prelecao, escolhaAtual(prelecao), null);
+        prepararFormulario(model, prelecao, escolhaAtual(prelecao));
         return "prelecao-form";
     }
 
     @PostMapping("/prelecao/salvar")
     public String salvarPrelecao(@ModelAttribute Prelecao prelecao,
                                  @RequestParam(required = false) String preletorEscolhido,
-                                 @RequestParam(required = false) String novoConvidadoNome,
-                                 @RequestParam(required = false) String novoConvidadoTelefone,
-                                 @RequestParam(required = false) String novoConvidadoOrigem,
                                  RedirectAttributes redirectAttributes, Model model) {
-        NovoConvidado novo = new NovoConvidado(novoConvidadoNome, novoConvidadoTelefone, novoConvidadoOrigem);
         try {
-            PreletorConvidado convidadoNovo = aplicarPreletor(prelecao, preletorEscolhido, novo);
+            aplicarPreletor(prelecao, preletorEscolhido);
             validarDataPrelecao(prelecao.getDataApresentacao());
             validarUnicidadeDaData(prelecao.getDataApresentacao(), null);
             validarTema(prelecao.getTema());
 
-            gravar(prelecao, convidadoNovo);
+            prelecaoRepository.save(prelecao);
             return "redirect:/prelecao";
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             prelecao.setDataApresentacao(null);
-            prepararFormulario(model, prelecao, preletorEscolhido, novo);
+            prepararFormulario(model, prelecao, preletorEscolhido);
             model.addAttribute("erro", e.getMessage());
             return "prelecao-form";
         }
@@ -157,29 +146,25 @@ public class PrelecaoController {
     @PostMapping("/prelecao/{prelecaoId}/editar")
     public String atualizarPrelecao(@PathVariable Long prelecaoId, @ModelAttribute Prelecao dadosPrelecao,
                                     @RequestParam(required = false) String preletorEscolhido,
-                                    @RequestParam(required = false) String novoConvidadoNome,
-                                    @RequestParam(required = false) String novoConvidadoTelefone,
-                                    @RequestParam(required = false) String novoConvidadoOrigem,
                                     RedirectAttributes redirectAttributes, Model model) {
-        NovoConvidado novo = new NovoConvidado(novoConvidadoNome, novoConvidadoTelefone, novoConvidadoOrigem);
         try {
             Prelecao prelecao = buscar(prelecaoId);
             prelecao.setDataApresentacao(dadosPrelecao.getDataApresentacao());
             prelecao.setTema(dadosPrelecao.getTema());
-            PreletorConvidado convidadoNovo = aplicarPreletor(prelecao, preletorEscolhido, novo);
+            aplicarPreletor(prelecao, preletorEscolhido);
             validarDataPrelecao(prelecao.getDataApresentacao());
             if (!prelecao.isCancelada()) {
                 validarUnicidadeDaData(prelecao.getDataApresentacao(), prelecaoId);
             }
             validarTema(prelecao.getTema());
 
-            gravar(prelecao, convidadoNovo);
+            prelecaoRepository.save(prelecao);
             return "redirect:/prelecao";
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
             dadosPrelecao.setId(prelecaoId);
             dadosPrelecao.setDataApresentacao(null);
-            prepararFormulario(model, dadosPrelecao, preletorEscolhido, novo);
+            prepararFormulario(model, dadosPrelecao, preletorEscolhido);
             model.addAttribute("erro", e.getMessage());
             return "prelecao-form";
         }
@@ -191,7 +176,7 @@ public class PrelecaoController {
                                    RedirectAttributes redirectAttributes) {
         Prelecao prelecao = buscar(prelecaoId);
         prelecao.setCanceladaEm(LocalDateTime.now());
-        prelecao.setMotivoCancelamento(opcional(motivo, 255));
+        prelecao.setMotivoCancelamento(preenchido(motivo) ? limitar(motivo.trim(), 255) : null);
         prelecaoRepository.save(prelecao);
         redirectAttributes.addFlashAttribute("sucesso", "Preleção de "
                 + prelecao.getDataApresentacao().format(FORMATO_DATA)
@@ -233,119 +218,27 @@ public class PrelecaoController {
         return "redirect:/prelecao";
     }
 
-    // ------------------------------------------------------------------ preletores convidados
-
-    @GetMapping("/prelecao/convidados")
-    public String listarConvidados(Model model) {
-        prepararConvidados(model, new PreletorConvidado());
-        return "prelecao-convidados";
-    }
-
-    @GetMapping("/prelecao/convidados/{convidadoId}")
-    public String editarConvidado(@PathVariable Long convidadoId, Model model) {
-        prepararConvidados(model, buscarConvidado(convidadoId));
-        return "prelecao-convidados";
-    }
-
-    @PostMapping("/prelecao/convidados")
-    public String salvarConvidado(@ModelAttribute("convidado") PreletorConvidado dados,
-                                  RedirectAttributes redirectAttributes, Model model) {
-        return gravarConvidado(new PreletorConvidado(), dados, redirectAttributes, model);
-    }
-
-    @PostMapping("/prelecao/convidados/{convidadoId}")
-    public String atualizarConvidado(@PathVariable Long convidadoId,
-                                     @ModelAttribute("convidado") PreletorConvidado dados,
-                                     RedirectAttributes redirectAttributes, Model model) {
-        return gravarConvidado(buscarConvidado(convidadoId), dados, redirectAttributes, model);
-    }
-
-    /** Desativar tira o convidado da lista de escolha da escala, sem mexer nas preleções dele. */
-    @PostMapping("/prelecao/convidados/{convidadoId}/ativo")
-    public String alternarConvidado(@PathVariable Long convidadoId, RedirectAttributes redirectAttributes) {
-        PreletorConvidado convidado = buscarConvidado(convidadoId);
-        convidado.setAtivo(!convidado.isAtivo());
-        convidadoRepository.save(convidado);
-        redirectAttributes.addFlashAttribute("sucesso", convidado.getNome()
-                + (convidado.isAtivo() ? " voltou a aparecer na escala." : " não aparece mais para escolher na escala."));
-        return "redirect:/prelecao/convidados";
-    }
-
-    @PostMapping("/prelecao/convidados/{convidadoId}/excluir")
-    public String excluirConvidado(@PathVariable Long convidadoId, RedirectAttributes redirectAttributes) {
-        PreletorConvidado convidado = buscarConvidado(convidadoId);
-        if (prelecaoRepository.existsByConvidadoId(convidadoId)) {
-            redirectAttributes.addFlashAttribute("erro", convidado.getNome() + " já está na escala de preleções e "
-                    + "não pode ser excluído(a). Use Desativar para tirá-lo(a) da lista de escolha.");
-            return "redirect:/prelecao/convidados";
-        }
-        convidadoRepository.delete(convidado);
-        redirectAttributes.addFlashAttribute("sucesso", convidado.getNome() + " foi excluído(a).");
-        return "redirect:/prelecao/convidados";
-    }
-
-    private String gravarConvidado(PreletorConvidado convidado, PreletorConvidado dados,
-                                   RedirectAttributes redirectAttributes, Model model) {
-        try {
-            convidado.setNome(exigirNomeConvidado(dados.getNome()));
-            convidado.setTelefone(opcional(dados.getTelefone(), 30));
-            convidado.setEmail(validarEmail(dados.getEmail()));
-            convidado.setOrigem(opcional(dados.getOrigem(), 150));
-            convidado.setObservacoes(preenchido(dados.getObservacoes()) ? dados.getObservacoes().trim() : null);
-        } catch (IllegalArgumentException e) {
-            dados.setId(convidado.getId());
-            prepararConvidados(model, dados);
-            model.addAttribute("erro", e.getMessage());
-            return "prelecao-convidados";
-        }
-        convidadoRepository.save(convidado);
-        redirectAttributes.addFlashAttribute("sucesso", "Convidado(a) " + convidado.getNome() + " salvo(a).");
-        return "redirect:/prelecao/convidados";
-    }
-
-    private void prepararConvidados(Model model, PreletorConvidado emEdicao) {
-        model.addAttribute("convidados", convidadoRepository.findAllByOrderByNomeAsc());
-        model.addAttribute("convidado", emEdicao);
-    }
-
     // ------------------------------------------------------------------ preletor da preleção
 
-    /**
-     * Põe na preleção o preletor escolhido no select (trabalhador ou convidado). Para {@code NOVO},
-     * devolve o convidado ainda não gravado — ele só é gravado junto com a preleção, depois de todas
-     * as validações, para um erro de data não deixar um convidado solto.
-     */
-    PreletorConvidado aplicarPreletor(Prelecao prelecao, String escolha, NovoConvidado novo) {
+    /** Põe na preleção o preletor escolhido no select: trabalhador ({@code T:}) ou convidado ({@code C:}). */
+    void aplicarPreletor(Prelecao prelecao, String escolha) {
         prelecao.setPreletor(null);
         prelecao.setConvidado(null);
         if (!preenchido(escolha)) {
             throw new IllegalArgumentException("Selecione o preletor.");
         }
-        if (NOVO_CONVIDADO.equals(escolha)) {
-            PreletorConvidado convidado = new PreletorConvidado();
-            convidado.setNome(exigirNomeConvidado(novo.nome()));
-            convidado.setTelefone(opcional(novo.telefone(), 30));
-            convidado.setOrigem(opcional(novo.origem(), 150));
-            prelecao.setConvidado(convidado);
-            return convidado;
-        }
         Long id = idDaEscolha(escolha);
         if (escolha.startsWith("C:")) {
-            prelecao.setConvidado(buscarConvidado(id));
-            return null;
+            Assistido convidado = assistidoRepository.findById(id)
+                    .filter(Assistido::isConvidado)
+                    .orElseThrow(() -> new IllegalArgumentException("Preletor convidado inválido."));
+            prelecao.setConvidado(convidado);
+            return;
         }
         Trabalhador preletor = trabalhadorRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Preletor inválido: " + id));
         validarPreletor(preletor);
         prelecao.setPreletor(preletor);
-        return null;
-    }
-
-    private void gravar(Prelecao prelecao, PreletorConvidado convidadoNovo) {
-        if (convidadoNovo != null) {
-            convidadoRepository.save(convidadoNovo);
-        }
-        prelecaoRepository.save(prelecao);
     }
 
     private static Long idDaEscolha(String escolha) {
@@ -375,9 +268,10 @@ public class PrelecaoController {
     }
 
     /** Convidados ativos e, se a preleção já tem um convidado desativado, ele também (senão sumiria). */
-    private List<PreletorConvidado> convidadosDisponiveis(Prelecao prelecao) {
-        List<PreletorConvidado> convidados = new ArrayList<>(convidadoRepository.findByAtivoTrueOrderByNomeAsc());
-        PreletorConvidado atual = prelecao.getConvidado();
+    private List<Assistido> convidadosDisponiveis(Prelecao prelecao) {
+        List<Assistido> convidados = new ArrayList<>(
+                assistidoRepository.findByVinculoAndAtivoTrueOrderByNomeAsc(Assistido.VINCULO_CONVIDADO));
+        Assistido atual = prelecao.getConvidado();
         if (atual != null && atual.getId() != null
                 && convidados.stream().noneMatch(c -> c.getId().equals(atual.getId()))) {
             convidados.add(atual);
@@ -420,28 +314,6 @@ public class PrelecaoController {
         }
     }
 
-    private static String exigirNomeConvidado(String nome) {
-        if (!preenchido(nome) || nome.trim().length() < 3) {
-            throw new IllegalArgumentException("Informe o nome do preletor convidado.");
-        }
-        return limitar(nome.trim(), 150);
-    }
-
-    private static String validarEmail(String email) {
-        if (!preenchido(email)) {
-            return null;
-        }
-        String limpo = email.trim().toLowerCase();
-        if (limpo.length() > 150 || !limpo.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
-            throw new IllegalArgumentException("E-mail do convidado inválido.");
-        }
-        return limpo;
-    }
-
-    private static String opcional(String valor, int maximo) {
-        return preenchido(valor) ? limitar(valor.trim(), maximo) : null;
-    }
-
     private static String limitar(String valor, int maximo) {
         return valor.length() > maximo ? valor.substring(0, maximo) : valor;
     }
@@ -455,16 +327,10 @@ public class PrelecaoController {
                 .orElseThrow(() -> new IllegalArgumentException("Preleção inválida: " + prelecaoId));
     }
 
-    private PreletorConvidado buscarConvidado(Long convidadoId) {
-        return convidadoRepository.findById(convidadoId)
-                .orElseThrow(() -> new IllegalArgumentException("Convidado inválido: " + convidadoId));
-    }
-
-    private void prepararFormulario(Model model, Prelecao prelecao, String preletorEscolhido, NovoConvidado novo) {
+    private void prepararFormulario(Model model, Prelecao prelecao, String preletorEscolhido) {
         model.addAttribute("prelecao", prelecao);
         model.addAttribute("preletores", preletoresDisponiveis());
         model.addAttribute("convidados", convidadosDisponiveis(prelecao));
         model.addAttribute("preletorEscolhido", preletorEscolhido);
-        model.addAttribute("novoConvidado", novo != null ? novo : new NovoConvidado(null, null, null));
     }
 }

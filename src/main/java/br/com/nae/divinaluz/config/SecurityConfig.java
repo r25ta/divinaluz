@@ -72,7 +72,8 @@ public class SecurityConfig {
                         // prontuário não é dado cadastral — a Recepcionista cadastra, mas não altera isso.
                         .requestMatchers("/prontuario/*/dia-frequencia", "/prontuario/*/tratamento")
                                 .hasAuthority(Permissao.PRONTUARIO.getAuthority())
-                        .requestMatchers("/novo", "/salvar", "/prontuario/*/editar",
+                        // Preletor convidado (V41): cadastrado no "Novo Cadastro", então é CADASTRO.
+                        .requestMatchers("/novo", "/salvar", "/convidados", "/convidados/**", "/prontuario/*/editar",
                                         "/prontuario/*/desativar", "/prontuario/*/reativar",
                                         "/prontuario/*/acesso", "/prontuario/*/reenviar-codigo",
                                         "/prontuario/*/celular/**",

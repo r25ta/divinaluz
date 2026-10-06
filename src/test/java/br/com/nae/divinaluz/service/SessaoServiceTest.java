@@ -228,8 +228,9 @@ class SessaoServiceTest {
 
     @Test
     void preletorConvidadoDaEscalaApareceNaSessao() {
-        br.com.nae.divinaluz.model.PreletorConvidado convidado = new br.com.nae.divinaluz.model.PreletorConvidado();
+        Assistido convidado = new Assistido();
         convidado.setNome("Divaldo Convidado");
+        convidado.setVinculo(Assistido.VINCULO_CONVIDADO);
         Prelecao daEscala = new Prelecao();
         daEscala.setDataApresentacao(DOMINGO);
         daEscala.setConvidado(convidado);
@@ -274,6 +275,35 @@ class SessaoServiceTest {
 
         assertEquals(null, sessao.getPreletorSubstituto());
         assertEquals(null, sessao.getTemaSubstituto());
+    }
+
+    @Test
+    void trocaEmergencialPorConvidadoTiraOTrabalhadorSubstituto() {
+        sessao.setPreletorSubstituto(trabalhador(31L, "Kalvin"));
+        Assistido convidado = new Assistido();
+        convidado.setId(50L);
+        convidado.setNome("Divaldo Convidado");
+        convidado.setVinculo(Assistido.VINCULO_CONVIDADO);
+        when(sessaoAssistenciaRepository.findById(1L)).thenReturn(Optional.of(sessao));
+        when(sessaoAssistenciaRepository.save(sessao)).thenReturn(sessao);
+        when(assistidoRepository.findById(50L)).thenReturn(Optional.of(convidado));
+
+        sessaoService.trocarPreletor(1L, "C:50", null);
+
+        assertEquals(null, sessao.getPreletorSubstituto());
+        assertSame(convidado, sessao.getConvidadoSubstituto());
+        assertEquals("Divaldo Convidado", sessaoService.preletorDaSessao(sessao).preletor());
+    }
+
+    @Test
+    void trocaEmergencialRecusaQuemNaoEhConvidado() {
+        Assistido comum = new Assistido();
+        comum.setId(51L);
+        comum.setVinculo("ASSISTIDO");
+        when(sessaoAssistenciaRepository.findById(1L)).thenReturn(Optional.of(sessao));
+        when(assistidoRepository.findById(51L)).thenReturn(Optional.of(comum));
+
+        assertThrows(RegraNegocioException.class, () -> sessaoService.trocarPreletor(1L, "C:51", null));
     }
 
     // ------------------------------------------------------------ indicadores
@@ -335,7 +365,7 @@ class SessaoServiceTest {
     void buscaPorNomeIgnoraAcentoEMaiusculas() {
         Assistido joao = assistido(1L, "João Conceição", p2, "ASSISTIDO");
         Assistido maria = assistido(2L, "Maria", p2, "ASSISTIDO");
-        when(assistidoRepository.findByAtivo(true)).thenReturn(List.of(maria, joao));
+        when(assistidoRepository.atendidosPorAtivo(true)).thenReturn(List.of(maria, joao));
 
         assertEquals(List.of(joao), sessaoService.buscarAssistidos("  CONCEICAO "));
         assertEquals(List.of(), sessaoService.buscarAssistidos("j"), "menos de 2 letras não busca");
@@ -344,7 +374,7 @@ class SessaoServiceTest {
     @Test
     void cadastroRapidoEntraEmP2ComODiaEAPresencaDaSessao() {
         when(checkinService.exigirCheckinAberto(1L)).thenReturn(sessao);
-        when(assistidoRepository.findByAtivo(true)).thenReturn(List.of());
+        when(assistidoRepository.atendidosPorAtivo(true)).thenReturn(List.of());
         when(assistidoRepository.save(any(Assistido.class))).thenAnswer(i -> i.getArgument(0));
         when(tipoTratamentoRepository.findByCodigo("P2")).thenReturn(Optional.of(p2));
 
@@ -360,7 +390,7 @@ class SessaoServiceTest {
     @Test
     void cadastroRapidoDeNomeJaCadastradoPedeConfirmacao() {
         when(checkinService.exigirCheckinAberto(1L)).thenReturn(sessao);
-        when(assistidoRepository.findByAtivo(true)).thenReturn(List.of(assistido(9L, "José da Silva", p2, "ASSISTIDO")));
+        when(assistidoRepository.atendidosPorAtivo(true)).thenReturn(List.of(assistido(9L, "José da Silva", p2, "ASSISTIDO")));
 
         assertThrows(SessaoService.HomonimoException.class,
                 () -> sessaoService.cadastroRapido(1L, "jose da silva", null, null, false));

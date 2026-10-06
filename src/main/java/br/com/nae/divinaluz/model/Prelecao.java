@@ -32,11 +32,11 @@ public class Prelecao {
     @ToString.Exclude
     private Trabalhador preletor;
 
-    /** Preletor convidado, que não é assistido (V40). */
+    /** Preletor convidado: um cadastro com vínculo CONVIDADO (V41; na V40 era uma tabela própria). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "convidado_id")
     @ToString.Exclude
-    private PreletorConvidado convidado;
+    private Assistido convidado;
 
     /** Cancelada: não vai acontecer, mas fica na escala como registro e libera a data (V40). */
     @Column(name = "cancelada_em")

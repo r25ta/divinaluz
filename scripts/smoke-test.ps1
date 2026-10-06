@@ -1037,6 +1037,15 @@ try {
         $cssVersionado = if ($pagina -match 'href="([^"]*/css/app-[0-9a-f]{32}\.css)"') { $Matches[1] } else { $null }
         $cabecalhosCss = if ($cssVersionado) { (& curl.exe -s -D - -o NUL "$(([Uri]$BaseUrl).GetLeftPart('Authority'))$cssVersionado") -join "`n" } else { "" }
         Check "CSS com versão no nome e cache de 1 ano" ($cssVersionado -and $cabecalhosCss -match "max-age=31536000")
+        Check "Nenhum CSS/fonte de servidor externo (Bootstrap e ícones servidos pelo sistema)" (
+            $pagina -notmatch "cdn\.jsdelivr|fonts\.googleapis" -and $pagina -match "/vendor/bootstrap/bootstrap\.min-[0-9a-f]{32}\.css")
+        $manifesto = if ($pagina -match 'rel="manifest" href="([^"]+)"') { $Matches[1] } else { $null }
+        $semLogin = if ($manifesto) { & curl.exe -s "$(([Uri]$BaseUrl).GetLeftPart('Authority'))$manifesto" } else { "" }
+        $icone = & curl.exe -s -o NUL -w "%{http_code}" "$BaseUrl/icones/icone-192.png"
+        Check "Manifesto do app e ícone abrem sem login (adicionar à tela inicial)" (
+            ($semLogin -join "") -match '"short_name"\s*:\s*"Divina Luz"' -and $icone -eq "200")
+        $r = Invoke-CurlForm -Url "$BaseUrl/sessao/$sessaoHojeId/qrcode"
+        Check "Tela do QR da sessão pede tela acesa e oferece tela cheia" ($r.Body -match "wakeLock" -and $r.Body -match "Tela cheia")
 
         # 16a. "Assistidos Presentes" com o botão de remover quem foi marcado por engano. A presença de
         # hoje era a do reinício em P2: removê-la também desfaz o reinício (o ciclo expirado volta).

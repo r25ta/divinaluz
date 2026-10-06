@@ -4,6 +4,8 @@ import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.Permissao;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -28,12 +30,33 @@ public class PerfilAdvice {
      * consulta também precisa de um caminho até o seu cartão.
      */
     @ModelAttribute("meuAssistidoId")
-    public Long meuAssistidoId(Authentication authentication) {
-        if (authentication == null) {
+    public Long meuAssistidoId(Authentication authentication, HttpServletRequest request) {
+        if (authentication == null || !ehPagina(request)) {
             return null;
         }
-        return assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
+        // O id de quem está logado não muda durante a sessão: guardado na sessão HTTP, em vez de uma
+        // consulta ao banco a cada página. A chave leva o login, para uma troca de usuário na mesma
+        // sessão não herdar o id do anterior.
+        HttpSession sessao = request.getSession(false);
+        String chave = "meuAssistidoId:" + authentication.getName();
+        if (sessao != null && sessao.getAttribute(chave) instanceof Long guardado) {
+            return guardado;
+        }
+        Long id = assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
                 .map(Assistido::getId).orElse(null);
+        if (sessao != null && id != null) {
+            sessao.setAttribute(chave, id);
+        }
+        return id;
+    }
+
+    /**
+     * Só as páginas inteiras usam estes atributos (navbar, botões). Os pedidos de pedaço de tela
+     * (atualização dos indicadores a cada 10s, busca da recepção — enviados com X-Requested-With) e
+     * as imagens de QR não: para eles nenhuma consulta ao banco é feita aqui (2026-10-05).
+     */
+    private static boolean ehPagina(HttpServletRequest request) {
+        return request.getHeader("X-Requested-With") == null && !request.getRequestURI().endsWith(".png");
     }
 
     @ModelAttribute("podeConsulta")
@@ -89,7 +112,10 @@ public class PerfilAdvice {
     // cartões aguardando avaliação, o Entrevistador os aguardando entrevista, e quem faz as duas
     // coisas (Dirigente) conta os dois. Ver EntrevistaController.
     @ModelAttribute("filaEntrevistas")
-    public long filaEntrevistas(Authentication authentication) {
+    public long filaEntrevistas(Authentication authentication, HttpServletRequest request) {
+        if (!ehPagina(request)) {
+            return 0;
+        }
         List<CartaoStatus> meus = new java.util.ArrayList<>();
         if (pode(authentication, Permissao.AVALIACAO)) {
             meus.add(CartaoStatus.AGUARDANDO_AVALIACAO);

@@ -6,11 +6,24 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title th:text="${title} + ' · N.A.E. Divina Luz'">N.A.E. Divina Luz</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+        <!--/* Tudo servido pelo próprio sistema (2026-10-05): antes eram três servidores externos
+               (Google Fonts, jsDelivr ×2), cada um com a sua conexão a abrir antes de a página aparecer
+               — no 4G, a maior parte da espera. Bootstrap 5.3.0 e Bootstrap Icons 1.11.3 (MIT) ficam em
+               static/vendor; a fonte é a do próprio aparelho, que não baixa nada. */-->
+        <link th:href="@{/vendor/bootstrap/bootstrap.min.css}" rel="stylesheet">
+        <link th:href="@{/vendor/bootstrap-icons/bootstrap-icons.min.css}" rel="stylesheet">
         <link th:href="@{/css/app.css}" rel="stylesheet">
+        <!--/* Aplicativo no celular (2026-10-05): "Adicionar à tela inicial" abre o sistema como um app,
+               com o ícone da casa. */-->
+        <link rel="manifest" th:href="@{/manifest.json}">
+        <meta name="theme-color" content="#0F787D">
+        <link rel="icon" type="image/png" sizes="32x32" th:href="@{/icones/favicon-32.png}">
+        <link rel="icon" type="image/png" sizes="192x192" th:href="@{/icones/icone-192.png}">
+        <link rel="apple-touch-icon" th:href="@{/icones/apple-touch-icon.png}">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-title" content="Divina Luz">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
         <script th:src="@{/js/data-mask.js}" defer></script>
         <!--/* Calendário e "ver senha" valem em todo o sistema, por isso ficam aqui e não por tela.
                O picker depende da máscara já ter sido aplicada, então vem depois dela. */-->

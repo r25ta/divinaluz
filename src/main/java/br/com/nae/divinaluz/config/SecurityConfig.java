@@ -41,7 +41,11 @@ public class SecurityConfig {
                         // "/entrar/**" é a entrada por código de e-mail (ver CodigoAcessoService): é
                         // pública por natureza, como o /login — quem a usa ainda não está autenticado.
                         .requestMatchers("/login", "/entrar", "/entrar/**", "/definir-senha/**", "/acesso-negado", "/error",
-                                        "/css/**", "/js/**", "/images/**", "/webjars/**").permitAll()
+                                        "/css/**", "/js/**", "/images/**", "/webjars/**",
+                                        // Bootstrap/ícones servidos pelo sistema e o manifesto do app no
+                                        // celular (2026-10-05): o navegador os pede sem login (o manifesto,
+                                        // inclusive, sem cookies).
+                                        "/vendor/**", "/icones/**", "/manifest*.json").permitAll()
                         // Próprio cartão e próprio QR: liberados a qualquer autenticado porque todo
                         // mundo alcança o seu (inclusive quem não tem permissão nenhuma). Quem pode
                         // ver o cartão DE OUTRO é checado no ProntuarioController

@@ -32,9 +32,14 @@
                 procure a recepção.
             </p>
 
-            <a th:href="@{/sessao/{id}(id=${sessao.id})}" class="btn btn-outline-teal btn-sm mt-2">
-                <i class="bi bi-arrow-left"></i> Voltar ao painel
-            </a>
+            <div class="d-flex justify-content-center flex-wrap gap-2 mt-2">
+                <button type="button" class="btn btn-outline-teal btn-sm" id="telaCheia" hidden>
+                    <i class="bi bi-arrows-fullscreen"></i> Tela cheia
+                </button>
+                <a th:href="@{/sessao/{id}(id=${sessao.id})}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao painel
+                </a>
+            </div>
         </div>
     </main>
 </div>
@@ -61,6 +66,33 @@
         img.addEventListener('load', function () {
             img.style.opacity = '1';
         });
+    })();
+
+    // Tablet na recepção (2026-10-05): a tela não apaga sozinha enquanto o QR estiver aberto (Wake
+    // Lock; o navegador solta a trava quando a aba some, por isso ela é pedida de novo ao voltar), e
+    // um botão de tela cheia para o QR ocupar o tablet inteiro. Navegador sem suporte: nada muda.
+    (function () {
+        var trava = null;
+        function pedirTrava() {
+            if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+            navigator.wakeLock.request('screen').then(function (t) { trava = t; }).catch(function () {});
+        }
+        pedirTrava();
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && (trava === null || trava.released)) pedirTrava();
+        });
+
+        var botao = document.getElementById('telaCheia');
+        if (botao && document.documentElement.requestFullscreen) {
+            botao.hidden = false;
+            botao.addEventListener('click', function () {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                } else {
+                    document.documentElement.requestFullscreen().catch(function () {});
+                }
+            });
+        }
     })();
 </script>
 </body>

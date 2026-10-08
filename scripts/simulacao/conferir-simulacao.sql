@@ -1,6 +1,6 @@
 -- =============================================================================================
 -- Confere, direto no banco, que a carga de simulação respeita as regras do sistema.
--- Só leitura. Cada linha é uma regra; "problemas" precisa dar 0 em todas.
+-- Só leitura. Precisa da V43 (tipos de entrevista). Cada linha é uma regra; "problemas" precisa dar 0 em todas.
 -- Uso: psql "<connection string>" -f conferir-simulacao.sql
 -- =============================================================================================
 \set ON_ERROR_STOP on
@@ -77,7 +77,8 @@ SELECT verificacao, problemas FROM (
   SELECT 10, 'Ciclo com 4 efetivas só segue depois de Avaliação + Entrevista',
          count(*) FROM sim_efetiva e
          WHERE e.numero_anterior = 4
-           AND NOT EXISTS (SELECT 1 FROM entrevista x WHERE x.assistido_id = e.assistido_id AND x.data = e.data_consulta)
+           AND NOT EXISTS (SELECT 1 FROM entrevista x WHERE x.assistido_id = e.assistido_id AND x.data = e.data_consulta
+                           AND x.tipo = 'TRATAMENTO')
            AND NOT EXISTS (SELECT 1 FROM cartao_encerrado c WHERE c.assistido_id = e.assistido_id AND c.encerrado_em = e.data_consulta)
            -- depois da alta, o P2 novo da recepção abre o ciclo sem entrevista (registrarSessaoAposAlta)
            AND NOT EXISTS (SELECT 1 FROM entrevista x WHERE x.assistido_id = e.assistido_id AND x.resultado = 'ALTA'
@@ -86,8 +87,7 @@ SELECT verificacao, problemas FROM (
   SELECT 11, 'Avaliação só depois da 4ª presença do cartão',
          count(*) FROM avaliacao a JOIN sim_pessoa p ON p.id = a.assistido_id
          -- (a 1ª sessão criada pela entrevista do mesmo dia não conta: ela vem depois da avaliação)
-         WHERE (SELECT e.numero_serie FROM sim_efetiva e WHERE e.assistido_id = a.assistido_id
-                  AND (e.data_consulta < a.data OR (e.data_consulta = a.data AND e.numero_serie = 4))
+         WHERE (SELECT e.numero_serie FROM sim_efetiva e WHERE e.assistido_id = a.assistido_id AND e.data_consulta < a.data
                 ORDER BY e.data_consulta DESC LIMIT 1) IS DISTINCT FROM 4
   UNION ALL
   SELECT 12, 'VEZ da avaliação conta todas as da pessoa (1, 2, 3...) e evolução a partir da 2ª',
@@ -131,6 +131,24 @@ SELECT verificacao, problemas FROM (
          LEFT JOIN trabalhador_funcao f ON f.trabalhador_id = pr.trabalhador_id AND f.funcao = 'EXPOSITOR_PRELETOR'
          LEFT JOIN assistido c ON c.id = pr.convidado_id
          WHERE (pr.trabalhador_id IS NOT NULL AND f.funcao IS NULL) OR (pr.convidado_id IS NOT NULL AND c.vinculo <> 'CONVIDADO')
+  UNION ALL
+  SELECT 18, 'Regra da casa: Avaliação e Entrevista do tratamento nunca no dia da 4ª presença',
+         (SELECT count(*) FROM avaliacao a JOIN sim_pessoa p ON p.id = a.assistido_id
+           WHERE EXISTS (SELECT 1 FROM sim_efetiva e WHERE e.assistido_id = a.assistido_id AND e.data_consulta = a.data AND e.numero_serie = 4))
+       + (SELECT count(*) FROM entrevista x JOIN sim_pessoa p ON p.id = x.assistido_id
+           WHERE x.tipo = 'TRATAMENTO'
+             AND EXISTS (SELECT 1 FROM sim_efetiva e WHERE e.assistido_id = x.assistido_id AND e.data_consulta = x.data AND e.numero_serie = 4))
+  UNION ALL
+  SELECT 19, 'Entrevista da 1ª sessão: na data em que um tratamento começou, uma por data, não no dia da do tratamento',
+         count(*) FROM entrevista x JOIN sim_pessoa p ON p.id = x.assistido_id
+         WHERE x.tipo = 'PRIMEIRA_SESSAO'
+           AND (NOT EXISTS (SELECT 1 FROM sim_efetiva e WHERE e.assistido_id = x.assistido_id AND e.data_consulta = x.data AND e.numero_serie = 1)
+                OR EXISTS (SELECT 1 FROM entrevista y WHERE y.assistido_id = x.assistido_id AND y.data = x.data AND y.id <> x.id
+                           AND y.tipo IN ('TRATAMENTO', 'PRIMEIRA_SESSAO')))
+  UNION ALL
+  SELECT 20, 'Entrevistas da 1ª sessão e excepcionais sem avaliação, decisão nem tratamento',
+         count(*) FROM entrevista x JOIN sim_pessoa p ON p.id = x.assistido_id
+         WHERE x.tipo <> 'TRATAMENTO' AND (x.avaliacao_id IS NOT NULL OR x.resultado IS NOT NULL OR x.tratamento_indicado_id IS NOT NULL)
 ) v ORDER BY ordem;
 
 -- Retrato do fim do período (o que as telas mostram hoje).
@@ -141,6 +159,9 @@ FROM sim_pessoa p GROUP BY 1, 2 ORDER BY 1, 2;
 SELECT coalesce(t.codigo, '(sem tratamento)') AS tratamento_atual, count(*) AS pessoas
 FROM sim_pessoa p LEFT JOIN tipo_tratamento t ON t.id = p.tratamento_atual_id
 WHERE p.ativo GROUP BY 1 ORDER BY 2 DESC;
+
+SELECT x.tipo, count(*) AS entrevistas FROM entrevista x JOIN sim_pessoa p ON p.id = x.assistido_id
+GROUP BY 1 ORDER BY 2 DESC;
 
 SELECT status_final, count(*) AS cartoes FROM cartao_encerrado c JOIN sim_pessoa p ON p.id = c.assistido_id
 GROUP BY 1 ORDER BY 2 DESC;

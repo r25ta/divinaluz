@@ -10,7 +10,7 @@ definirTratamento, alterarDiaFrequencia, registrarOuvinte) — por isso o result
 recepção, o Avaliador e o Entrevistador teriam produzido usando o sistema. Qualquer violação de
 regra aqui é um erro do simulador (AssertionError), nunca um dado gravado.
 
-Uso:  python3 gerar_simulacao.py            (semente fixa 2088: o SQL sai sempre igual)
+Uso:  python3 gerar_simulacao.py            (semente fixa 2118: o SQL sai sempre igual)
       python3 gerar_simulacao.py --semente 7
 """
 import argparse
@@ -161,6 +161,22 @@ OBS_ALTA = [
     "Alta comunicada; orientado a manter o Evangelho no Lar e voltar se precisar.",
 ]
 
+OBS_PRIMEIRA_SESSAO = [
+    "Acolhimento: explicado como funcionam as sessões, o passe e o cartão de 4 semanas.",
+    "Primeira vez numa casa espírita; tirou dúvidas sobre o passe e a água fluidificada.",
+    "Contou o motivo da vinda; orientado sobre a frequência semanal e o Evangelho no Lar.",
+    "Veio por indicação de familiar; explicado o tratamento de entrada (P2) e os horários.",
+    "Recomeço depois de um tempo afastado; reforçada a importância de não faltar.",
+]
+OBS_EXCEPCIONAL = [
+    "Pediu para conversar sobre o luto recente na família; ouvido e orientado a manter a prece.",
+    "Procurou a casa por conflito no trabalho; orientado a buscar o diálogo e a vigilância.",
+    "Quis tirar dúvidas sobre mediunidade; indicada a escola de aprendizes.",
+    "Pediu orientação sobre um familiar internado; combinada vibração no grupo de assistência.",
+    "Relatou sonhos recorrentes que o assustam; orientado sobre a prece antes de dormir.",
+    "Pediu ajuda para retomar o Evangelho no Lar com a família.",
+]
+
 CONVIDADOS = [
     ("Rubens Albuquerque Neto", "(11) 98123-4410", "Centro Espírita Caminho da Luz", "rubens.neto@sim.invalid"),
     ("Dalva Moreira Pacheco", "(11) 97456-1203", "Grupo Espírita Bezerra de Menezes", None),
@@ -196,6 +212,7 @@ class Pessoa:
     presencas: list = field(default_factory=list)
     avaliacoes: list = field(default_factory=list)
     entrevistas: list = field(default_factory=list)
+    avulsas: list = field(default_factory=list)      # entrevista da 1ª sessão e excepcional (V43)
     cartoes: list = field(default_factory=list)
     historico_dia: list = field(default_factory=list)
     dados: dict = field(default_factory=dict)
@@ -366,6 +383,8 @@ class Casa:
         regra(d <= FIM_AVALIACOES, "avaliação futura")
         u = self.ultima_efetiva(p)
         regra(u is None or d >= u.data, "avaliação anterior à última presença")
+        regra(u is None or u.numero != SESSOES_POR_AVALIACAO or d > u.data,
+              "regra da casa: a avaliação nunca é no dia da 4ª presença")
         vez = len(p.avaliacoes) + 1
         if resultado == "ALTA":
             proposto = None
@@ -378,11 +397,29 @@ class Casa:
         p.status = "AGUARDANDO_ENTREVISTA"
         return av
 
+    def registrar_entrevista_avulsa(self, p, tipo, d, entrevistador, obs):
+        """TratamentoService.registrarEntrevistaAvulsa (V43): não mexe no cartão."""
+        regra(tipo in ("PRIMEIRA_SESSAO", "EXCEPCIONAL"), "tipo de entrevista avulsa")
+        regra(entrevistador is not p, "ninguém se entrevista")
+        regra(d <= FIM_AVALIACOES, "entrevista futura")
+        regra(bool(obs and obs.strip()), "entrevista sem o que foi conversado")
+        if tipo == "PRIMEIRA_SESSAO":
+            regra(any(x.data == d and not x.ouvinte and x.numero == 1 for x in p.presencas),
+                  "entrevista da 1ª sessão fora da data em que um tratamento começou")
+            regra(not any(e["data"] == d for e in p.entrevistas), "dia aberto pela entrevista do tratamento")
+            regra(not any(e["data"] == d and e["tipo"] == "PRIMEIRA_SESSAO" for e in p.avulsas),
+                  "entrevista da 1ª sessão em dobro")
+        en = {"k": self.novo_k("entrevista"), "tipo": tipo, "data": d, "entrevistador": entrevistador, "obs": obs}
+        p.avulsas.append(en)
+        return en
+
     def registrar_entrevista(self, p, av, d, entrevistador, resultado, tratamento, obs):
         regra(entrevistador is not p, "ninguém se entrevista")
         regra(av in p.avaliacoes and av["entrevista"] is None, "avaliação inválida")
         regra(p.status == "AGUARDANDO_ENTREVISTA", f"{p.nome}: entrevista com cartão {p.status}")
         regra(d >= av["data"], "entrevista antes da avaliação")
+        regra(not any(x.data == d and not x.ouvinte and x.numero == SESSOES_POR_AVALIACAO for x in p.presencas),
+              "regra da casa: a entrevista nunca é no dia da 4ª presença")
         regra(d not in CANCELADAS, "entrevista em sessão cancelada")
         self._validar_dia(p, d)
         if resultado == "ALTA":
@@ -665,6 +702,17 @@ class Simulacao:
         # quem chega com o cartão retido passa pela avaliação / entrevista no fim da sessão
         for p in ordem:
             self.pos_sessao(p, d, s)
+        # Entrevista excepcional: alguém pede para conversar, sem ligação com o tratamento. Quase sempre
+        # no próprio dia; às vezes o entrevistador o recebe num dia da semana (data livre).
+        if self.rnd.random() < 0.45:
+            pedem = [p for p in ordem if any(x.data == d for x in p.presencas)]
+            if pedem:
+                p = self.rnd.choice(pedem)
+                entrevistador = self.escolher_entrevistador(p, d, s)
+                quando = d if self.rnd.random() < 0.7 else d + timedelta(days=self.rnd.randint(1, 3))
+                if entrevistador and quando <= FIM_AVALIACOES:
+                    self.casa.registrar_entrevista_avulsa(p, "EXCEPCIONAL", quando, entrevistador,
+                                                          self.rnd.choice(OBS_EXCEPCIONAL))
 
     def atender(self, p, d, s):
         casa = self.casa
@@ -712,10 +760,10 @@ class Simulacao:
             # sistema mostra hoje, com cartões Em Avaliação e Aguardando Entrevista.
             ultimas_semanas = d >= FIM - timedelta(days=13)
             if completou_hoje:
-                if r < (0.30 if ultimas_semanas else 0.55):
-                    self.avaliar(p, d, s)
-                elif r < (0.42 if ultimas_semanas else 0.78):
-                    marcada = d + timedelta(days=self.rnd.randint(1, 4))
+                # Regra da casa: a avaliação nunca é no dia da 4ª presença. O Avaliador atende nos dias
+                # seguintes (a data da avaliação é livre) ou na próxima vez que a pessoa vier.
+                if r < (0.40 if ultimas_semanas else 0.75):
+                    marcada = d + timedelta(days=self.rnd.randint(1, 5))
                     if marcada <= FIM_AVALIACOES:
                         p.avaliacao_marcada = marcada
                 # senão: fica para o próximo dia em que vier
@@ -732,6 +780,18 @@ class Simulacao:
                 return
             if (mesmo_dia and self.rnd.random() < 0.15) or (not mesmo_dia and self.rnd.random() < 0.88):
                 self.entrevistar(p, av, d, s)
+        # Entrevista da 1ª sessão, se o assistido quiser: no dia em que um tratamento começou (cadastro,
+        # reinício em P2, volta depois da alta, troca de tratamento) — não no dia em que a entrevista do
+        # tratamento abriu o ciclo, que já foi a conversa daquela 1ª sessão.
+        if (any(x.data == d and not x.ouvinte and x.numero == 1 for x in p.presencas)
+                and not any(e["data"] == d for e in p.entrevistas)
+                and not any(e["data"] == d for e in p.avulsas)):
+            novato = len(self.casa.efetivas(p)) == 1
+            if self.rnd.random() < (0.6 if novato else 0.3):
+                entrevistador = self.escolher_entrevistador(p, d, s)
+                if entrevistador:
+                    self.casa.registrar_entrevista_avulsa(p, "PRIMEIRA_SESSAO", d, entrevistador,
+                                                          self.rnd.choice(OBS_PRIMEIRA_SESSAO))
 
     def avaliacoes_marcadas_para(self, d):
         for p in self.casa.pessoas:
@@ -790,14 +850,18 @@ class Simulacao:
         obs = " ".join(self.rnd.sample(OBS_AVALIACAO, self.rnd.choice([1, 2])))
         self.casa.registrar_avaliacao(p, d, avaliador, resultado, proposto, evolucao, recs, historico, obs)
 
-    def entrevistar(self, p, av, d, s):
+    def escolher_entrevistador(self, p, d, s):
         escalados = [e["trabalhador"] for e in s["escala"] if e["posicao"] == "ENTREVISTADOR"]
-        presentes = [w for w in self.equipes[p.dia] if any(x.data == d for x in w.presencas)]
+        equipe = DOMINGO if d.weekday() == 6 else TERCA
+        presentes = [w for w in self.equipes[equipe] if any(x.data == d for x in w.presencas)]
         candidatos = [w for w in escalados if w is not p] or \
                      [w for w in presentes if w is not p and ({"ENTREVISTADOR", "DIRIGENTE"} & w.funcoes)]
-        if not candidatos:
+        return self.rnd.choice(candidatos) if candidatos else None
+
+    def entrevistar(self, p, av, d, s):
+        entrevistador = self.escolher_entrevistador(p, d, s)
+        if entrevistador is None:
             return
-        entrevistador = self.rnd.choice(candidatos)
         resultado, tratamento = av["resultado"], av["proposto"]
         r = self.rnd.random()
         if resultado == "ALTA" and r < 0.12:
@@ -907,6 +971,9 @@ def gerar_sql(sim: Simulacao):
     w(f"     OR EXISTS (SELECT 1 FROM avaliacao WHERE data BETWEEN {q(INICIO)} AND {q(FIM_AVALIACOES)})")
     w(f"     OR EXISTS (SELECT 1 FROM entrevista WHERE data BETWEEN {q(INICIO)} AND {q(FIM_AVALIACOES)}) THEN")
     w("    RAISE EXCEPTION 'Já existem sessões, presenças, preleções, avaliações ou entrevistas entre 05/04/2026 e 02/10/2026. A simulação não mistura dados com um período que já tem registros reais.';")
+    w("  END IF;")
+    w("  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'entrevista' AND column_name = 'tipo') THEN")
+    w("    RAISE EXCEPTION 'Este banco ainda não tem a migration V43 (tipos de entrevista). Publique a versão do sistema que a traz e rode a carga depois.';")
     w("  END IF;")
     w("  IF (SELECT count(*) FROM tipo_tratamento WHERE codigo IN ('P1','P2','P3A (ou P3F)','P3C','P3E','P3DC / P3V','A2','CH','P4','P3B')) <> 10 THEN")
     w("    RAISE EXCEPTION 'O catálogo de tratamentos não tem os 10 códigos esperados (V3 + V31).';")
@@ -1040,15 +1107,19 @@ def gerar_sql(sim: Simulacao):
                         q(r["escola"]), q(r["trabalho_espiritual"]), q(r["medico"]), sid("assistido", av["avaliador"].k)])
             en = av["entrevista"]
             if en:
-                ens.append([sid("entrevista", en["k"]), sid("avaliacao", av["k"]), sid("assistido", p.k), q(en["data"]),
-                            q(en["entrevistador"].nome), tt(en["tratamento"]), q(en["resultado"]), q(en["obs"]),
-                            sid("assistido", en["entrevistador"].k)])
-    w(f"-- {len(avs)} avaliações e {len(ens)} entrevistas")
+                ens.append([sid("entrevista", en["k"]), q("TRATAMENTO"), sid("avaliacao", av["k"]), sid("assistido", p.k),
+                            q(en["data"]), q(en["entrevistador"].nome), tt(en["tratamento"]), q(en["resultado"]),
+                            q(en["obs"]), sid("assistido", en["entrevistador"].k)])
+        for en in p.avulsas:
+            ens.append([sid("entrevista", en["k"]), q(en["tipo"]), "NULL", sid("assistido", p.k), q(en["data"]),
+                        q(en["entrevistador"].nome), "NULL", "NULL", q(en["obs"]), sid("assistido", en["entrevistador"].k)])
+    avulsas = sum(len(p.avulsas) for p in pessoas)
+    w(f"-- {len(avs)} avaliações e {len(ens)} entrevistas ({len(ens) - avulsas} de tratamento, {avulsas} da 1ª sessão ou excepcionais)")
     insert(out, "avaliacao", ["id", "assistido_id", "numero_vez", "data", "historico", "evolucao", "observacoes",
                               "tratamento_proposto_id", "resultado", "rec_visto", "rec_assistencia",
                               "rec_evangelho_no_lar", "rec_leituras", "rec_escola", "rec_trabalho_espiritual",
                               "rec_medico", "avaliador_id"], avs)
-    insert(out, "entrevista", ["id", "avaliacao_id", "assistido_id", "data", "entrevistador", "tratamento_indicado_id",
+    insert(out, "entrevista", ["id", "tipo", "avaliacao_id", "assistido_id", "data", "entrevistador", "tratamento_indicado_id",
                                "resultado", "observacoes", "entrevistador_id"], ens)
     w("")
 
@@ -1090,11 +1161,13 @@ def resumo(sim):
     print(f"cadastros: {len(pessoas)} (+{len(sim.convidados)} convidados); status: {dict(st)}")
     print(f"presenças por sessão: min {min(por_sessao)}, máx {max(por_sessao)}, média {sum(por_sessao)/len(por_sessao):.1f}")
     print("tratamentos atuais:", dict(Counter(p.tratamento for p in pessoas if p.tratamento)))
+    print("entrevistas:", {"TRATAMENTO": sum(len(p.entrevistas) for p in pessoas),
+                           **Counter(e["tipo"] for p in pessoas for e in p.avulsas)})
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--semente", type=int, default=2088)
+    ap.add_argument("--semente", type=int, default=2118)
     ap.add_argument("--saida", default=str(Path(__file__).with_name("carga-simulacao.sql")))
     args = ap.parse_args()
     sim = Simulacao(args.semente)

@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.CartaoEncerrado;
@@ -10,6 +11,7 @@ import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
+import br.com.nae.divinaluz.model.TipoEntrevista;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
@@ -34,6 +36,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -793,5 +796,134 @@ class TratamentoServiceTest {
         sessao.setDiaFrequencia(dia);
         sessao.setCanceladaEm(java.time.LocalDateTime.now());
         return sessao;
+    }
+
+    // --- Entrevistas avulsas: 1ª sessão e excepcional (V43, 2026-10-08) ---------------------------
+
+    private br.com.nae.divinaluz.model.Entrevista entrevistaAvulsa(LocalDate data, String observacoes) {
+        br.com.nae.divinaluz.model.Entrevista e = new br.com.nae.divinaluz.model.Entrevista();
+        e.setAssistido(assistido);
+        e.setData(data);
+        e.setObservacoes(observacoes);
+        return e;
+    }
+
+    private br.com.nae.divinaluz.model.Entrevista entrevistaGravada(TipoEntrevista tipo, LocalDate data) {
+        br.com.nae.divinaluz.model.Entrevista e = entrevistaAvulsa(data, "x");
+        e.setTipo(tipo);
+        return e;
+    }
+
+    @Test
+    void entrevistaDaPrimeiraSessaoNaDataQueAbriuOTratamentoNaoMexeNoCartao() {
+        LocalDate primeira = LocalDate.of(2026, 9, 27);
+        assistido.setTratamentoAtual(tratamento);
+        assistido.setCicloIniciadoEm(primeira);
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(presenca(primeira, 1)));
+        when(entrevistaRepository.findByAssistidoIdOrderByDataDesc(1L)).thenReturn(List.of());
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Entrevista e = entrevistaAvulsa(primeira, "  Acolhimento; explicado o P2.  ");
+        e.setResultado(br.com.nae.divinaluz.model.ResultadoAvaliacao.ALTA);   // o que vier do formulário é ignorado
+        e.setTratamentoIndicado(new TipoTratamento());
+        tratamentoService.registrarEntrevistaAvulsa(e, TipoEntrevista.PRIMEIRA_SESSAO, outraPessoa(50L));
+
+        assertEquals(TipoEntrevista.PRIMEIRA_SESSAO, e.getTipo());
+        assertNull(e.getAvaliacao());
+        assertNull(e.getResultado());
+        assertNull(e.getTratamentoIndicado());
+        assertEquals("Acolhimento; explicado o P2.", e.getObservacoes());
+        assertEquals("Entrevistador", e.getEntrevistador());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+        assertEquals(tratamento, assistido.getTratamentoAtual());
+        assertEquals(primeira, assistido.getCicloIniciadoEm());
+        verify(cartaoEncerradoRepository, never()).save(any());
+        verify(sessaoRepository, never()).save(any());
+        verify(assistidoRepository, never()).save(any());
+    }
+
+    @Test
+    void entrevistaDaPrimeiraSessaoRecusaDataQueNaoAbriuTratamento() {
+        LocalDate data = LocalDate.of(2026, 9, 27);
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(presenca(data, 2)));
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(data, "Conversa"), TipoEntrevista.PRIMEIRA_SESSAO, outraPessoa(50L)));
+        assertTrue(erro.getMessage().contains("não foi a 1ª sessão"));
+        verify(entrevistaRepository, never()).save(any());
+    }
+
+    @Test
+    void entrevistaDaPrimeiraSessaoRecusaODiaAbertoPelaEntrevistaDoTratamento() {
+        LocalDate data = LocalDate.of(2026, 9, 27);
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(presenca(data, 1)));
+        when(entrevistaRepository.findByAssistidoIdOrderByDataDesc(1L))
+                .thenReturn(List.of(entrevistaGravada(TipoEntrevista.TRATAMENTO, data)));
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(data, "Conversa"), TipoEntrevista.PRIMEIRA_SESSAO, outraPessoa(50L)));
+        assertTrue(erro.getMessage().contains("entrevista do tratamento"));
+    }
+
+    @Test
+    void entrevistaDaPrimeiraSessaoSoUmaVezPorDataMasAExcepcionalNaoAtrapalha() {
+        LocalDate data = LocalDate.of(2026, 9, 27);
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(presenca(data, 1)));
+        when(entrevistaRepository.findByAssistidoIdOrderByDataDesc(1L))
+                .thenReturn(List.of(entrevistaGravada(TipoEntrevista.EXCEPCIONAL, data),
+                        entrevistaGravada(TipoEntrevista.PRIMEIRA_SESSAO, data)));
+
+        RegraNegocioException erro = assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(data, "Conversa"), TipoEntrevista.PRIMEIRA_SESSAO, outraPessoa(50L)));
+        assertTrue(erro.getMessage().contains("já foi registrada"));
+    }
+
+    @Test
+    void entrevistaExcepcionalComCartaoRetidoNaoLiberaOCartao() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // data livre: uma quarta-feira, fora do dia de assistência
+        assistido.setDiaFrequencia(DiaFrequencia.DOMINGO_08H);
+        br.com.nae.divinaluz.model.Entrevista e = entrevistaAvulsa(LocalDate.of(2026, 9, 30), "Pediu para conversar sobre o luto.");
+        tratamentoService.registrarEntrevistaAvulsa(e, TipoEntrevista.EXCEPCIONAL, outraPessoa(50L));
+
+        assertEquals(TipoEntrevista.EXCEPCIONAL, e.getTipo());
+        assertEquals(CartaoStatus.AGUARDANDO_AVALIACAO, assistido.getStatusCartao());
+        verify(assistidoRepository, never()).save(any());
+        verify(cartaoEncerradoRepository, never()).save(any());
+    }
+
+    @Test
+    void entrevistaAvulsaExigeConversaOutraPessoaDataPassadaETipoAvulso() {
+        LocalDate ontem = LocalDate.now().minusDays(1);
+        assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(ontem, "   "), TipoEntrevista.EXCEPCIONAL, outraPessoa(50L)));
+        assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(ontem, "Conversa"), TipoEntrevista.EXCEPCIONAL, assistido));
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevistaAvulsa(
+                entrevistaAvulsa(LocalDate.now().plusDays(1), "Conversa"), TipoEntrevista.EXCEPCIONAL, outraPessoa(50L)));
+        assertThrows(RegraNegocioException.class, () -> tratamentoService
+                .registrarEntrevistaAvulsa(entrevistaAvulsa(ontem, "Conversa"), TipoEntrevista.TRATAMENTO, outraPessoa(50L)));
+        verify(entrevistaRepository, never()).save(any());
+    }
+
+    // A regra das 4 sessões só conta a entrevista de tratamento: uma excepcional no ciclo não libera.
+    @Test
+    void quatroSessoesSoSaoLiberadasPelaEntrevistaDoTratamento() {
+        LocalDate ciclo = LocalDate.of(2026, 9, 1);
+        assistido.setCicloIniciadoEm(ciclo);
+        assistido.setTratamentoAtual(tratamento);
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(presenca(LocalDate.of(2026, 9, 22), 4)));
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, ciclo)).thenReturn(4L);
+        when(entrevistaRepository.countByAssistidoIdAndTipoAndDataGreaterThanEqual(1L, TipoEntrevista.TRATAMENTO, ciclo))
+                .thenReturn(0L);
+
+        assertThrows(AvaliacaoPendenteException.class,
+                () -> tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 29))));
+        verify(sessaoRepository, never()).save(any());
     }
 }

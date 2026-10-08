@@ -337,6 +337,56 @@
                 </div>
             </div>
 
+            <!--/* Entrevistas avulsas (V43, 2026-10-08): a da 1ª sessão, se o assistido quiser, e a
+                   excepcional, pedida por ele a qualquer momento. Ficam aqui, fora do histórico das
+                   avaliações, porque não decidem tratamento nem liberam o cartão. */-->
+            <div class="dl-card mt-3">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-chat-square-text"></i></span>
+                        <h2>Outras Entrevistas</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="d-flex flex-wrap gap-2 p-3" th:if="${podeEntrevista and !proprioRegistro}">
+                        <a th:if="${primeiraSessaoSemEntrevista != null}"
+                           th:href="@{/prontuario/{id}/nova-entrevista-avulsa(id=${assistido.id}, tipo='PRIMEIRA_SESSAO', data=${#temporals.format(primeiraSessaoSemEntrevista, 'dd/MM/yyyy')})}"
+                           class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-door-open"></i>
+                            Entrevista da 1ª Sessão (<span th:text="${#temporals.format(primeiraSessaoSemEntrevista, 'dd/MM/yyyy')}">01/10/2026</span>)
+                        </a>
+                        <a th:href="@{/prontuario/{id}/nova-entrevista-avulsa(id=${assistido.id}, tipo='EXCEPCIONAL')}"
+                           class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-chat-square-text"></i> Entrevista Excepcional
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(entrevistasAvulsas)}">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">Data</th>
+                                    <th>Tipo</th>
+                                    <th>Entrevistador</th>
+                                    <th>O que foi conversado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="e : ${entrevistasAvulsas}">
+                                    <td class="text-center" th:text="${#temporals.format(e.data, 'dd/MM/yyyy')}"></td>
+                                    <td><span class="dl-badge dl-badge-neutral" th:text="${e.tipo.label}">Entrevista excepcional</span></td>
+                                    <td th:text="${e.entrevistador ?: '—'}"></td>
+                                    <td><span class="dl-truncate" th:text="${e.observacoes}" th:title="${e.observacoes}"></span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(entrevistasAvulsas)}">
+                        <i class="bi bi-chat-square-text"></i>
+                        <p class="mb-0">Nenhuma entrevista da 1ª sessão ou excepcional registrada.</p>
+                    </div>
+                </div>
+            </div>
+
             <!--/* Os tratamentos anteriores: cada cartão que a entrevista fechou (concluído ou alta), que
                    expirou por ausência ou que foi interrompido por troca. */-->
             <div class="dl-card mt-3">

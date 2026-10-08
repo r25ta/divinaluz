@@ -14,6 +14,7 @@ import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.ResultadoAvaliacao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
+import br.com.nae.divinaluz.model.TipoEntrevista;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
@@ -263,6 +264,7 @@ public class TratamentoService {
         Assistido assistido = novaEntrevista.getAssistido();
         Avaliacao avaliacao = novaEntrevista.getAvaliacao();
         exigirOutraPessoa(assistido, responsavel, "entrevista");
+        novaEntrevista.setTipo(TipoEntrevista.TRATAMENTO);
 
         if (avaliacao == null || (avaliacao.getAssistido() != null
                 && !Objects.equals(avaliacao.getAssistido().getId(), assistido.getId()))) {
@@ -324,6 +326,70 @@ public class TratamentoService {
         registrarPrimeiraSessaoDaEntrevista(assistido, data);
 
         return entrevistaSalva;
+    }
+
+    /**
+     * Entrevista da 1ª sessão ou excepcional (V43, 2026-10-08). Fica no prontuário, mas não segue uma
+     * Avaliação, não decide tratamento e não mexe no cartão: a regra das 4 sessões só conta a
+     * entrevista de tratamento ({@link #contarEntrevistasDoCiclo}), então uma excepcional nunca libera
+     * um cartão retido.
+     *
+     * <p><strong>1ª sessão</strong>, se o assistido quiser: na data de uma presença que abriu um
+     * tratamento (nº 1 da série — cadastro, reinício em P2 ou volta depois da alta), uma só por data, e
+     * não no dia em que a entrevista de tratamento abriu o ciclo (ela já foi a conversa daquela 1ª
+     * sessão). <strong>Excepcional</strong>: a pedido do assistido, em qualquer data passada e com
+     * qualquer status do cartão.</p>
+     *
+     * @param responsavel quem está registrando (o login); gravado como entrevistador
+     */
+    @Transactional
+    public Entrevista registrarEntrevistaAvulsa(Entrevista novaEntrevista, TipoEntrevista tipo, Assistido responsavel) {
+        if (tipo == null || !tipo.isAvulsa()) {
+            throw new RegraNegocioException("Tipo de entrevista inválido.");
+        }
+        Assistido assistido = novaEntrevista.getAssistido();
+        exigirOutraPessoa(assistido, responsavel, "entrevista");
+        LocalDate data = novaEntrevista.getData();
+        if (data == null) {
+            throw new RegraNegocioException("Informe a data da entrevista.");
+        }
+        if (data.isAfter(LocalDate.now())) {
+            throw new RegraNegocioException("A data da entrevista não pode ser futura.");
+        }
+        if (novaEntrevista.getObservacoes() == null || novaEntrevista.getObservacoes().isBlank()) {
+            throw new RegraNegocioException("Registre o que foi conversado na entrevista.");
+        }
+        if (tipo == TipoEntrevista.PRIMEIRA_SESSAO) {
+            boolean primeiraSessao = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistido.getId()).stream()
+                    .anyMatch(s -> data.equals(s.getDataConsulta()) && !s.isOuvinte()
+                            && Integer.valueOf(1).equals(s.getNumeroSerie()));
+            if (!primeiraSessao) {
+                throw new RegraNegocioException("A entrevista da 1ª sessão é registrada na data em que um tratamento "
+                        + "começou, e " + data.format(FORMATO_DATA) + " não foi a 1ª sessão de um tratamento.");
+            }
+            List<Entrevista> doDia = entrevistaRepository.findByAssistidoIdOrderByDataDesc(assistido.getId()).stream()
+                    .filter(e -> data.equals(e.getData()) && e.getTipo() != TipoEntrevista.EXCEPCIONAL)
+                    .toList();
+            if (doDia.stream().anyMatch(e -> e.getTipo() == TipoEntrevista.TRATAMENTO)) {
+                throw new RegraNegocioException("Em " + data.format(FORMATO_DATA) + " a 1ª sessão foi aberta pela "
+                        + "entrevista do tratamento, que já é a entrevista desse dia.");
+            }
+            if (!doDia.isEmpty()) {
+                throw new RegraNegocioException("A entrevista da 1ª sessão de " + data.format(FORMATO_DATA)
+                        + " já foi registrada.");
+            }
+        }
+
+        novaEntrevista.setTipo(tipo);
+        novaEntrevista.setAvaliacao(null);
+        novaEntrevista.setResultado(null);
+        novaEntrevista.setTratamentoIndicado(null);
+        novaEntrevista.setObservacoes(novaEntrevista.getObservacoes().trim());
+        if (responsavel != null) {
+            novaEntrevista.setEntrevistadorResponsavel(responsavel);
+            novaEntrevista.setEntrevistador(responsavel.getNome());
+        }
+        return entrevistaRepository.save(novaEntrevista);
     }
 
     /**
@@ -480,7 +546,8 @@ public class TratamentoService {
                 .filter(linhas -> linhas.stream().anyMatch(s -> !s.isOuvinte()))
                 .map(linhas -> linhas.get(0).getAssistido())
                 .filter(a -> avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(a.getId(), data) > 0
-                        || entrevistaRepository.countByAssistidoIdAndDataGreaterThanEqual(a.getId(), data) > 0)
+                        || entrevistaRepository.countByAssistidoIdAndTipoNotAndDataGreaterThanEqual(
+                                a.getId(), TipoEntrevista.EXCEPCIONAL, data) > 0)
                 .map(Assistido::getNome)
                 .toList();
         if (!comAtendimento.isEmpty()) {
@@ -679,9 +746,11 @@ public class TratamentoService {
         criarPrimeiraSessao(assistido, data);
     }
 
+    // Só a entrevista de tratamento libera o cartão: a da 1ª sessão e a excepcional não contam (V43).
     private long contarEntrevistasDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {
         return cicloIniciadoEm != null
-                ? entrevistaRepository.countByAssistidoIdAndDataGreaterThanEqual(assistidoId, cicloIniciadoEm)
-                : entrevistaRepository.countByAssistidoId(assistidoId);
+                ? entrevistaRepository.countByAssistidoIdAndTipoAndDataGreaterThanEqual(
+                        assistidoId, TipoEntrevista.TRATAMENTO, cicloIniciadoEm)
+                : entrevistaRepository.countByAssistidoIdAndTipo(assistidoId, TipoEntrevista.TRATAMENTO);
     }
 }

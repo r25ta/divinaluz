@@ -11,6 +11,8 @@ import java.time.LocalDate;
 // Após a avaliação, o assistido passa por uma entrevista em que o entrevistador comunica o
 // tratamento decidido. Ao contrário da avaliação, a data da entrevista precisa cair no dia de
 // assistência do assistido (ver TratamentoService.validarDiaDaSemana).
+// Desde a V43 há também a entrevista da 1ª sessão e a excepcional (TipoEntrevista): essas não têm
+// avaliação, resultado nem tratamento, e não mexem no cartão.
 @Getter
 @Setter
 @ToString
@@ -19,10 +21,15 @@ public class Entrevista {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(optional = false)
+    // Obrigatória só na entrevista de TRATAMENTO (CHECK da V43); as avulsas não seguem uma avaliação.
+    @OneToOne
     @JoinColumn(name = "avaliacao_id", unique = true)
     @ToString.Exclude
     private Avaliacao avaliacao;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TipoEntrevista tipo = TipoEntrevista.TRATAMENTO;
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "assistido_id")

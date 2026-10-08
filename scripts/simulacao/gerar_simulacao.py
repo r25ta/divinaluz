@@ -726,9 +726,8 @@ class Simulacao:
                 and any(x.data == d for x in p.presencas)):
             av = p.avaliacoes[-1]
             mesmo_dia = av["data"] == d
-            # Entrevista no mesmo dia da 4ª presença: o TratamentoService não cria a 1ª sessão do novo
-            # ciclo (já há efetiva no dia) e a 4ª presença passa a contar nos dois cartões — um caso de
-            # borda do sistema, que a simulação não exercita. Só entrevista no dia quem entrou como ouvinte.
+            # Regra da casa: a entrevista nunca acontece no dia da 4ª presença. Só entrevista no dia
+            # quem entrou como ouvinte, com o cartão retido.
             if any(x.data == d and not x.ouvinte for x in p.presencas):
                 return
             if (mesmo_dia and self.rnd.random() < 0.15) or (not mesmo_dia and self.rnd.random() < 0.88):

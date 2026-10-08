@@ -12,6 +12,7 @@ import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.Permissao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
+import br.com.nae.divinaluz.model.TipoEntrevista;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
@@ -519,9 +520,12 @@ public class ProntuarioController {
         List<SessaoTratamento> sessoes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id);
 
         List<Avaliacao> avaliacoes = avaliacaoRepository.findByAssistidoIdOrderByDataDesc(id);
-        List<Entrevista> entrevistas = entrevistaRepository.findByAssistidoIdOrderByDataDesc(id);
+        List<Entrevista> entrevistas = entrevistaRepository.findByAssistidoIdAndTipoOrderByDataDesc(id, TipoEntrevista.TRATAMENTO);
+        // Entrevista da 1ª sessão e excepcional (V43): ficam num card à parte, fora do histórico das avaliações.
+        List<Entrevista> entrevistasAvulsas =
+                entrevistaRepository.findByAssistidoIdAndTipoNotOrderByDataDescIdDesc(id, TipoEntrevista.TRATAMENTO);
 
-        // Data da última entrevista e previsão da próxima (4 semanas depois). É apenas
+        // Data da última entrevista de tratamento e previsão da próxima (4 semanas depois). É apenas
         // informativo — não interfere na regra de bloqueio por 4 sessões já existente.
         LocalDate ultimaEntrevista = entrevistas.isEmpty() ? null : entrevistas.get(0).getData();
         LocalDate proximaEntrevistaPrevista = ultimaEntrevista != null ? ultimaEntrevista.plusWeeks(4) : null;
@@ -532,6 +536,8 @@ public class ProntuarioController {
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("trabalhador", trabalhadorRepository.findByAssistidoId(id).orElse(null));
         model.addAttribute("ultimaEntrevista", ultimaEntrevista);
+        model.addAttribute("entrevistasAvulsas", entrevistasAvulsas);
+        model.addAttribute("primeiraSessaoSemEntrevista", primeiraSessaoSemEntrevista(sessoes, entrevistas, entrevistasAvulsas));
         model.addAttribute("proximaEntrevistaPrevista", proximaEntrevistaPrevista);
         model.addAttribute("diasFrequencia", DiaFrequencia.values());
         model.addAttribute("historicoDiaFrequencia", historicoDiaFrequenciaRepository.findByAssistidoIdOrderByDataHoraDesc(id));
@@ -549,6 +555,26 @@ public class ProntuarioController {
         model.addAttribute("sessoesPorCartao", SESSOES_POR_CARTAO);
 
         return "prontuario"; // Nome do novo arquivo HTML
+    }
+
+    /**
+     * A 1ª sessão mais recente (presença nº 1 da série, que abriu um tratamento) ainda sem entrevista —
+     * o prontuário oferece registrar a entrevista da 1ª sessão (V43). Nula quando já houve entrevista
+     * nesse dia (a da 1ª sessão, ou a de tratamento que abriu o ciclo).
+     */
+    private static LocalDate primeiraSessaoSemEntrevista(List<SessaoTratamento> sessoes, List<Entrevista> deTratamento,
+            List<Entrevista> avulsas) {
+        LocalDate data = sessoes.stream()
+                .filter(s -> !s.isOuvinte() && Integer.valueOf(1).equals(s.getNumeroSerie()) && s.getDataConsulta() != null)
+                .map(SessaoTratamento::getDataConsulta)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        if (data == null) {
+            return null;
+        }
+        boolean jaEntrevistado = deTratamento.stream().anyMatch(e -> data.equals(e.getData()))
+                || avulsas.stream().anyMatch(e -> e.getTipo() == TipoEntrevista.PRIMEIRA_SESSAO && data.equals(e.getData()));
+        return jaEntrevistado ? null : data;
     }
 
     private boolean ehAdministrador(Authentication authentication) {
@@ -665,7 +691,9 @@ public class ProntuarioController {
         model.addAttribute("totalOuvinte", sessoes.stream().filter(SessaoTratamento::isOuvinte).count());
         // Recomendações do Avaliador para o tratamento em andamento: só depois que a entrevista as
         // comunicou (é ela que libera o cartão) — a entrevista que abriu este ciclo, ou a da alta.
-        model.addAttribute("entrevistaVigente", cartaoRetido ? null : entrevistaRepository.findByAssistidoIdOrderByDataDesc(id)
+        // Só a entrevista de tratamento tem avaliação: uma excepcional posterior não pode ocupar o lugar dela.
+        model.addAttribute("entrevistaVigente", cartaoRetido ? null : entrevistaRepository
+                .findByAssistidoIdAndTipoOrderByDataDesc(id, TipoEntrevista.TRATAMENTO)
                 .stream().findFirst()
                 .filter(e -> e.isAlta() ? status == CartaoStatus.ALTA
                         : status == CartaoStatus.EM_TRATAMENTO && e.getData() != null && e.getData().equals(cicloIniciadoEm))
@@ -895,6 +923,7 @@ public class ProntuarioController {
 
         entrevista.setAssistido(assistido);
         entrevista.setAvaliacao(avaliacao);
+        entrevista.setTipo(TipoEntrevista.TRATAMENTO);
 
         try {
             tratamentoService.registrarEntrevista(entrevista, assistidoLogado(usuarioLogado));
@@ -906,6 +935,64 @@ public class ProntuarioController {
                 ? "Entrevista registrada: alta comunicada e tratamento encerrado."
                 : "Entrevista registrada: " + entrevista.getTratamentoIndicado().getCodigo()
                         + " liberado, com a 1ª sessão em " + entrevista.getData().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".");
+        return "redirect:/prontuario/" + assistidoId;
+    }
+
+    /**
+     * Entrevista da 1ª sessão (se o assistido quiser) ou excepcional (pedida por ele a qualquer momento)
+     * — V43, 2026-10-08. Não segue uma avaliação e não mexe no cartão: a entrevista de tratamento
+     * continua sendo a única que o libera. A da 1ª sessão já abre com a data da 1ª sessão pendente.
+     */
+    @GetMapping("/prontuario/{id}/nova-entrevista-avulsa")
+    public String novaEntrevistaAvulsa(@PathVariable Long id, @RequestParam TipoEntrevista tipo,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate data, Model model,
+            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(id, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + id;
+        }
+        if (!tipo.isAvulsa()) {
+            return "redirect:/prontuario/" + id;
+        }
+        Assistido assistido = assistidoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        Entrevista entrevista = new Entrevista();
+        entrevista.setTipo(tipo);
+        entrevista.setData(data != null ? data : LocalDate.now());
+        return exibirEntrevistaAvulsa(model, assistido, entrevista, usuarioLogado, null);
+    }
+
+    private String exibirEntrevistaAvulsa(Model model, Assistido assistido, Entrevista entrevista,
+            UserDetails usuarioLogado, String erro) {
+        model.addAttribute("assistido", assistido);
+        model.addAttribute("entrevista", entrevista);
+        model.addAttribute("entrevistadorNome", assistidoLogado(usuarioLogado).getNome());
+        if (erro != null) {
+            model.addAttribute("erro", erro);
+        }
+        return "entrevista-avulsa-form";
+    }
+
+    @PostMapping("/prontuario/{assistidoId}/entrevista-avulsa")
+    public String salvarEntrevistaAvulsa(@PathVariable Long assistidoId, @RequestParam TipoEntrevista tipo,
+            @ModelAttribute Entrevista entrevista, @AuthenticationPrincipal UserDetails usuarioLogado,
+            Model model, RedirectAttributes redirectAttributes) {
+        if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
+            redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
+            return "redirect:/prontuario/" + assistidoId;
+        }
+        Assistido assistido = assistidoRepository.findById(assistidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+        entrevista.setAssistido(assistido);
+        entrevista.setTipo(tipo);
+        try {
+            tratamentoService.registrarEntrevistaAvulsa(entrevista, tipo, assistidoLogado(usuarioLogado));
+        } catch (RegraNegocioException e) {
+            return exibirEntrevistaAvulsa(model, assistido, entrevista, usuarioLogado, e.getMessage());
+        }
+        redirectAttributes.addFlashAttribute("sucesso", tipo.getLabel() + " registrada em "
+                + entrevista.getData().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                + ". O cartão não muda.");
         return "redirect:/prontuario/" + assistidoId;
     }
 }

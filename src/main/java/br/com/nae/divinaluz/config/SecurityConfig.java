@@ -68,7 +68,9 @@ public class SecurityConfig {
                         // fila de cartões retidos é de quem faz qualquer uma das duas.
                         .requestMatchers("/prontuario/*/nova-avaliacao", "/prontuario/*/avaliacao")
                                 .hasAuthority(Permissao.AVALIACAO.getAuthority())
-                        .requestMatchers("/prontuario/*/nova-entrevista", "/prontuario/*/entrevista")
+                        // As entrevistas avulsas (1ª sessão e excepcional, V43) são do mesmo Entrevistador.
+                        .requestMatchers("/prontuario/*/nova-entrevista", "/prontuario/*/entrevista",
+                                        "/prontuario/*/nova-entrevista-avulsa", "/prontuario/*/entrevista-avulsa")
                                 .hasAuthority(Permissao.ENTREVISTA.getAuthority())
                         .requestMatchers("/entrevistas")
                                 .hasAnyAuthority(Permissao.AVALIACAO.getAuthority(), Permissao.ENTREVISTA.getAuthority())

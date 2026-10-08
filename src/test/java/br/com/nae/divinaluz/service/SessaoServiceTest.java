@@ -8,6 +8,7 @@ import br.com.nae.divinaluz.model.PosicaoSessao;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
+import br.com.nae.divinaluz.model.TipoEntrevista;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -325,7 +326,7 @@ class SessaoServiceTest {
                 presenca(eva, true, null)));         // QR escaneado de novo: a mesma pessoa, uma vez só
         when(sessaoRepository.findAssistidosComPresencaAntesDe(eq(DOMINGO), any()))
                 .thenReturn(Set.of(1L, 2L, 4L, 5L)); // Carla nunca tinha vindo: é "nova"
-        when(entrevistaRepository.countByData(DOMINGO)).thenReturn(3L);
+        when(entrevistaRepository.countByDataAndTipo(DOMINGO, TipoEntrevista.TRATAMENTO)).thenReturn(3L);
         when(tipoTratamentoRepository.findAll()).thenReturn(List.of(p1, p2, ch));
 
         SessaoService.Indicadores ind = sessaoService.indicadores(sessao);

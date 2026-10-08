@@ -9,6 +9,7 @@ import br.com.nae.divinaluz.model.PosicaoSessao;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SessaoAssistencia;
 import br.com.nae.divinaluz.model.SessaoTratamento;
+import br.com.nae.divinaluz.model.TipoEntrevista;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -369,7 +370,7 @@ public class SessaoService {
                 contarPorTratamento(presentes),
                 presentes.stream().filter(p -> "TRABALHADOR".equals(p.assistido().getVinculo())).count(),
                 presentes.stream().filter(Presente::novo).count(),
-                entrevistaRepository.countByData(data),
+                entrevistaRepository.countByDataAndTipo(data, TipoEntrevista.TRATAMENTO),
                 presentes);
     }
 

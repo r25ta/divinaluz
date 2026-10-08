@@ -11,7 +11,7 @@
             <div class="dl-page-header">
                 <div>
                     <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
-                    <h1>Registrar Avaliação</h1>
+                    <h1>Registrar Avaliação — <span th:text="${numeroVez} + 'ª VEZ'">1ª VEZ</span></h1>
                 </div>
                 <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                     <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
@@ -22,12 +22,23 @@
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
             </div>
 
+            <div class="alert alert-warning">
+                <i class="bi bi-hourglass-split"></i>
+                Cartão <strong>Em Avaliação</strong>: as 4 sessões de
+                <strong th:text="${assistido.tratamentoAtual != null ? assistido.tratamentoAtual.codigo : 'tratamento'}">P2</strong>
+                foram cumpridas<span th:if="${ultimaPresenca != null}"> (última em
+                <strong th:text="${#temporals.format(ultimaPresenca, 'dd/MM/yyyy')}"></strong>)</span>.
+                Classifique o próximo tratamento ou dê alta. O que você decidir aqui só é visto por quem entrevista,
+                até a entrevista comunicar ao assistido.
+            </div>
+
             <div class="dl-card">
                 <div class="dl-card-body">
 
                     <form th:action="@{/prontuario/{id}/avaliacao(id=${assistido.id})}" th:object="${avaliacao}" method="post">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
+                        <!--/* Frente do cartão físico: cada "VEZ" tem histórico, M/P/I/B e data. */-->
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Avaliação</div>
                             <div class="row g-3">
@@ -40,12 +51,16 @@
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 </div>
-                                <div class="col-md-4">
+                                <!--/* A 1ª VEZ do cartão físico não tem M/P/I/B: não há com o que comparar. */-->
+                                <div class="col-md-8" th:if="${numeroVez > 1}">
                                     <label class="form-label">Evolução</label>
-                                    <select class="form-select" th:field="*{evolucao}">
-                                        <option value="">Selecione...</option>
-                                        <option th:each="e : ${evolucoes}" th:value="${e}" th:text="${e}"></option>
-                                    </select>
+                                    <div class="d-flex flex-wrap gap-3 pt-1">
+                                        <div class="form-check" th:each="e : ${evolucoes}">
+                                            <input class="form-check-input" type="radio" th:field="*{evolucao}" th:value="${e}" required>
+                                            <label class="form-check-label" th:for="${#ids.prev('evolucao')}"
+                                                   th:text="${e.name() == 'MELHOR' ? 'M — Melhor' : (e.name() == 'PIOR' ? 'P — Pior' : (e.name() == 'INDIFERENTE' ? 'I — Indiferente' : 'B — Bom'))}">Bom</label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="form-text mt-2">A data da avaliação é livre — quem precisa cair no dia de assistência do assistido é a Entrevista, registrada depois.</div>
@@ -53,27 +68,66 @@
 
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Histórico</div>
-                            <textarea class="form-control" th:field="*{historico}" rows="3" placeholder="Relato da avaliação..."></textarea>
+                            <textarea class="form-control" th:field="*{historico}" rows="4" placeholder="Relato da avaliação..."></textarea>
                         </div>
 
+                        <!--/* Decisão do Avaliador: novo tratamento (próximas 4 sessões) ou alta. */-->
                         <div class="dl-form-section">
-                            <div class="dl-form-section-title">Observações</div>
-                            <textarea class="form-control" th:field="*{observacoes}" rows="3" placeholder="Recomendações do médium para o assistido..."></textarea>
-                        </div>
-
-                        <!--/* V36: o Avaliador propõe o novo tratamento; a Entrevista o comunica. Até lá ele
-                               fica reservado a Avaliador, Entrevistador e Dirigente. */-->
-                        <div class="dl-form-section">
-                            <div class="dl-form-section-title">Tratamento Proposto</div>
-                            <select class="form-select" th:field="*{tratamentoProposto}" required>
-                                <option value="">Selecione...</option>
-                                <option th:each="t : ${tratamentos}" th:value="${t.id}"
-                                        th:text="${t.codigo + ' - ' + t.nome}"></option>
-                            </select>
-                            <div class="form-text">
-                                Tratamento das próximas 4 sessões. O entrevistador comunica ao assistido na entrevista
-                                (e pode ajustar). Até lá, só Avaliador, Entrevistador e Dirigente veem esta proposta.
+                            <div class="dl-form-section-title">Próximo Tratamento</div>
+                            <div class="d-flex flex-wrap gap-3 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" th:field="*{resultado}" value="NOVO_TRATAMENTO" id="resultadoNovo">
+                                    <label class="form-check-label" for="resultadoNovo">Novo tratamento</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" th:field="*{resultado}" value="ALTA" id="resultadoAlta">
+                                    <label class="form-check-label" for="resultadoAlta">Alta</label>
+                                </div>
                             </div>
+                            <div id="campoTratamentoProposto">
+                                <select class="form-select" th:field="*{tratamentoProposto}" id="tratamentoProposto">
+                                    <option value="">Selecione...</option>
+                                    <option th:each="t : ${tratamentos}" th:value="${t.id}"
+                                            th:text="${t.codigo + ' - ' + t.nome}"></option>
+                                </select>
+                                <div class="form-text">Tratamento das próximas 4 sessões. O entrevistador comunica ao assistido (e pode ajustar).</div>
+                            </div>
+                            <div id="avisoAlta" class="form-text" style="display:none;">
+                                <i class="bi bi-award"></i> Com alta, a entrevista encerra o tratamento. Se a pessoa voltar,
+                                entra como ouvinte; um novo tratamento é iniciado pela recepção.
+                            </div>
+                        </div>
+
+                        <!--/* Verso do cartão físico ("Resultado da Consulta"): recomendações + observações. */-->
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Recomendações</div>
+                            <div class="row g-2">
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recVisto}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recVisto')}">Visto</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recAssistencia}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recAssistencia')}">Assistência</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recEvangelhoNoLar}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recEvangelhoNoLar')}">Evangelho no Lar</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recLeituras}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recLeituras')}">Leituras</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recEscola}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recEscola')}">Escola</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recTrabalhoEspiritual}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recTrabalhoEspiritual')}">Trabalho Espiritual</label></div></div>
+                                <div class="col-6 col-md-4"><div class="form-check">
+                                    <input class="form-check-input" type="checkbox" th:field="*{recMedico}">
+                                    <label class="form-check-label" th:for="${#ids.prev('recMedico')}">Médico</label></div></div>
+                            </div>
+                            <label class="form-label mt-3">Observações</label>
+                            <textarea class="form-control" th:field="*{observacoes}" rows="3"
+                                      placeholder="Recomendações a seguir durante o tratamento..."></textarea>
+                            <div class="form-text">Aparecem no cartão do assistido depois que a entrevista as comunicar.</div>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
@@ -90,5 +144,23 @@
         </div>
     </main>
 </div>
+<script>
+    (function () {
+        var alta = document.getElementById('resultadoAlta');
+        var novo = document.getElementById('resultadoNovo');
+        var campo = document.getElementById('campoTratamentoProposto');
+        var select = document.getElementById('tratamentoProposto');
+        var aviso = document.getElementById('avisoAlta');
+        function atualizar() {
+            var ehAlta = alta.checked;
+            campo.style.display = ehAlta ? 'none' : '';
+            aviso.style.display = ehAlta ? '' : 'none';
+            select.required = !ehAlta;
+        }
+        alta.addEventListener('change', atualizar);
+        novo.addEventListener('change', atualizar);
+        atualizar();
+    })();
+</script>
 </body>
 </html>

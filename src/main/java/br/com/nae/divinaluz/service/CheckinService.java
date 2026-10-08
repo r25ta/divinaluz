@@ -48,8 +48,14 @@ public class CheckinService {
         this.tratamentoService = tratamentoService;
     }
 
+    // aposAlta: a pessoa tinha recebido alta (ver TratamentoService.ResultadoSessao).
     public record ResultadoCheckin(Assistido assistido, SessaoAssistencia sessao, SessaoTratamento presenca,
-            boolean ouvinte, boolean tratamentoReiniciado) {}
+            boolean ouvinte, boolean tratamentoReiniciado, boolean aposAlta) {
+        public ResultadoCheckin(Assistido assistido, SessaoAssistencia sessao, SessaoTratamento presenca,
+                boolean ouvinte, boolean tratamentoReiniciado) {
+            this(assistido, sessao, presenca, ouvinte, tratamentoReiniciado, false);
+        }
+    }
 
     public Optional<SessaoAssistencia> sessaoComCheckinAberto() {
         return sessaoAssistenciaRepository.findFirstByCheckinAbertoEmIsNotNullAndCheckinFechadoEmIsNull();
@@ -219,8 +225,9 @@ public class CheckinService {
             return new ResultadoAutoCheckin(sessao, assistido, jaPresente.get(), jaPresente.get().isOuvinte(), true);
         }
 
+        // Com alta, o registrarSessao lança a presença como ouvinte (novo tratamento é com a recepção).
         CartaoStatus status = assistido.getStatusCartao();
-        if (status == CartaoStatus.AGUARDANDO_AVALIACAO || status == CartaoStatus.AGUARDANDO_ENTREVISTA) {
+        if (status != null && status.isRetido()) {
             throw new RegraNegocioException("Seu cartão está " + status.getLabel().toLowerCase()
                     + ". Procure a recepção para ser encaminhado(a).");
         }
@@ -286,7 +293,7 @@ public class CheckinService {
         TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(
                 novaPresenca(assistido, sessao), confirmarReinicio);
         return new ResultadoCheckin(assistido, sessao, resultado.sessao(), resultado.ouvinte(),
-                resultado.tratamentoReiniciado());
+                resultado.tratamentoReiniciado(), resultado.aposAlta());
     }
 
     /**

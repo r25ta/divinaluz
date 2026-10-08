@@ -20,13 +20,40 @@
 
             <div class="alert alert-danger" th:if="${erro}" th:text="${erro}"></div>
 
-            <div class="alert alert-warning">
-                <i class="bi bi-info-circle-fill"></i>
-                Referente à <strong th:text="${avaliacao.numeroVez} + 'ª VEZ'"></strong> —
-                avaliação de <strong th:text="${#temporals.format(avaliacao.data, 'dd/MM/yyyy')}"></strong>.
-                <span th:if="${assistido.diaFrequencia != null}">
-                    A data da entrevista precisa cair em uma <strong th:text="${assistido.diaFrequencia.label}"></strong>.
-                </span>
+            <!--/* O que o Avaliador decidiu — reservado a quem entrevista até aqui. */-->
+            <div class="dl-card">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-clipboard2-pulse"></i></span>
+                        <h2>Avaliação — <span th:text="${avaliacao.numeroVez} + 'ª VEZ'">1ª VEZ</span></h2>
+                    </div>
+                    <span class="dl-muted small" th:text="${#temporals.format(avaliacao.data, 'dd/MM/yyyy')}">01/10/2026</span>
+                </div>
+                <div class="dl-card-body">
+                    <div class="dl-info-strip mb-3">
+                        <div class="dl-info-strip-item">
+                            <span class="label">Decisão do Avaliador</span>
+                            <span th:if="${avaliacao.alta}" class="dl-badge dl-badge-teal"><i class="bi bi-award-fill"></i> Alta</span>
+                            <span th:if="${!avaliacao.alta and avaliacao.tratamentoProposto != null}" class="dl-badge dl-badge-teal"
+                                  th:text="${avaliacao.tratamentoProposto.codigo + ' - ' + avaliacao.tratamentoProposto.nome}">P2</span>
+                            <span th:if="${!avaliacao.alta and avaliacao.tratamentoProposto == null}" class="value">—</span>
+                        </div>
+                        <div class="dl-info-strip-item">
+                            <span class="label">Evolução</span>
+                            <span class="value" th:text="${avaliacao.evolucao ?: '—'}">BOM</span>
+                        </div>
+                        <div class="dl-info-strip-item" th:if="${avaliacao.avaliador != null}">
+                            <span class="label">Avaliador</span>
+                            <span class="value" th:text="${avaliacao.avaliador.nome}">Nome</span>
+                        </div>
+                    </div>
+                    <div class="mb-2" th:if="${not #lists.isEmpty(avaliacao.recomendacoes)}">
+                        <span class="label dl-muted small d-block mb-1">Recomendações</span>
+                        <span class="dl-badge dl-badge-neutral me-1" th:each="r : ${avaliacao.recomendacoes}" th:text="${r}">Leituras</span>
+                    </div>
+                    <p class="mb-1 small" th:if="${avaliacao.observacoes}"><strong>Observações:</strong> <span th:text="${avaliacao.observacoes}"></span></p>
+                    <p class="mb-0 small" th:if="${avaliacao.historico}"><strong>Histórico:</strong> <span th:text="${avaliacao.historico}"></span></p>
+                </div>
             </div>
 
             <div class="dl-card">
@@ -48,33 +75,53 @@
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
                                            th:attr="data-dias=${assistido.diaFrequencia != null ? assistido.diaFrequencia.indiceJs : null}"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
+                                    <div class="form-text" th:if="${assistido.diaFrequencia != null}">
+                                        Precisa cair em <span th:text="${assistido.diaFrequencia.label}">Domingo</span>.
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
+                                <!--/* Quem entrevista é quem está logado (V42) — não se digita mais o nome. */-->
+                                <div class="col-md-8">
                                     <label class="form-label">Entrevistador</label>
-                                    <input type="text" class="form-control" th:field="*{entrevistador}" placeholder="Nome do entrevistador">
+                                    <input type="text" class="form-control" th:value="${entrevistadorNome}" readonly>
                                 </div>
                             </div>
                         </div>
 
                         <div class="dl-form-section">
-                            <div class="dl-form-section-title">Tratamento Indicado</div>
-                            <p class="dl-muted small mb-2" th:if="${avaliacao.tratamentoProposto != null}">
-                                <i class="bi bi-clipboard2-pulse"></i> Proposto pelo Avaliador:
-                                <strong th:text="${avaliacao.tratamentoProposto.codigo + ' - ' + avaliacao.tratamentoProposto.nome}">P2</strong>.
-                                Já vem selecionado; ajuste só se for o caso.
-                            </p>
-                            <select class="form-select" th:field="*{tratamentoIndicado}" required>
-                                <option value="">Selecione...</option>
-                                <option th:each="t : ${tratamentos}" th:value="${t.id}"
-                                        th:text="${t.codigo + ' - ' + t.nome}"></option>
-                            </select>
-                            <div class="form-text">Pode repetir o tratamento anterior, se for o caso.</div>
+                            <div class="dl-form-section-title">O que é comunicado</div>
+                            <div class="d-flex flex-wrap gap-3 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" th:field="*{resultado}" value="NOVO_TRATAMENTO" id="resultadoNovo">
+                                    <label class="form-check-label" for="resultadoNovo">Novo tratamento</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" th:field="*{resultado}" value="ALTA" id="resultadoAlta">
+                                    <label class="form-check-label" for="resultadoAlta">Alta</label>
+                                </div>
+                            </div>
+                            <div id="campoTratamento">
+                                <select class="form-select" th:field="*{tratamentoIndicado}" id="tratamentoIndicado">
+                                    <option value="">Selecione...</option>
+                                    <option th:each="t : ${tratamentos}" th:value="${t.id}"
+                                            th:text="${t.codigo + ' - ' + t.nome}"></option>
+                                </select>
+                                <div class="form-text">Já vem com a decisão do Avaliador; ajuste só se for o caso. A data da entrevista é a 1ª sessão do novo tratamento.</div>
+                            </div>
+                            <div id="avisoAlta" class="form-text" style="display:none;">
+                                <i class="bi bi-award"></i> A alta encerra o tratamento. Se a pessoa voltar, entra como ouvinte.
+                            </div>
+                        </div>
+
+                        <div class="dl-form-section">
+                            <div class="dl-form-section-title">Observação</div>
+                            <textarea class="form-control" th:field="*{observacoes}" rows="3"
+                                      placeholder="Observação sobre o tratamento comunicado..."></textarea>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
                             <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
-                                <i class="bi bi-check-lg"></i> Salvar Entrevista
+                                <i class="bi bi-check-lg"></i> Salvar e Liberar o Cartão
                             </button>
                         </div>
                     </form>
@@ -85,5 +132,23 @@
         </div>
     </main>
 </div>
+<script>
+    (function () {
+        var alta = document.getElementById('resultadoAlta');
+        var novo = document.getElementById('resultadoNovo');
+        var campo = document.getElementById('campoTratamento');
+        var select = document.getElementById('tratamentoIndicado');
+        var aviso = document.getElementById('avisoAlta');
+        function atualizar() {
+            var ehAlta = alta.checked;
+            campo.style.display = ehAlta ? 'none' : '';
+            aviso.style.display = ehAlta ? '' : 'none';
+            select.required = !ehAlta;
+        }
+        alta.addEventListener('change', atualizar);
+        novo.addEventListener('change', atualizar);
+        atualizar();
+    })();
+</script>
 </body>
 </html>

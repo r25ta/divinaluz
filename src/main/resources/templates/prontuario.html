@@ -191,8 +191,8 @@
                                  th:if="${statusCartao != null and (statusCartao.name() == 'AGUARDANDO_AVALIACAO' or statusCartao.name() == 'AGUARDANDO_ENTREVISTA')}">
                                 <i class="bi bi-signpost-split-fill"></i>
                                 <span class="flex-grow-1">
-                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">Cartão completo: encaminhe para a avaliação espiritual.</span>
-                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">Avaliação concluída: encaminhe para a entrevista.</span>
+                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">Cartão completo e em avaliação: encaminhe para o Avaliador. O cartão não recebe presenças até a entrevista.</span>
+                                    <span th:if="${statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">Avaliação concluída: encaminhe para a entrevista. O que o Avaliador decidiu só é visto por quem entrevista.</span>
                                 </span>
                                 <span th:if="${proprioRegistro}" class="dl-muted small">
                                     <i class="bi bi-person-x"></i> Ninguém conduz o próprio tratamento — outro trabalhador precisa atender.
@@ -215,13 +215,18 @@
                                     <p class="dl-muted mb-0 mt-1 small" th:text="${assistido.tratamentoAtual.comoFunciona}"></p>
                                 </div>
                             </div>
-                            <p th:if="${assistido.tratamentoAtual == null}" class="dl-muted mb-3">
+                            <p th:if="${assistido.tratamentoAtual == null and (statusCartao == null or statusCartao.name() != 'ALTA')}" class="dl-muted mb-3">
                                 <i class="bi bi-hourglass-split"></i> Ainda não definido — aguardando triagem.
+                            </p>
+                            <p th:if="${statusCartao != null and statusCartao.name() == 'ALTA'}" class="dl-muted mb-3">
+                                <i class="bi bi-award"></i> Recebeu alta. Se voltar, entra como ouvinte; um novo tratamento
+                                começa pela recepção ("Novo tratamento em P2" no painel da sessão).
                             </p>
 
                             <!--/* Alterar o tratamento é dado do prontuário, não cadastral (2026-10-04): a
                                    Recepcionista cadastra, mas não mexe aqui. */-->
-                            <form th:if="${podeProntuario}" th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
+                            <!--/* Com o cartão retido o próximo tratamento é do Avaliador/Entrevista (2026-10-07). */-->
+                            <form th:if="${podeProntuario and (statusCartao == null or !statusCartao.retido)}" th:action="@{/prontuario/{id}/tratamento(id=${assistido.id})}" method="post"
                                   class="pt-2" style="border-top: 1px dashed var(--dl-border);">
                                 <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                 <div class="d-flex gap-2 flex-wrap">
@@ -267,13 +272,15 @@
                                     <th class="text-center">Vez</th>
                                     <th class="text-center">Data</th>
                                     <th class="text-center">Evolução</th>
-                                    <th>Observações</th>
-                                    <th>Tratamento Proposto</th>
+                                    <th>Recomendações</th>
+                                    <th>Decisão do Avaliador</th>
                                     <th>Entrevista</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr th:each="av : ${avaliacoes}">
+                                <!--/* Avaliação ainda sem entrevista: a decisão, as recomendações e as observações
+                                       ficam reservadas a quem entrevista (2026-10-07). */-->
+                                <tr th:each="av : ${avaliacoes}" th:with="reservada=${av.entrevista == null and !podeVerTratamentoProposto}">
                                     <td class="text-center" th:text="${av.numeroVez} + 'ª VEZ'"></td>
                                     <td class="text-center" th:text="${#temporals.format(av.data, 'dd/MM/yyyy')}"></td>
                                     <td class="text-center">
@@ -286,28 +293,37 @@
                                         <span th:if="${av.evolucao == null}" class="dl-muted">—</span>
                                     </td>
                                     <td>
-                                        <span th:if="${av.observacoes}" class="dl-truncate" th:text="${av.observacoes}" th:title="${av.observacoes}"></span>
-                                        <span th:unless="${av.observacoes}" class="dl-muted">—</span>
-                                    </td>
-                                    <!--/* O novo tratamento proposto pelo Avaliador fica reservado a Avaliador,
-                                           Entrevistador e Dirigente até a Entrevista comunicá-lo (2026-10-04);
-                                           depois disso ele já é o tratamento atual e deixa de ser segredo. */-->
-                                    <td>
-                                        <th:block th:if="${av.tratamentoProposto != null}">
-                                            <span th:if="${podeVerTratamentoProposto or av.entrevista != null}"
-                                                  class="dl-badge dl-badge-teal" th:text="${av.tratamentoProposto.codigo}"></span>
-                                            <span th:unless="${podeVerTratamentoProposto or av.entrevista != null}"
-                                                  class="dl-muted small" title="Reservado ao Avaliador e ao Entrevistador até a entrevista">
-                                                <i class="bi bi-lock-fill"></i> Reservado até a entrevista
-                                            </span>
+                                        <th:block th:unless="${reservada}">
+                                            <div th:if="${not #lists.isEmpty(av.recomendacoes)}" class="mb-1">
+                                                <span class="dl-badge dl-badge-neutral me-1" th:each="r : ${av.recomendacoes}" th:text="${r}">Leituras</span>
+                                            </div>
+                                            <span th:if="${av.observacoes}" class="dl-truncate" th:text="${av.observacoes}" th:title="${av.observacoes}"></span>
+                                            <span th:if="${#strings.isEmpty(av.observacoes) and #lists.isEmpty(av.recomendacoes)}" class="dl-muted">—</span>
+                                            <span th:if="${av.avaliador != null}" class="dl-muted small d-block" th:text="'Avaliador: ' + ${av.avaliador.nome}"></span>
                                         </th:block>
-                                        <span th:if="${av.tratamentoProposto == null}" class="dl-muted">—</span>
+                                        <span th:if="${reservada}" class="dl-muted small"><i class="bi bi-lock-fill"></i> Reservado até a entrevista</span>
+                                    </td>
+                                    <!--/* A decisão do Avaliador fica reservada a quem entrevista até a Entrevista
+                                           comunicá-la (2026-10-07); depois disso deixa de ser segredo. */-->
+                                    <td>
+                                        <span th:if="${reservada}" class="dl-muted small" title="Reservado a quem entrevista até a entrevista">
+                                            <i class="bi bi-lock-fill"></i> Reservado até a entrevista
+                                        </span>
+                                        <th:block th:unless="${reservada}">
+                                            <span th:if="${av.alta}" class="dl-badge dl-badge-teal"><i class="bi bi-award-fill"></i> Alta</span>
+                                            <span th:if="${!av.alta and av.tratamentoProposto != null}"
+                                                  class="dl-badge dl-badge-teal" th:text="${av.tratamentoProposto.codigo}"></span>
+                                            <span th:if="${!av.alta and av.tratamentoProposto == null}" class="dl-muted">—</span>
+                                        </th:block>
                                     </td>
                                     <td>
                                         <div th:if="${av.entrevista != null}">
+                                            <span class="dl-badge dl-badge-teal" th:if="${av.entrevista.alta}"><i class="bi bi-award-fill"></i> Alta</span>
                                             <span class="dl-badge dl-badge-teal" th:if="${av.entrevista.tratamentoIndicado != null}" th:text="${av.entrevista.tratamentoIndicado.codigo}"></span>
                                             <span class="dl-muted small d-block" th:text="${#temporals.format(av.entrevista.data, 'dd/MM/yyyy')} + (${av.entrevista.entrevistador} ? ' · ' + ${av.entrevista.entrevistador} : '')"></span>
+                                            <span class="small d-block" th:if="${av.entrevista.observacoes}" th:text="${av.entrevista.observacoes}"></span>
                                         </div>
+                                        <span th:if="${av.entrevista == null}" class="dl-badge dl-badge-info">Aguardando</span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -317,6 +333,55 @@
                     <div class="dl-table-empty" th:if="${#lists.isEmpty(avaliacoes)}">
                         <i class="bi bi-clipboard2-pulse"></i>
                         <p class="mb-0">Nenhuma avaliação registrada para este assistido ainda.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!--/* Os tratamentos anteriores: cada cartão que a entrevista fechou (concluído ou alta), que
+                   expirou por ausência ou que foi interrompido por troca. */-->
+            <div class="dl-card mt-3">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-archive"></i></span>
+                        <h2>Histórico de Tratamentos</h2>
+                    </div>
+                </div>
+                <div class="dl-card-body p-0">
+                    <div class="table-responsive">
+                        <table class="dl-table" th:if="${not #lists.isEmpty(cartoesEncerrados)}">
+                            <thead>
+                                <tr>
+                                    <th>Tratamento</th>
+                                    <th>Período</th>
+                                    <th class="text-center">Presenças</th>
+                                    <th>Como terminou</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="cartao : ${cartoesEncerrados}">
+                                    <td>
+                                        <span th:if="${cartao.tratamento != null}" class="dl-badge dl-badge-teal" th:text="${cartao.tratamento.codigo}"></span>
+                                        <span th:if="${cartao.tratamento == null}" class="dl-muted">—</span>
+                                    </td>
+                                    <td>
+                                        <span th:text="${cartao.iniciadoEm != null ? #temporals.format(cartao.iniciadoEm, 'dd/MM/yyyy') : '—'}"></span>
+                                        <span class="dl-muted">até</span>
+                                        <span th:text="${#temporals.format(cartao.encerradoEm, 'dd/MM/yyyy')}"></span>
+                                    </td>
+                                    <td class="text-center" th:text="${cartao.sessoesEfetivas} + ' / ' + ${sessoesPorCartao}"></td>
+                                    <td>
+                                        <span class="dl-badge" th:classappend="${cartao.statusFinal.badgeClasse}">
+                                            <i class="bi" th:classappend="${cartao.statusFinal.icone}"></i>
+                                            <span th:text="${cartao.statusFinal.label}"></span>
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(cartoesEncerrados)}">
+                        <i class="bi bi-archive"></i>
+                        <p class="mb-0">Nenhum tratamento encerrado ainda.</p>
                     </div>
                 </div>
             </div>

@@ -297,11 +297,15 @@ try {
     # 8b. Módulo de Entrevista (item 4): a fila /entrevistas reúne quem está com o cartão retido e
     # aponta pro mesmo formulário de sempre; o prontuário ganha o mesmo atalho.
     $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-    Check "Fila de Entrevista lista o assistido em Aguardando Avaliação" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+    Check "Fila de Entrevista lista o assistido Em Avaliação" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
     Check "Navbar tem o link do Módulo de Entrevista" ($r.Body -match "bi-chat-square-text")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
-    Check "Prontuário mostra o status 'Aguardando Avaliação' e o botão de registrar" ($r.Body -match "Aguardando Avaliação" -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+    Check "Prontuário mostra o status 'Em Avaliação' e o botão de registrar" ($r.Body -match "Em Avaliação" -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+    Check "Com o cartão em avaliação o prontuário não oferece 'Alterar Tratamento'" ($r.Body -notmatch "Alterar Tratamento")
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/tratamento" -Form @{ tratamentoAtualId = $p3eId; dataPrimeiraSessao = "06/02/2024" }
+    $tratamentoRetido = Invoke-SqlScalar "SELECT t.codigo FROM assistido a JOIN tipo_tratamento t ON t.id = a.tratamento_atual_id WHERE a.id = $assistidoId;"
+    Check "Trocar o tratamento com o cartão em avaliação é recusado (pularia o Avaliador)" ($tratamentoRetido -eq "P2")
 
     # 9. Regra das 4 sessões: 5ª sessão bloqueada pelo status do cartão até Avaliação + Entrevista
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
@@ -309,15 +313,27 @@ try {
 
     # 10a. Avaliação (diagnóstico) — data livre, não muda tratamento nem destrava sessão sozinha.
     # Desde a V36 o Avaliador propõe o tratamento nela (obrigatório): sem ele, volta com erro.
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR" }
-    Check "Avaliação sem tratamento proposto volta ao formulário" ($r.StatusCode -eq 302 -and $r.Location -match "nova-avaliacao$")
     $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-avaliacao"
-    Check "O formulário de avaliação explica o que faltou" ($r.Body -match "tratamento proposto")
+    Check "Formulário do Avaliador mostra a VEZ, as recomendações do verso e a opção de Alta" (
+        $r.StatusCode -eq 200 -and $r.Body -match "1ª VEZ" -and $r.Body -match 'name="recEvangelhoNoLar"' -and $r.Body -match 'value="ALTA"')
+    Check "1ª VEZ não pede a evolução (o cartão físico não tem M/P/I/B nela)" ($r.Body -notmatch 'name="evolucao"')
+    $script:CsrfToken = Extract-Csrf $r.Body
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; evolucao = "MELHOR"; historico = "Historico de teste"; observacoes = "Observacoes de teste"; tratamentoProposto = $p3eId }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; historico = "Historico digitado" }
+    Check "Avaliação sem tratamento proposto volta ao formulário preenchido, explicando o que faltou" (
+        $r.StatusCode -eq 200 -and $r.Body -match "tratamento proposto" -and $r.Body -match "Historico digitado")
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "29/01/2024"; tratamentoProposto = $p3eId }
+    Check "Avaliação com data anterior à última presença do cartão é recusada" ($r.StatusCode -eq 200 -and $r.Body -match "anterior à última presença")
+
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; historico = "Historico de teste"; observacoes = "Observacoes de teste"; tratamentoProposto = $p3eId; recEvangelhoNoLar = "true"; recLeituras = "true" }
     Check "Avaliação registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
     $propostoGravado = Invoke-SqlScalar "SELECT COALESCE(tratamento_proposto_id::text, 'NULL') FROM avaliacao WHERE assistido_id = $assistidoId ORDER BY id DESC LIMIT 1;"
     Check "Tratamento proposto gravado na avaliação" ($propostoGravado -eq $p3eId)
+    $auditoriaAvaliacao = Invoke-SqlScalar "SELECT (a.avaliador_id = u.id)::text || '|' || a.rec_evangelho_no_lar::text || '|' || a.rec_medico::text || '|' || a.numero_vez FROM avaliacao a, assistido u WHERE u.login = '$AdminLogin' AND a.assistido_id = $assistidoId ORDER BY a.id DESC LIMIT 1;"
+    Check "Avaliação grava quem avaliou (login), as recomendações marcadas e a 1ª VEZ" ($auditoriaAvaliacao -eq "true|true|false|1")
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; tratamentoProposto = $p3eId }
+    $totalAvaliacoes = Invoke-SqlScalar "SELECT count(*) FROM avaliacao WHERE assistido_id = $assistidoId;"
+    Check "Segunda avaliação com o cartão já avaliado é recusada" ($totalAvaliacoes -eq "1")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Prontuário mostra observações da avaliação" ($r.Body -match "Observacoes de teste")
@@ -345,7 +361,9 @@ try {
     # A Entrevista abre com o tratamento proposto pelo Avaliador já escolhido.
     $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-entrevista?avaliacaoId=$avaliacaoId"
     Check "Entrevista abre com o tratamento proposto já selecionado" (
-        $r.Body -match "Proposto pelo Avaliador" -and $r.Body -match "value=""$p3eId""\s+selected")
+        $r.Body -match "Decisão do Avaliador" -and $r.Body -match "value=""$p3eId""\s+selected")
+    Check "Entrevista mostra ao entrevistador as recomendações do Avaliador" ($r.Body -match "Evangelho no Lar")
+    Check "Entrevistador vem do login (não é mais digitado)" ($r.Body -notmatch 'name="entrevistador"')
 
     $codigoCartaoEntrevista = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
     if ($codigoCartaoEntrevista) {
@@ -356,12 +374,18 @@ try {
     # 10b. Entrevista vinculada à avaliação, indicando novo tratamento (P3E): destrava o ciclo,
     # atualiza o tratamento atual e já registra automaticamente a 1ª sessão do novo ciclo.
     if ($avaliacaoId) {
-        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "06/02/2024"; entrevistador = "Smoke Test"; tratamentoIndicado = $p3eId }
+        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "01/02/2024"; tratamentoIndicado = $p3eId }
+        Check "Entrevista anterior à avaliação é recusada" ($r.StatusCode -eq 200 -and $r.Body -match "anterior à avaliação")
+        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "06/02/2024"; tratamentoIndicado = $p3eId; observacoes = "Obs da entrevista" }
         Check "Entrevista registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+        $auditoriaEntrevista = Invoke-SqlScalar "SELECT (e.entrevistador_id = u.id)::text || '|' || e.observacoes FROM entrevista e, assistido u WHERE u.login = '$AdminLogin' AND e.avaliacao_id = $avaliacaoId;"
+        Check "Entrevista grava quem entrevistou (login) e a observação" ($auditoriaEntrevista -eq "true|Obs da entrevista")
     }
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Tratamento atual atualizado para P3E após entrevista" ($r.Body -match ">P3E<")
+    Check "Prontuário mostra a observação da entrevista e o Histórico de Tratamentos" (
+        $r.Body -match "Obs da entrevista" -and $r.Body -match "Histórico de Tratamentos" -and $r.Body -match "Tratamento Concluído")
 
     $statusPosEntrevista = Invoke-SqlScalar "SELECT status_cartao || '|' || ciclo_iniciado_em FROM assistido WHERE id = $assistidoId;"
     Check "Status volta para 'Em Tratamento' e ciclo reinicia em 06/02/2024" ($statusPosEntrevista -eq "EM_TRATAMENTO|2024-02-06")
@@ -371,6 +395,14 @@ try {
 
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a 1ª sessão automática do novo ciclo em 06/02/2024" ($r.Body -match "06/02/2024")
+    Check "Cartão mostra as recomendações comunicadas na entrevista" (
+        $r.Body -match "Recomendações para este tratamento" -and $r.Body -match "Evangelho no Lar" -and $r.Body -match "Observacoes de teste")
+
+    $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-avaliacao"
+    Check "Avaliação não abre com o cartão Em Tratamento (volta ao prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+    # Segue o redirect: senão a mensagem fica empilhada e aparece numa conferência adiante (seção 6).
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "O prontuário explica por que a avaliação não abriu" ($r.Body -match "4 sessões cumpridas")
 
     # 10c. Histórico de cartões: a entrevista encerra o ciclo retido como CONCLUÍDO, guardando o
     # tratamento ANTIGO (P2) — o P3E indicado só vale do ciclo novo em diante.
@@ -379,6 +411,19 @@ try {
 
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a seção 'Tratamentos Anteriores' com o ciclo concluído" ($r.Body -match "Tratamentos Anteriores" -and $r.Body -match "Tratamento Concluído")
+
+    # 10d. As telas de quem recebeu alta (a regra está no TratamentoServiceTest): o status é posto
+    # por SQL e devolvido logo depois.
+    $estadoAntesAlta = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+    Invoke-Sql "UPDATE assistido SET status_cartao = 'ALTA' WHERE id = $assistidoId;" | Out-Null
+    $r = Invoke-CurlForm -Url $cartaoUrl
+    Check "Cartão com alta abre e explica que a pessoa pode vir como ouvinte" ($r.StatusCode -eq 200 -and $r.Body -match "concluído com alta")
+    $r = Invoke-CurlForm -Url $prontuarioUrl
+    Check "Prontuário com alta explica o novo tratamento pela recepção" ($r.StatusCode -eq 200 -and $r.Body -match "Recebeu alta")
+    $codigoAlta = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
+    $r = Invoke-CurlForm -Url "$BaseUrl/checkin/$codigoAlta"
+    Check "Scan do QR de quem recebeu alta abre (200)" ($r.StatusCode -eq 200 -and $r.Body -match "recebeu alta")
+    Invoke-Sql "UPDATE assistido SET status_cartao = '$estadoAntesAlta' WHERE id = $assistidoId;" | Out-Null
 
     # 11. Cartão expirado por ausência de 21+ dias: a sessão (27/02, terça) é barrada, o cartão vira
     # INCOMPLETO_POR_TEMPO e só a confirmação da recepção (reiniciarP2=true) reinicia em P2.
@@ -545,8 +590,8 @@ try {
         # status é posicionado direto no banco porque aqui o ciclo já foi liberado pela entrevista.
         Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_AVALIACAO' WHERE id = $assistidoId;" | Out-Null
         $r = Invoke-CurlForm -Url $cartaoUrl
-        Check "Cartão 'Aguardando Avaliação' ainda abre para o assistido (200)" ($r.StatusCode -eq 200)
-        Check "Cartão retido mostra o nome e o status ao assistido" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Aguardando Avaliação")
+        Check "Cartão 'Em Avaliação' ainda abre para o assistido (200)" ($r.StatusCode -eq 200)
+        Check "Cartão retido mostra o nome e o status ao assistido" ($r.Body -match [regex]::Escape($nomeEditado) -and $r.Body -match "Em Avaliação")
         Check "Cartão retido esconde as marcações de presença" ($r.Body -notmatch "dl-marcacao")
         Check "Cartão retido esconde o histórico de presenças" ($r.Body -notmatch "Histórico de Presenças")
         Check "Cartão retido esconde o tratamento atual" ($r.Body -notmatch "Tratamento atual")
@@ -751,9 +796,18 @@ try {
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Avaliador alcança a fila (200)" ($r.StatusCode -eq 200)
+            # A avaliação só abre com o cartão Em Avaliação (posto por SQL e devolvido logo depois).
+            $statusAntesMatriz = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+            Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_AVALIACAO' WHERE id = $assistidoId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Avaliador abre a avaliação, com o campo de tratamento proposto" (
                 $r.StatusCode -eq 200 -and $r.Body -match 'name="tratamentoProposto"')
+            Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAntesMatriz' WHERE id = $assistidoId;" | Out-Null
+            # Depois de registrada, a decisão do Avaliador fica só com quem entrevista (2026-10-07).
+            $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Avaliador não vê a decisão já registrada antes da entrevista" ($r.Body -match "Reservado até a entrevista")
+            Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-entrevista?avaliacaoId=1"
             Check "Avaliador não registra entrevista (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
@@ -764,6 +818,10 @@ try {
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Entrevistador alcança a fila (200)" ($r.StatusCode -eq 200)
+            $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Entrevistador vê a decisão do Avaliador antes da entrevista" ($r.Body -notmatch "Reservado até a entrevista")
+            Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Entrevistador não registra avaliação (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
@@ -915,6 +973,17 @@ try {
 
         $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId"
         Check "Prontuário avisa que outro trabalhador precisa fazer o atendimento" ($r.Body -match "Ninguém conduz o próprio tratamento")
+
+        # Com o PRÓPRIO cartão aguardando a entrevista, o trabalhador não abre o próprio prontuário
+        # (onde está a decisão do Avaliador): vai para o próprio cartão, retido (2026-10-07).
+        $statusAdmin = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $meuId;"
+        Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $meuId;" | Out-Null
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId"
+        Check "Trabalhador não vê o próprio prontuário aguardando entrevista (vai ao cartão)" (
+            $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$meuId/cartao$")
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$meuId/cartao"
+        Check "O próprio cartão fica retido para o trabalhador" ($r.Body -match "prontuário fica reservado" -and $r.Body -notmatch "dl-marcacao")
+        Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAdmin' WHERE id = $meuId;" | Out-Null
     }
 
     # 16. Check-in por QR code (CLAUDE.md 3.12) e Módulo Sessão (3.13): o QR fica no cartão do

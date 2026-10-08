@@ -14,7 +14,10 @@ public enum StatusCartaoEncerrado {
     INCOMPLETO_POR_TEMPO("Tratamento Incompleto", "dl-badge-danger", "bi-exclamation-triangle-fill"),
 
     /** O tratamento foi trocado pela recepção/edição antes de o ciclo terminar. */
-    INTERROMPIDO("Interrompido por Troca de Tratamento", "dl-badge-neutral", "bi-arrow-repeat");
+    INTERROMPIDO("Interrompido por Troca de Tratamento", "dl-badge-neutral", "bi-arrow-repeat"),
+
+    /** Cumpriu as 4 sessões, o Avaliador deu alta e a entrevista a comunicou (2026-10-07). */
+    ALTA("Alta", "dl-badge-teal", "bi-award-fill");
 
     private final String label;
     private final String badgeClasse;

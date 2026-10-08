@@ -147,7 +147,7 @@ class TratamentoServiceTest {
     @Test
     void tratamentoRealmenteNovoReabreCartaoEmTratamento() {
         assistido.setTratamentoAtual(tratamento);
-        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        assistido.setStatusCartao(CartaoStatus.INCOMPLETO_POR_TEMPO);
         assistido.setDiaFrequencia(null);
 
         TipoTratamento novoTratamento = new TipoTratamento();
@@ -268,7 +268,7 @@ class TratamentoServiceTest {
         e.setAvaliacao(av);
         e.setData(LocalDate.of(2026, 9, 22));
         e.setTratamentoIndicado(indicado);
-        tratamentoService.registrarEntrevista(e);
+        tratamentoService.registrarEntrevista(e, null);
 
         ArgumentCaptor<CartaoEncerrado> captor = ArgumentCaptor.forClass(CartaoEncerrado.class);
         verify(cartaoEncerradoRepository).save(captor.capture());
@@ -340,23 +340,243 @@ class TratamentoServiceTest {
         verify(sessaoRepository, never()).save(any(SessaoTratamento.class));
     }
 
+    // A VEZ conta todas as avaliações da pessoa, sem limite (o papel para na 8ª), não só as do ciclo —
+    // contada no ciclo, saía sempre "1ª VEZ", porque cada entrevista reinicia o ciclo.
     @Test
-    void avaliacaoNumeraDentroDoCicloEMoveCartaoParaAguardandoEntrevista() {
+    void avaliacaoNumeraTodasAsVezesEMoveCartaoParaAguardandoEntrevista() {
         assistido.setCicloIniciadoEm(LocalDate.of(2026, 9, 1));
         assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
-        when(avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(1L, LocalDate.of(2026, 9, 1)))
-                .thenReturn(1L);
+        when(avaliacaoRepository.countByAssistidoId(1L)).thenReturn(1L);
+        when(avaliacaoRepository.save(any(br.com.nae.divinaluz.model.Avaliacao.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Assistido avaliador = outraPessoa(7L);
+
+        br.com.nae.divinaluz.model.Avaliacao av = avaliacao(LocalDate.of(2026, 9, 23)); // data livre
+        av.setEvolucao(br.com.nae.divinaluz.model.Evolucao.MELHOR);
+        tratamentoService.registrarAvaliacao(av, avaliador);
+
+        assertEquals(2, av.getNumeroVez());
+        assertEquals(avaliador, av.getAvaliador());
+        assertEquals(CartaoStatus.AGUARDANDO_ENTREVISTA, assistido.getStatusCartao());
+    }
+
+    @Test
+    void avaliacaoSoComOCartaoEmAvaliacao() {
+        // EM_TRATAMENTO (setUp): antes dava para registrar avaliação a qualquer momento.
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.of(2026, 9, 23)), null));
+        verify(avaliacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void ninguemAvaliaASiMesmo() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.of(2026, 9, 23)), assistido));
+        verify(avaliacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void avaliacaoFuturaOuAntesDaUltimaPresencaERecusada() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        when(sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(1L))
+                .thenReturn(Optional.of(sessao(LocalDate.of(2026, 9, 20))));
+
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.now().plusDays(1)), null));
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.of(2026, 9, 19)), null));
+        verify(avaliacaoRepository, never()).save(any());
+    }
+
+    // A 1ª VEZ do cartão físico não tem M/P/I/B; da 2ª em diante a evolução é obrigatória.
+    @Test
+    void evolucaoObrigatoriaAPartirDaSegundaVez() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        when(avaliacaoRepository.countByAssistidoId(1L)).thenReturn(1L);
+
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.of(2026, 9, 23)), null));
+        verify(avaliacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void avaliacaoComAltaDispensaTratamentoProposto() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
         when(avaliacaoRepository.save(any(br.com.nae.divinaluz.model.Avaliacao.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
+        br.com.nae.divinaluz.model.Avaliacao av = avaliacao(LocalDate.of(2026, 9, 23));
+        av.setResultado(br.com.nae.divinaluz.model.ResultadoAvaliacao.ALTA);
+        tratamentoService.registrarAvaliacao(av, null);
+
+        assertEquals(null, av.getTratamentoProposto());
+        assertEquals(CartaoStatus.AGUARDANDO_ENTREVISTA, assistido.getStatusCartao());
+    }
+
+    // A entrevista que comunica a alta encerra o tratamento: cartão "Alta" no histórico, sem ciclo
+    // aberto e sem 1ª sessão de um ciclo novo.
+    @Test
+    void entrevistaComAltaEncerraOTratamento() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 25));
+        assistido.setTratamentoAtual(tratamento);
+        when(sessaoRepository.countByAssistidoIdAndOuvinteFalseAndDataConsultaGreaterThanEqual(1L, LocalDate.of(2026, 8, 25)))
+                .thenReturn(4L);
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.setResultado(br.com.nae.divinaluz.model.ResultadoAvaliacao.ALTA);
+        e.setTratamentoIndicado(tratamento); // ignorado com alta
+        Assistido entrevistador = outraPessoa(7L);
+        tratamentoService.registrarEntrevista(e, entrevistador);
+
+        ArgumentCaptor<CartaoEncerrado> captor = ArgumentCaptor.forClass(CartaoEncerrado.class);
+        verify(cartaoEncerradoRepository).save(captor.capture());
+        assertEquals(StatusCartaoEncerrado.ALTA, captor.getValue().getStatusFinal());
+        assertEquals(tratamento, captor.getValue().getTratamento());
+        assertEquals(CartaoStatus.ALTA, assistido.getStatusCartao());
+        assertEquals(null, assistido.getTratamentoAtual());
+        assertEquals(null, assistido.getCicloIniciadoEm());
+        assertEquals(null, e.getTratamentoIndicado());
+        assertEquals("Entrevistador", e.getEntrevistador());
+        verify(sessaoRepository, never()).save(any(SessaoTratamento.class));
+    }
+
+    @Test
+    void entrevistaSoComOCartaoAguardandoEntrevista() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.setTratamentoIndicado(tratamento);
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e, null));
+        verify(entrevistaRepository, never()).save(any());
+    }
+
+    @Test
+    void entrevistaDeAvaliacaoDeOutraPessoaERecusada() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.getAvaliacao().setAssistido(outraPessoa(7L));
+        e.setTratamentoIndicado(tratamento);
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e, null));
+        verify(entrevistaRepository, never()).save(any());
+    }
+
+    @Test
+    void ninguemSeEntrevista() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.setTratamentoIndicado(tratamento);
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e, assistido));
+        verify(entrevistaRepository, never()).save(any());
+    }
+
+    @Test
+    void entrevistaAntesDaAvaliacaoERecusada() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.getAvaliacao().setData(LocalDate.of(2026, 9, 25));
+        e.setTratamentoIndicado(tratamento);
+
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e, null));
+    }
+
+    // Quem entrou como ouvinte no dia da entrevista (o cartão estava retido) tem essa presença
+    // transformada na 1ª sessão do novo tratamento — antes o ciclo novo começava com zero.
+    @Test
+    void entrevistaTransformaOOuvinteDoDiaNaPrimeiraSessao() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        LocalDate data = LocalDate.of(2026, 9, 22);
+        SessaoTratamento ouvinte = sessao(data);
+        ouvinte.setOuvinte(true);
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L)).thenReturn(List.of(ouvinte));
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(data);
+        e.setTratamentoIndicado(tratamento);
+        tratamentoService.registrarEntrevista(e, null);
+
+        assertFalse(ouvinte.isOuvinte());
+        assertEquals(1, ouvinte.getNumeroSerie());
+        verify(sessaoRepository).save(ouvinte);
+    }
+
+    @Test
+    void naoTrocaOTratamentoComOCartaoRetido() {
+        assistido.setTratamentoAtual(tratamento);
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        TipoTratamento outro = new TipoTratamento();
+        outro.setId(5L);
+        outro.setCodigo("P3E");
+
+        assertThrows(RegraNegocioException.class,
+                () -> tratamentoService.definirTratamento(assistido, outro, LocalDate.of(2026, 9, 22)));
+        assertEquals(tratamento, assistido.getTratamentoAtual());
+    }
+
+    @Test
+    void depoisDaAltaAPresencaEntraComoOuvinte() {
+        assistido.setStatusCartao(CartaoStatus.ALTA);
+        assistido.setDiaFrequencia(DiaFrequencia.TERCA_19H);
+        when(sessaoRepository.save(any(SessaoTratamento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // domingo, fora do dia da pessoa: como ouvinte não importa
+        TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 20)));
+
+        assertTrue(resultado.ouvinte());
+        assertTrue(resultado.aposAlta());
+        assertEquals(CartaoStatus.ALTA, assistido.getStatusCartao());
+    }
+
+    @Test
+    void depoisDaAltaARecepcaoIniciaNovoTratamentoEmP2() {
+        assistido.setStatusCartao(CartaoStatus.ALTA);
+        when(tipoTratamentoRepository.findByCodigo("P2")).thenReturn(Optional.of(tratamento));
+        when(sessaoRepository.save(any(SessaoTratamento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SessaoTratamento nova = sessao(LocalDate.of(2026, 9, 22));
+        TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(nova, true);
+
+        assertTrue(resultado.tratamentoReiniciado());
+        assertTrue(resultado.aposAlta());
+        assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
+        assertEquals(tratamento, assistido.getTratamentoAtual());
+        assertEquals(LocalDate.of(2026, 9, 22), assistido.getCicloIniciadoEm());
+        assertEquals(1, nova.getNumeroSerie());
+        // nada de "incompleto por tempo": depois da alta não havia cartão aberto
+        verify(cartaoEncerradoRepository, never()).save(any());
+    }
+
+    private br.com.nae.divinaluz.model.Avaliacao avaliacao(LocalDate data) {
         br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
         av.setAssistido(assistido);
-        av.setData(LocalDate.of(2026, 9, 23)); // data livre
+        av.setData(data);
         av.setTratamentoProposto(tratamento);
-        tratamentoService.registrarAvaliacao(av);
+        return av;
+    }
 
-        assertEquals(2, av.getNumeroVez());
-        assertEquals(CartaoStatus.AGUARDANDO_ENTREVISTA, assistido.getStatusCartao());
+    private br.com.nae.divinaluz.model.Entrevista entrevista(LocalDate data) {
+        br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
+        av.setId(9L);
+        av.setAssistido(assistido);
+        br.com.nae.divinaluz.model.Entrevista e = new br.com.nae.divinaluz.model.Entrevista();
+        e.setAssistido(assistido);
+        e.setAvaliacao(av);
+        e.setData(data);
+        return e;
+    }
+
+    private static Assistido outraPessoa(Long id) {
+        Assistido outra = new Assistido();
+        outra.setId(id);
+        outra.setNome("Entrevistador");
+        return outra;
     }
 
     @Test
@@ -373,7 +593,7 @@ class TratamentoServiceTest {
         e.setAvaliacao(av);
         e.setData(LocalDate.of(2026, 9, 22));
         e.setTratamentoIndicado(tratamento);
-        tratamentoService.registrarEntrevista(e);
+        tratamentoService.registrarEntrevista(e, null);
 
         assertEquals(tratamento, assistido.getTratamentoAtual());
         assertEquals(CartaoStatus.EM_TRATAMENTO, assistido.getStatusCartao());
@@ -392,7 +612,7 @@ class TratamentoServiceTest {
         e.setAvaliacao(av);
         e.setData(LocalDate.of(2026, 9, 22));
 
-        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e));
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(e, null));
     }
 
     private SessaoTratamento sessao(LocalDate data) {
@@ -426,11 +646,12 @@ class TratamentoServiceTest {
 
     @Test
     void avaliacaoSemTratamentoPropostoERecusada() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
         br.com.nae.divinaluz.model.Avaliacao av = new br.com.nae.divinaluz.model.Avaliacao();
         av.setAssistido(assistido);
         av.setData(LocalDate.of(2026, 9, 23));
 
-        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarAvaliacao(av));
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarAvaliacao(av, null));
         verify(avaliacaoRepository, never()).save(any());
     }
 

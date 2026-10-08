@@ -80,12 +80,14 @@ public class PerfilAdvice {
     }
 
     /**
-     * Quem enxerga o tratamento proposto pelo Avaliador enquanto o cartão aguarda a entrevista:
-     * Avaliador, Entrevistador e Dirigente (pedido de 2026-10-04). É também quem vê a fila.
+     * Quem enxerga o que o Avaliador decidiu (tratamento proposto ou alta, e as recomendações)
+     * enquanto o cartão aguarda a entrevista: só quem entrevista — Entrevistador e Dirigente
+     * (2026-10-07; de 2026-10-04 até ali o Avaliador também via). Sobre o próprio cartão, ninguém:
+     * o prontuário nem abre (ProntuarioController.verProntuario) e a fila esconde a própria linha.
      */
     @ModelAttribute("podeVerTratamentoProposto")
     public boolean podeVerTratamentoProposto(Authentication authentication) {
-        return pode(authentication, Permissao.AVALIACAO) || pode(authentication, Permissao.ENTREVISTA);
+        return pode(authentication, Permissao.ENTREVISTA);
     }
 
     @ModelAttribute("podeSessao")

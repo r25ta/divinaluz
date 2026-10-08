@@ -75,8 +75,7 @@ public class CheckinController {
             CheckinService.ResultadoCheckin resultado = checkinService.registrarPresenca(codigoCartao, confirmarReinicio);
             redirectAttributes.addFlashAttribute("sucesso", mensagemDeSucesso(resultado));
             if (resultado.tratamentoReiniciado()) {
-                redirectAttributes.addFlashAttribute("aviso",
-                        "O assistido ficou 3 semanas ou mais sem sessão: o cartão anterior expirou e o tratamento foi reiniciado em P2.");
+                redirectAttributes.addFlashAttribute("aviso", mensagemReinicio(resultado));
             }
         } catch (AvaliacaoPendenteException e) {
             redirectAttributes.addFlashAttribute("erro", e.getMessage());
@@ -106,15 +105,24 @@ public class CheckinController {
                 + resultado.sessao().getDiaFrequencia().getLabel() + ". O cartão não avançou.";
     }
 
+    static String mensagemReinicio(CheckinService.ResultadoCheckin resultado) {
+        return resultado.aposAlta()
+                ? "Depois da alta, um novo tratamento foi iniciado em P2 e esta é a 1ª sessão do novo cartão."
+                : "O assistido ficou 3 semanas ou mais sem sessão: o cartão anterior expirou e o tratamento foi reiniciado em P2.";
+    }
+
     static String mensagemDeSucesso(CheckinService.ResultadoCheckin resultado) {
         String nome = resultado.assistido().getNome();
+        if (resultado.ouvinte() && resultado.aposAlta()) {
+            return nome + " recebeu alta e entrou como ouvinte. Para um novo tratamento, use \"Novo tratamento em P2\".";
+        }
         if (resultado.ouvinte()) {
             return nome + " já tinha presença nesta semana: entrou como ouvinte e o cartão não avançou.";
         }
         Integer numero = resultado.presenca().getNumeroSerie();
         String presenca = numero != null ? numero + "ª presença" : "presença";
         String aviso = resultado.assistido().getStatusCartao() == CartaoStatus.AGUARDANDO_AVALIACAO
-                ? " Cartão completo: encaminhe para a avaliação espiritual."
+                ? " Cartão completo e em avaliação: encaminhe para o Avaliador."
                 : "";
         return presenca + " carimbada no cartão de " + nome + "." + aviso;
     }

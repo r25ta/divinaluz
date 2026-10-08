@@ -32,12 +32,31 @@ public class Entrevista {
     @DateTimeFormat(pattern = "dd/MM/yyyy")
     private LocalDate data;
 
+    // Nome de quem entrevistou, para exibição (o cartão físico tem o campo "Entrevistador"). Desde a
+    // V42 vem do login de quem registrou (entrevistadorResponsavel), não mais digitado.
     private String entrevistador;
 
+    @ManyToOne
+    @JoinColumn(name = "entrevistador_id")
+    @ToString.Exclude
+    private Assistido entrevistadorResponsavel;
+
+    // Novo tratamento ou alta (V42) — o que o Avaliador propôs, confirmado ou ajustado aqui.
+    @Enumerated(EnumType.STRING)
+    private ResultadoAvaliacao resultado = ResultadoAvaliacao.NOVO_TRATAMENTO;
+
     // Tratamento decidido nesta entrevista (pode repetir o tratamento anterior). Atualiza
-    // Assistido.tratamentoAtual ao ser salva.
+    // Assistido.tratamentoAtual ao ser salva. Nulo quando o resultado é alta.
     @ManyToOne
     @JoinColumn(name = "tratamento_indicado_id")
     @ToString.Exclude
     private TipoTratamento tratamentoIndicado;
+
+    // Observação do entrevistador sobre o tratamento comunicado (V42).
+    @Column(columnDefinition = "TEXT")
+    private String observacoes;
+
+    public boolean isAlta() {
+        return resultado == ResultadoAvaliacao.ALTA;
+    }
 }

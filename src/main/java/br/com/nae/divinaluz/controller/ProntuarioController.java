@@ -500,10 +500,20 @@ public class ProntuarioController {
     // --- NOVO MÉTODO ADICIONADO AQUI ---
     @GetMapping("/prontuario/{id}")
     public String verProntuario(@PathVariable Long id, Model model,
-            @AuthenticationPrincipal UserDetails usuarioLogado) {
+            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
         // Busca o assistido pelo ID
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+
+        // Todo trabalhador é também assistido: com o PRÓPRIO cartão em avaliação ou aguardando a
+        // entrevista, ele não vê o próprio prontuário (onde está o que o Avaliador decidiu) — só outro
+        // entrevistador o atende (2026-10-07). Vai para o próprio cartão, que já esconde o conteúdo.
+        boolean proprio = ehOProprioRegistro(id, usuarioLogado);
+        if (proprio && assistido.getStatusCartao() != null && assistido.getStatusCartao().isRetido()) {
+            redirectAttributes.addFlashAttribute("aviso", "Seu cartão está \"" + assistido.getStatusCartao().getLabel()
+                    + "\": o seu prontuário fica reservado até a entrevista, que outro entrevistador vai fazer.");
+            return "redirect:/prontuario/" + id + "/cartao";
+        }
 
         // Busca o histórico de sessões ordenado pela data
         List<SessaoTratamento> sessoes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id);
@@ -531,9 +541,12 @@ public class ProntuarioController {
         model.addAttribute("statusCartao", assistido.getStatusCartao());
         model.addAttribute("avaliacaoPendenteEntrevista",
                 avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(id).orElse(null));
-        model.addAttribute("proprioRegistro", ehOProprioRegistro(id, usuarioLogado));
+        model.addAttribute("proprioRegistro", proprio);
         // Celulares que marcam a presença desta pessoa pelo QR da sessão, sem login (CelularController).
         model.addAttribute("celularesVinculados", celularVinculadoService.quantosVinculados(id));
+        // O tratamento anterior vai para o histórico do prontuário quando a entrevista fecha o ciclo.
+        model.addAttribute("cartoesEncerrados", cartaoEncerradoRepository.findByAssistidoIdOrderByEncerradoEmDesc(id));
+        model.addAttribute("sessoesPorCartao", SESSOES_POR_CARTAO);
 
         return "prontuario"; // Nome do novo arquivo HTML
     }
@@ -617,8 +630,9 @@ public class ProntuarioController {
 
         // Presenças efetivas do ciclo atual: são elas que preenchem as 4 marcações do cartão
         // virtual (o mesmo bloco de 4 sessões que o TratamentoService conta para a avaliação).
+        // Com alta não há cartão em andamento: nenhuma marcação (o ciclo foi encerrado).
         LocalDate cicloIniciadoEm = assistido.getCicloIniciadoEm();
-        List<SessaoTratamento> presencasDoCiclo = sessoes.stream()
+        List<SessaoTratamento> presencasDoCiclo = status == CartaoStatus.ALTA ? List.<SessaoTratamento>of() : sessoes.stream()
                 .filter(sessao -> !sessao.isOuvinte() && sessao.getDataConsulta() != null)
                 .filter(sessao -> cicloIniciadoEm == null || !sessao.getDataConsulta().isBefore(cicloIniciadoEm))
                 .sorted(Comparator.comparing(SessaoTratamento::getDataConsulta))
@@ -649,6 +663,13 @@ public class ProntuarioController {
         model.addAttribute("marcacoesVazias", marcacoesVazias);
         model.addAttribute("sessoesPorCartao", SESSOES_POR_CARTAO);
         model.addAttribute("totalOuvinte", sessoes.stream().filter(SessaoTratamento::isOuvinte).count());
+        // Recomendações do Avaliador para o tratamento em andamento: só depois que a entrevista as
+        // comunicou (é ela que libera o cartão) — a entrevista que abriu este ciclo, ou a da alta.
+        model.addAttribute("entrevistaVigente", cartaoRetido ? null : entrevistaRepository.findByAssistidoIdOrderByDataDesc(id)
+                .stream().findFirst()
+                .filter(e -> e.isAlta() ? status == CartaoStatus.ALTA
+                        : status == CartaoStatus.EM_TRATAMENTO && e.getData() != null && e.getData().equals(cicloIniciadoEm))
+                .orElse(null));
         return "cartao";
     }
 
@@ -742,6 +763,8 @@ public class ProntuarioController {
         return "redirect:/prontuario/" + assistidoId;
     }
 
+    // Módulo do Avaliador (2026-10-07). A tela só abre com o cartão Em Avaliação — as regras de
+    // verdade estão em TratamentoService.registrarAvaliacao, que confere tudo de novo.
     @GetMapping("/prontuario/{id}/nova-avaliacao")
     public String novaAvaliacao(@PathVariable Long id, Model model,
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
@@ -751,21 +774,36 @@ public class ProntuarioController {
         }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_AVALIACAO) {
+            redirectAttributes.addFlashAttribute("erro", "A avaliação só é registrada com o cartão \""
+                    + CartaoStatus.AGUARDANDO_AVALIACAO.getLabel() + "\" (4 sessões cumpridas).");
+            return "redirect:/prontuario/" + id;
+        }
+        return exibirAvaliacao(model, assistido, new Avaliacao(), null);
+    }
 
+    private String exibirAvaliacao(Model model, Assistido assistido, Avaliacao avaliacao, String erro) {
+        long anteriores = avaliacaoRepository.countByAssistidoId(assistido.getId());
         model.addAttribute("assistido", assistido);
-        model.addAttribute("avaliacao", new Avaliacao());
+        model.addAttribute("avaliacao", avaliacao);
+        model.addAttribute("numeroVez", anteriores + 1);
         model.addAttribute("evolucoes", Evolucao.values());
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
+        model.addAttribute("ultimaPresenca", sessaoRepository
+                .findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(assistido.getId())
+                .map(SessaoTratamento::getDataConsulta).orElse(null));
+        if (erro != null) {
+            model.addAttribute("erro", erro);
+        }
         return "avaliacao-form";
     }
 
     // Mesmo cuidado do endpoint de sessão: path variable não pode se chamar "id" porque
-    // Avaliacao também tem um campo "id". A Avaliação registra o diagnóstico (histórico,
-    // observações, evolução) e, desde a V36, o tratamento PROPOSTO pelo Avaliador — que só passa a
-    // valer quando a Entrevista o comunica (ver abaixo).
+    // Avaliacao também tem um campo "id". Um erro devolve o formulário preenchido (o Avaliador
+    // não redigita o histórico).
     @PostMapping("/prontuario/{assistidoId}/avaliacao")
     public String salvarAvaliacao(@PathVariable Long assistidoId, @ModelAttribute Avaliacao avaliacao,
-            @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
+            @AuthenticationPrincipal UserDetails usuarioLogado, Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
             return "redirect:/prontuario/" + assistidoId;
@@ -775,12 +813,14 @@ public class ProntuarioController {
         avaliacao.setAssistido(assistido);
 
         try {
-            tratamentoService.registrarAvaliacao(avaliacao);
+            tratamentoService.registrarAvaliacao(avaliacao, assistidoLogado(usuarioLogado));
         } catch (RegraNegocioException e) {
-            redirectAttributes.addFlashAttribute("erro", e.getMessage());
-            return "redirect:/prontuario/" + assistidoId + "/nova-avaliacao";
+            return exibirAvaliacao(model, assistido, avaliacao, e.getMessage());
         }
 
+        redirectAttributes.addFlashAttribute("sucesso", avaliacao.isAlta()
+                ? "Avaliação registrada com ALTA. O cartão aguarda a entrevista, que comunica a alta."
+                : "Avaliação registrada. O cartão aguarda a entrevista, que comunica o novo tratamento.");
         return "redirect:/prontuario/" + assistidoId;
     }
 
@@ -798,24 +838,52 @@ public class ProntuarioController {
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)
                 .orElseThrow(() -> new IllegalArgumentException("Avaliação inválida: " + avaliacaoId));
+        String problema = problemaParaEntrevistar(assistido, avaliacao);
+        if (problema != null) {
+            redirectAttributes.addFlashAttribute("erro", problema);
+            return "redirect:/prontuario/" + id;
+        }
 
-        // A Entrevista comunica o que o Avaliador propôs (V36); o entrevistador confirma ou ajusta.
+        // A Entrevista comunica o que o Avaliador decidiu (V36/V42); o entrevistador confirma ou ajusta.
         // Avaliações antigas não têm proposta: aí vale o tratamento atual, como antes.
         Entrevista entrevista = new Entrevista();
-        entrevista.setTratamentoIndicado(avaliacao.getTratamentoProposto() != null
+        entrevista.setResultado(avaliacao.getResultado());
+        entrevista.setTratamentoIndicado(avaliacao.isAlta() ? null : avaliacao.getTratamentoProposto() != null
                 ? avaliacao.getTratamentoProposto() : assistido.getTratamentoAtual());
+        return exibirEntrevista(model, assistido, avaliacao, entrevista, usuarioLogado, null);
+    }
 
+    private String exibirEntrevista(Model model, Assistido assistido, Avaliacao avaliacao, Entrevista entrevista,
+            UserDetails usuarioLogado, String erro) {
         model.addAttribute("assistido", assistido);
         model.addAttribute("avaliacao", avaliacao);
         model.addAttribute("entrevista", entrevista);
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
+        model.addAttribute("entrevistadorNome", assistidoLogado(usuarioLogado).getNome());
+        if (erro != null) {
+            model.addAttribute("erro", erro);
+        }
         return "entrevista-form";
+    }
+
+    /** A avaliação precisa ser desta pessoa e estar pendente, com o cartão Aguardando Entrevista. */
+    private static String problemaParaEntrevistar(Assistido assistido, Avaliacao avaliacao) {
+        if (avaliacao.getAssistido() == null || !assistido.getId().equals(avaliacao.getAssistido().getId())) {
+            return "Esta avaliação não é deste assistido.";
+        }
+        if (avaliacao.getEntrevista() != null) {
+            return "Esta avaliação já tem uma entrevista registrada.";
+        }
+        if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_ENTREVISTA) {
+            return "A entrevista só é registrada com o cartão \"" + CartaoStatus.AGUARDANDO_ENTREVISTA.getLabel() + "\".";
+        }
+        return null;
     }
 
     @PostMapping("/prontuario/{assistidoId}/entrevista")
     public String salvarEntrevista(@PathVariable Long assistidoId, @RequestParam Long avaliacaoId,
             @ModelAttribute Entrevista entrevista, @AuthenticationPrincipal UserDetails usuarioLogado,
-            RedirectAttributes redirectAttributes) {
+            Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
             return "redirect:/prontuario/" + assistidoId;
@@ -829,12 +897,15 @@ public class ProntuarioController {
         entrevista.setAvaliacao(avaliacao);
 
         try {
-            tratamentoService.registrarEntrevista(entrevista);
+            tratamentoService.registrarEntrevista(entrevista, assistidoLogado(usuarioLogado));
         } catch (RegraNegocioException e) {
-            redirectAttributes.addFlashAttribute("erro", e.getMessage());
-            return "redirect:/prontuario/" + assistidoId + "/nova-entrevista?avaliacaoId=" + avaliacaoId;
+            return exibirEntrevista(model, assistido, avaliacao, entrevista, usuarioLogado, e.getMessage());
         }
 
+        redirectAttributes.addFlashAttribute("sucesso", entrevista.isAlta()
+                ? "Entrevista registrada: alta comunicada e tratamento encerrado."
+                : "Entrevista registrada: " + entrevista.getTratamentoIndicado().getCodigo()
+                        + " liberado, com a 1ª sessão em " + entrevista.getData().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".");
         return "redirect:/prontuario/" + assistidoId;
     }
 }

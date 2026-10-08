@@ -15,6 +15,10 @@
                 <!--/* Sem "Voltar ao Prontuário" desde 2026-10-04: o prontuário é acessado pelo menu. */-->
             </div>
 
+            <div class="alert alert-warning" th:if="${aviso}">
+                <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
+            </div>
+
             <!-- Cartão virtual: reproduz a ficha física (frente com os dados, verso com as marcações
                  de presença do ciclo atual). -->
             <div class="dl-cartao" th:with="restantes=${sessoesPorCartao - #lists.size(presencasDoCiclo)}">
@@ -76,8 +80,9 @@
                         <div>
                             <div class="titulo" th:text="${statusCartao.label}">Aguardando Avaliação</div>
                             <p class="mb-0" th:if="${statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">
-                                Seu cartão está retido para a avaliação espiritual. As presenças voltam a
-                                aparecer aqui quando o novo tratamento for liberado na entrevista.
+                                Você completou as 4 sessões e seu cartão está em avaliação: o avaliador vai
+                                definir o próximo tratamento ou a alta. As presenças voltam a aparecer aqui
+                                quando a entrevista liberar o cartão.
                             </p>
                             <p class="mb-0" th:if="${statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
                                 Sua avaliação já foi concluída. Procure a recepção para a entrevista: é nela
@@ -100,7 +105,7 @@
                         </span>
                     </div>
 
-                    <div class="dl-marcacoes">
+                    <div class="dl-marcacoes" th:unless="${statusCartao != null and statusCartao.name() == 'ALTA'}">
                         <div class="dl-marcacao ok" th:each="sessao : ${presencasDoCiclo}">
                             <span class="selo">
                                 <i class="bi bi-check-lg"></i>
@@ -135,7 +140,36 @@
                             <i class="bi bi-exclamation-triangle"></i>
                             Cartão encerrado por ausência. Um novo tratamento P2 será iniciado na próxima presença.
                         </th:block>
+                        <th:block th:if="${statusCartao != null and statusCartao.name() == 'ALTA'}">
+                            <i class="bi bi-award"></i>
+                            Tratamento concluído com alta. Você pode continuar vindo às sessões como ouvinte;
+                            para um novo tratamento, procure a recepção.
+                        </th:block>
                     </div>
+                </div>
+            </div>
+
+            <!--/* Recomendações do Avaliador para este tratamento — o "Resultado da Consulta" do verso do
+                   cartão físico. Só aparecem depois que a entrevista as comunicou. */-->
+            <div class="dl-card" th:if="${entrevistaVigente != null}"
+                 th:with="av=${entrevistaVigente.avaliacao}">
+                <div class="dl-card-header">
+                    <div class="dl-card-header-title">
+                        <span class="dl-card-icon"><i class="bi bi-list-check"></i></span>
+                        <h2>Recomendações para este tratamento</h2>
+                    </div>
+                    <span class="dl-muted small" th:text="'Entrevista de ' + ${#temporals.format(entrevistaVigente.data, 'dd/MM/yyyy')}"></span>
+                </div>
+                <div class="dl-card-body">
+                    <div th:if="${not #lists.isEmpty(av.recomendacoes)}" class="d-flex flex-wrap gap-2 mb-2">
+                        <span class="dl-badge dl-badge-teal" th:each="r : ${av.recomendacoes}">
+                            <i class="bi bi-check2"></i> <span th:text="${r}">Leituras</span>
+                        </span>
+                    </div>
+                    <p class="mb-0" th:if="${av.observacoes}" th:text="${av.observacoes}">Observações</p>
+                    <p class="dl-muted mb-0" th:if="${#lists.isEmpty(av.recomendacoes) and #strings.isEmpty(av.observacoes)}">
+                        Nenhuma recomendação especial para este tratamento.
+                    </p>
                 </div>
             </div>
 

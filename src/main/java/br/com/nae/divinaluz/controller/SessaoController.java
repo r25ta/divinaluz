@@ -368,8 +368,7 @@ public class SessaoController {
     private void avisarResultado(CheckinService.ResultadoCheckin resultado, RedirectAttributes redirectAttributes) {
         redirectAttributes.addFlashAttribute("sucesso", CheckinController.mensagemDeSucesso(resultado));
         if (resultado.tratamentoReiniciado()) {
-            redirectAttributes.addFlashAttribute("aviso",
-                    "O assistido ficou 3 semanas ou mais sem sessão: o cartão anterior expirou e o tratamento foi reiniciado em P2.");
+            redirectAttributes.addFlashAttribute("aviso", CheckinController.mensagemReinicio(resultado));
         }
     }
 

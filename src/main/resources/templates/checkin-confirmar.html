@@ -71,7 +71,7 @@
                          th:if="${assistido.statusCartao != null and (assistido.statusCartao.name() == 'AGUARDANDO_AVALIACAO' or assistido.statusCartao.name() == 'AGUARDANDO_ENTREVISTA')}">
                         <i class="bi bi-signpost-split-fill"></i>
                         <span th:if="${assistido.statusCartao.name() == 'AGUARDANDO_AVALIACAO'}">
-                            Cartão completo e retido: encaminhe para a <strong>avaliação espiritual</strong>.
+                            Cartão completo e <strong>em avaliação</strong>: encaminhe para o <strong>Avaliador</strong>.
                             Não há marcação de presença neste status.
                         </span>
                         <span th:if="${assistido.statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
@@ -104,8 +104,23 @@
                         </form>
                     </div>
 
+                    <!-- Recebeu alta: entra como ouvinte, ou a recepção começa um tratamento novo em P2. -->
+                    <div class="alert alert-info"
+                         th:if="${assistido.statusCartao != null and assistido.statusCartao.name() == 'ALTA'}">
+                        <p class="mb-2"><i class="bi bi-award-fill"></i>
+                            Esta pessoa <strong>recebeu alta</strong>. A presença entra como ouvinte;
+                            se ela quiser um novo tratamento, inicie em <strong>P2</strong>.</p>
+                        <form th:if="${sessaoAberta != null}" th:action="@{/checkin/{codigo}/reiniciar(codigo=${codigoCartao})}" method="post">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-arrow-repeat"></i> Novo tratamento em P2 e carimbar
+                            </button>
+                        </form>
+                    </div>
+
                     <div class="d-flex flex-wrap gap-2" th:if="${sessaoAberta != null}">
-                        <form th:action="@{/checkin/{codigo}(codigo=${codigoCartao})}" method="post">
+                        <form th:if="${assistido.statusCartao == null or assistido.statusCartao.name() != 'ALTA'}"
+                              th:action="@{/checkin/{codigo}(codigo=${codigoCartao})}" method="post">
                             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                             <button type="submit" class="btn btn-teal text-white btn-lg">
                                 <i class="bi bi-check2-square"></i> Carimbar presença

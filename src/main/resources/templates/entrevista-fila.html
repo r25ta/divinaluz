@@ -30,7 +30,7 @@
                 <div class="dl-card-header">
                     <div class="dl-card-header-title">
                         <span class="dl-card-icon"><i class="bi bi-clipboard2-pulse"></i></span>
-                        <h2>Aguardando Avaliação</h2>
+                        <h2>Em Avaliação</h2>
                     </div>
                     <span class="dl-badge dl-badge-warning" th:text="${#lists.size(aguardandoAvaliacao)}">0</span>
                 </div>
@@ -76,7 +76,7 @@
                     </div>
                     <div class="dl-table-empty" th:if="${#lists.isEmpty(aguardandoAvaliacao)}">
                         <i class="bi bi-check-circle"></i>
-                        <p class="mb-0">Ninguém aguardando avaliação no momento.</p>
+                        <p class="mb-0">Nenhum cartão em avaliação no momento.</p>
                     </div>
                 </div>
             </div>
@@ -97,7 +97,7 @@
                                 <tr>
                                     <th>Assistido</th>
                                     <th>Avaliação</th>
-                                    <th>Tratamento Proposto</th>
+                                    <th>Decisão do Avaliador</th>
                                     <th>Dia de Assistência</th>
                                     <th class="text-end">Ação</th>
                                 </tr>
@@ -116,13 +116,15 @@
                                         </div>
                                         <span th:if="${item.avaliacaoPendente == null}" class="dl-muted">—</span>
                                     </td>
-                                    <!--/* Só Avaliador, Entrevistador e Dirigente chegam a esta tela — os mesmos que
-                                           podem ver o tratamento proposto enquanto o cartão aguarda a entrevista. */-->
-                                    <td>
-                                        <span th:if="${item.avaliacaoPendente != null and item.avaliacaoPendente.tratamentoProposto != null}"
-                                              class="dl-badge dl-badge-teal" th:text="${item.avaliacaoPendente.tratamentoProposto.codigo}"></span>
-                                        <span th:unless="${item.avaliacaoPendente != null and item.avaliacaoPendente.tratamentoProposto != null}"
-                                              class="dl-muted">—</span>
+                                    <!--/* A decisão do Avaliador só para quem entrevista (2026-10-07), e nunca na
+                                           própria linha: o trabalhador também é assistido. */-->
+                                    <td th:with="ve=${podeVerTratamentoProposto and (meuId == null or meuId != item.assistido.id)}">
+                                        <span th:unless="${ve}" class="dl-muted small"><i class="bi bi-lock-fill"></i> Reservado</span>
+                                        <th:block th:if="${ve and item.avaliacaoPendente != null}">
+                                            <span th:if="${item.avaliacaoPendente.alta}" class="dl-badge dl-badge-teal"><i class="bi bi-award-fill"></i> Alta</span>
+                                            <span th:if="${!item.avaliacaoPendente.alta and item.avaliacaoPendente.tratamentoProposto != null}"
+                                                  class="dl-badge dl-badge-teal" th:text="${item.avaliacaoPendente.tratamentoProposto.codigo}"></span>
+                                        </th:block>
                                     </td>
                                     <td th:text="${item.assistido.diaFrequencia != null ? item.assistido.diaFrequencia.label : '—'}"></td>
                                     <td class="text-end">

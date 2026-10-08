@@ -44,7 +44,11 @@
                         <h1 class="h5 mb-2" th:if="${!resultado.jaEstavaPresente and !resultado.ouvinte}">Presença marcada!</h1>
                         <h1 class="h5 mb-2" th:if="${!resultado.jaEstavaPresente and resultado.ouvinte}">Entrou como ouvinte</h1>
                         <p class="mb-1" th:text="${sessao.diaFrequencia.label} + ' · ' + ${#temporals.format(sessao.data, 'dd/MM/yyyy')}">Domingo, 08h</p>
-                        <p class="dl-muted mb-4" th:if="${resultado.ouvinte}">
+                        <p class="dl-muted mb-4" th:if="${resultado.ouvinte and marcado.statusCartao != null and marcado.statusCartao.name() == 'ALTA'}">
+                            Você recebeu alta do tratamento: esta presença conta como ouvinte.
+                            Para começar um novo tratamento, procure a recepção.
+                        </p>
+                        <p class="dl-muted mb-4" th:if="${resultado.ouvinte and (marcado.statusCartao == null or marcado.statusCartao.name() != 'ALTA')}">
                             Já houve presença nesta semana; esta conta como ouvinte e o cartão não avança.
                         </p>
                         <p class="dl-muted mb-4"

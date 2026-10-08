@@ -11,6 +11,7 @@ import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
+import br.com.nae.divinaluz.model.ResultadoAvaliacao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.StatusCartaoEncerrado;
 import br.com.nae.divinaluz.model.TipoTratamento;
@@ -77,7 +78,14 @@ public class TratamentoService {
         this.sessaoAssistenciaRepository = sessaoAssistenciaRepository;
     }
 
-    public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {}
+    // aposAlta: a pessoa tinha recebido alta — ou entrou como ouvinte, ou (com a confirmação da
+    // recepção) começou um tratamento novo em P2. Muda só a mensagem que a tela mostra.
+    public record ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte,
+            boolean aposAlta) {
+        public ResultadoSessao(SessaoTratamento sessao, boolean tratamentoReiniciado, boolean ouvinte) {
+            this(sessao, tratamentoReiniciado, ouvinte, false);
+        }
+    }
 
     public ResultadoSessao registrarSessao(SessaoTratamento novaSessao) {
         return registrarSessao(novaSessao, false);
@@ -95,6 +103,9 @@ public class TratamentoService {
             throw new RegraNegocioException("Informe a data da sessão.");
         }
         validarSessaoNaoCancelada(novaSessao.getDataConsulta());
+        if (assistido.getStatusCartao() == CartaoStatus.ALTA) {
+            return registrarSessaoAposAlta(novaSessao, confirmarReinicio);
+        }
         validarDiaDaSemana(assistido, novaSessao.getDataConsulta());
 
         if (assistido.getStatusCartao() == null) {
@@ -171,58 +182,183 @@ public class TratamentoService {
         return new ResultadoSessao(sessaoSalva, tratamentoReiniciado, false);
     }
 
-    // Avaliação: dados da avaliação espiritual em si. Data livre (não precisa cair no dia de
-    // assistência) — quem fica presa a esse dia é a Entrevista que a segue (ver
-    // registrarEntrevista). Não mexe em Assistido.tratamentoAtual: o tratamento proposto pelo
-    // Avaliador (obrigatório desde a V36) só vale quando a Entrevista o comunica.
+    /**
+     * Avaliação (Módulo do Avaliador, 2026-10-07): o cartão completou as 4 sessões e está "Em
+     * Avaliação". O Avaliador registra o diagnóstico (histórico, evolução), as recomendações do verso
+     * do cartão e decide o resultado — novo tratamento (proposto aqui) ou alta. O cartão passa a
+     * Aguardando Entrevista. Não mexe em Assistido.tratamentoAtual: o que o Avaliador decidiu só vale
+     * quando a Entrevista o comunica.
+     *
+     * <p>Controles: só com o cartão Em Avaliação (antes dava para registrar avaliação a qualquer
+     * momento); ninguém avalia a si mesmo (conferido aqui, não só no controller); data não futura e
+     * não anterior à presença que completou o cartão; evolução obrigatória a partir da 2ª VEZ (a 1ª
+     * VEZ do cartão físico não tem M/P/I/B: não há com o que comparar).</p>
+     *
+     * @param responsavel quem está registrando (o login); gravado como avaliador
+     */
     @Transactional
-    public Avaliacao registrarAvaliacao(Avaliacao novaAvaliacao) {
+    public Avaliacao registrarAvaliacao(Avaliacao novaAvaliacao, Assistido responsavel) {
         Assistido assistido = novaAvaliacao.getAssistido();
-        if (novaAvaliacao.getTratamentoProposto() == null) {
-            throw new RegraNegocioException("Informe o tratamento proposto para as próximas sessões.");
+        exigirOutraPessoa(assistido, responsavel, "avaliação");
+        if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_AVALIACAO) {
+            throw new RegraNegocioException("Só é possível registrar a avaliação com o cartão \""
+                    + CartaoStatus.AGUARDANDO_AVALIACAO.getLabel() + "\" (4 sessões cumpridas). O cartão está \""
+                    + rotulo(assistido.getStatusCartao()) + "\".");
+        }
+        LocalDate data = novaAvaliacao.getData();
+        if (data == null) {
+            throw new RegraNegocioException("Informe a data da avaliação.");
+        }
+        if (data.isAfter(LocalDate.now())) {
+            throw new RegraNegocioException("A data da avaliação não pode ser futura.");
+        }
+        sessaoRepository.findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(assistido.getId())
+                .map(SessaoTratamento::getDataConsulta)
+                .filter(data::isBefore)
+                .ifPresent(ultima -> {
+                    throw new RegraNegocioException("A data da avaliação não pode ser anterior à última presença do cartão ("
+                            + ultima.format(FORMATO_DATA) + ").");
+                });
+
+        if (novaAvaliacao.getResultado() == null) {
+            novaAvaliacao.setResultado(ResultadoAvaliacao.NOVO_TRATAMENTO);
+        }
+        if (novaAvaliacao.isAlta()) {
+            novaAvaliacao.setTratamentoProposto(null);
+        } else if (novaAvaliacao.getTratamentoProposto() == null) {
+            throw new RegraNegocioException("Informe o tratamento proposto para as próximas sessões (ou marque Alta).");
         }
 
-        long totalAvaliacoesCiclo = contarAvaliacoesDoCiclo(assistido.getId(), assistido.getCicloIniciadoEm());
-        novaAvaliacao.setNumeroVez((int) totalAvaliacoesCiclo + 1);
+        // A VEZ conta todas as avaliações da pessoa, sem limite (o cartão físico para na 8ª só por
+        // falta de espaço no papel) — contada no
+        // ciclo, como era até a V42, saía sempre "1ª VEZ", porque cada entrevista reinicia o ciclo.
+        int vez = (int) avaliacaoRepository.countByAssistidoId(assistido.getId()) + 1;
+        if (vez > 1 && novaAvaliacao.getEvolucao() == null) {
+            throw new RegraNegocioException("Informe a evolução (Melhor, Pior, Indiferente ou Bom) — "
+                    + "obrigatória a partir da 2ª avaliação.");
+        }
+        novaAvaliacao.setNumeroVez(vez);
+        novaAvaliacao.setAvaliador(responsavel);
 
         Avaliacao avaliacaoSalva = avaliacaoRepository.save(novaAvaliacao);
-        if (assistido.getStatusCartao() == CartaoStatus.AGUARDANDO_AVALIACAO) {
-            assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
-            assistidoRepository.save(assistido);
-        }
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        assistidoRepository.save(assistido);
         return avaliacaoSalva;
     }
 
-    // Entrevista: passo seguinte à Avaliação, em que o entrevistador comunica o tratamento
-    // decidido ao assistido. A data precisa cair no dia de assistência do assistido (item 3) e é
-    // ela quem atualiza Assistido.tratamentoAtual e libera a continuação das sessões.
+    /**
+     * Entrevista: o entrevistador comunica o que o Avaliador decidiu (confirmando ou ajustando),
+     * registra a observação e libera o cartão. A data precisa cair no dia de assistência do assistido
+     * (item 3). Com novo tratamento, abre o ciclo seguinte já com a 1ª sessão na data da entrevista;
+     * com alta, encerra o tratamento.
+     *
+     * <p>Controles: só com o cartão Aguardando Entrevista; a avaliação precisa ser desta pessoa e
+     * ainda sem entrevista; ninguém entrevista a si mesmo; data não futura e não anterior à
+     * avaliação.</p>
+     *
+     * @param responsavel quem está registrando (o login); gravado como entrevistador
+     */
     @Transactional
-    public Entrevista registrarEntrevista(Entrevista novaEntrevista) {
+    public Entrevista registrarEntrevista(Entrevista novaEntrevista, Assistido responsavel) {
         Assistido assistido = novaEntrevista.getAssistido();
-        validarSessaoNaoCancelada(novaEntrevista.getData());
-        validarDiaDaSemana(assistido, novaEntrevista.getData());
+        Avaliacao avaliacao = novaEntrevista.getAvaliacao();
+        exigirOutraPessoa(assistido, responsavel, "entrevista");
 
-        if (entrevistaRepository.existsByAvaliacaoId(novaEntrevista.getAvaliacao().getId())) {
+        if (avaliacao == null || (avaliacao.getAssistido() != null
+                && !Objects.equals(avaliacao.getAssistido().getId(), assistido.getId()))) {
+            throw new RegraNegocioException("Esta avaliação não é deste assistido.");
+        }
+        if (entrevistaRepository.existsByAvaliacaoId(avaliacao.getId())) {
             throw new RegraNegocioException("Esta avaliação já tem uma entrevista registrada.");
+        }
+        if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_ENTREVISTA) {
+            throw new RegraNegocioException("Só é possível registrar a entrevista com o cartão \""
+                    + CartaoStatus.AGUARDANDO_ENTREVISTA.getLabel() + "\". O cartão está \""
+                    + rotulo(assistido.getStatusCartao()) + "\".");
+        }
+        LocalDate data = novaEntrevista.getData();
+        if (data == null) {
+            throw new RegraNegocioException("Informe a data da entrevista.");
+        }
+        if (data.isAfter(LocalDate.now())) {
+            throw new RegraNegocioException("A data da entrevista não pode ser futura.");
+        }
+        if (avaliacao.getData() != null && data.isBefore(avaliacao.getData())) {
+            throw new RegraNegocioException("A entrevista não pode ser anterior à avaliação ("
+                    + avaliacao.getData().format(FORMATO_DATA) + ").");
+        }
+        validarSessaoNaoCancelada(data);
+        validarDiaDaSemana(assistido, data);
+
+        if (novaEntrevista.getResultado() == null) {
+            novaEntrevista.setResultado(ResultadoAvaliacao.NOVO_TRATAMENTO);
+        }
+        if (novaEntrevista.isAlta()) {
+            novaEntrevista.setTratamentoIndicado(null);
+        } else if (novaEntrevista.getTratamentoIndicado() == null) {
+            throw new RegraNegocioException("Informe o tratamento das próximas sessões (ou marque Alta).");
+        }
+        if (responsavel != null) {
+            novaEntrevista.setEntrevistadorResponsavel(responsavel);
+            novaEntrevista.setEntrevistador(responsavel.getNome());
         }
 
         Entrevista entrevistaSalva = entrevistaRepository.save(novaEntrevista);
 
-        // A entrevista fecha o ciclo que estava retido (4 sessões + avaliação cumpridas) e abre o
-        // seguinte — o ciclo que termina aqui vai para o histórico como concluído, ainda com o
-        // tratamento antigo, antes de o tratamento indicado assumir.
-        encerrarCicloAtual(assistido, novaEntrevista.getData(), StatusCartaoEncerrado.CONCLUIDO);
-
-        if (novaEntrevista.getTratamentoIndicado() != null) {
-            assistido.setTratamentoAtual(novaEntrevista.getTratamentoIndicado());
+        // A entrevista fecha o ciclo que estava retido (4 sessões + avaliação cumpridas) — ele vai
+        // para o histórico do prontuário ainda com o tratamento antigo, antes de o novo assumir.
+        if (novaEntrevista.isAlta()) {
+            encerrarCicloAtual(assistido, data, StatusCartaoEncerrado.ALTA);
+            assistido.setTratamentoAtual(null);
+            assistido.setCicloIniciadoEm(null);
+            assistido.setStatusCartao(CartaoStatus.ALTA);
+            assistidoRepository.save(assistido);
+            return entrevistaSalva;
         }
 
+        encerrarCicloAtual(assistido, data, StatusCartaoEncerrado.CONCLUIDO);
+        assistido.setTratamentoAtual(novaEntrevista.getTratamentoIndicado());
         assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
-        assistido.setCicloIniciadoEm(novaEntrevista.getData());
+        assistido.setCicloIniciadoEm(data);
         assistidoRepository.save(assistido);
-        registrarPrimeiraSessaoDaEntrevista(assistido, novaEntrevista.getData());
+        registrarPrimeiraSessaoDaEntrevista(assistido, data);
 
         return entrevistaSalva;
+    }
+
+    /**
+     * Depois da alta não há cartão em andamento. A pessoa que volta entra como ouvinte; com a
+     * confirmação da recepção ({@code confirmarReinicio}, o mesmo botão do reinício em P2) começa um
+     * tratamento novo em P2, com esta presença como a 1ª sessão.
+     */
+    private ResultadoSessao registrarSessaoAposAlta(SessaoTratamento novaSessao, boolean confirmarReinicio) {
+        Assistido assistido = novaSessao.getAssistido();
+        if (!confirmarReinicio || existeSessaoNaSemana(assistido.getId(), novaSessao.getDataConsulta())) {
+            novaSessao.setOuvinte(true);
+            novaSessao.setNumeroSerie(null);
+            return new ResultadoSessao(sessaoRepository.save(novaSessao), false, true, true);
+        }
+        validarDiaDaSemana(assistido, novaSessao.getDataConsulta());
+        assistido.setTratamentoAtual(buscarTratamentoInicial());
+        assistido.setCicloIniciadoEm(novaSessao.getDataConsulta());
+        assistido.setStatusCartao(CartaoStatus.EM_TRATAMENTO);
+        assistidoRepository.save(assistido);
+        novaSessao.setOuvinte(false);
+        novaSessao.setNumeroSerie(1);
+        return new ResultadoSessao(sessaoRepository.save(novaSessao), true, false, true);
+    }
+
+    // Ninguém conduz o próprio tratamento (3.7): conferido no serviço, e não só no controller, para
+    // nenhum caminho novo escapar da regra.
+    private static void exigirOutraPessoa(Assistido assistido, Assistido responsavel, String atendimento) {
+        if (responsavel != null && responsavel.getId() != null && responsavel.getId().equals(assistido.getId())) {
+            throw new RegraNegocioException("Ninguém conduz o próprio tratamento: outro trabalhador precisa registrar esta "
+                    + atendimento + ".");
+        }
+    }
+
+    private static String rotulo(CartaoStatus status) {
+        return status != null ? status.getLabel() : CartaoStatus.EM_TRATAMENTO.getLabel();
     }
 
     // Item 4: sempre que um tratamento novo é atribuído (cadastro, edição ou o card "Alterar
@@ -235,6 +371,13 @@ public class TratamentoService {
         Long idAnterior = anterior != null ? anterior.getId() : null;
         Long idNovo = novoTratamento != null ? novoTratamento.getId() : null;
         boolean mudou = !Objects.equals(idAnterior, idNovo);
+
+        // Cartão retido: o próximo tratamento é decidido pelo Avaliador e comunicado na entrevista.
+        // Trocar por aqui pularia a avaliação inteira (2026-10-07).
+        if (mudou && assistido.getStatusCartao() != null && assistido.getStatusCartao().isRetido()) {
+            throw new RegraNegocioException("O cartão está \"" + assistido.getStatusCartao().getLabel()
+                    + "\": o próximo tratamento é decidido pelo Avaliador e comunicado na entrevista.");
+        }
 
         if (mudou && novoTratamento != null) {
             if (dataPrimeiraSessao == null) {
@@ -515,27 +658,25 @@ public class TratamentoService {
                 .anyMatch(dataSessao -> !dataSessao.isBefore(inicioSemana) && !dataSessao.isAfter(fimSemana));
     }
 
+    // A entrevista é a 1ª sessão do novo tratamento (regra 5). Se a pessoa já entrou como ouvinte
+    // nesse dia (o cartão estava retido), aquela presença passa a ser a 1ª sessão — antes ela ficava
+    // como ouvinte e o ciclo novo começava com zero presenças.
     private void registrarPrimeiraSessaoDaEntrevista(Assistido assistido, LocalDate data) {
-        if (data == null || existeSessaoNaData(assistido.getId(), data)) {
+        List<SessaoTratamento> doDia = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistido.getId())
+                .stream()
+                .filter(sessao -> data.equals(sessao.getDataConsulta()))
+                .toList();
+        if (doDia.stream().anyMatch(sessao -> !sessao.isOuvinte())) {
             return;
         }
-        SessaoTratamento primeiraSessao = new SessaoTratamento();
-        primeiraSessao.setAssistido(assistido);
-        primeiraSessao.setNumeroSerie(1);
-        primeiraSessao.setDataConsulta(data);
-        primeiraSessao.setOuvinte(false);
-        sessaoRepository.save(primeiraSessao);
-    }
-
-    private boolean existeSessaoNaData(Long assistidoId, LocalDate data) {
-        return sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(assistidoId).stream()
-                .anyMatch(sessao -> data.equals(sessao.getDataConsulta()));
-    }
-
-    private long contarAvaliacoesDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {
-        return cicloIniciadoEm != null
-                ? avaliacaoRepository.countByAssistidoIdAndDataGreaterThanEqual(assistidoId, cicloIniciadoEm)
-                : avaliacaoRepository.countByAssistidoId(assistidoId);
+        if (!doDia.isEmpty()) {
+            SessaoTratamento ouvinte = doDia.get(0);
+            ouvinte.setOuvinte(false);
+            ouvinte.setNumeroSerie(1);
+            sessaoRepository.save(ouvinte);
+            return;
+        }
+        criarPrimeiraSessao(assistido, data);
     }
 
     private long contarEntrevistasDoCiclo(Long assistidoId, LocalDate cicloIniciadoEm) {

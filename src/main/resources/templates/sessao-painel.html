@@ -316,6 +316,7 @@
                                     <div class="dl-resultado" th:each="a : ${resultados}"
                                          th:with="retido=${a.statusCartao != null and (a.statusCartao.name() == 'AGUARDANDO_AVALIACAO' or a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA')},
                                                   expirado=${a.statusCartao != null and a.statusCartao.name() == 'INCOMPLETO_POR_TEMPO'},
+                                                  alta=${a.statusCartao != null and a.statusCartao.name() == 'ALTA'},
                                                   outroDia=${a.diaFrequencia != null and a.diaFrequencia != sessao.diaFrequencia},
                                                   presente=${presentesIds.contains(a.id)}">
                                         <div class="dl-resultado-topo">
@@ -341,8 +342,20 @@
                                                  th:if="${sessao.checkinAberto and !presente}">
                                                 <span class="dl-muted small text-start" th:if="${retido}">
                                                     <i class="bi bi-signpost-split"></i>
-                                                    <span th:text="${a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'} ? 'Encaminhar para avaliação' : 'Encaminhar para entrevista'"></span>
+                                                    <span th:text="${a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'} ? 'Encaminhar para o Avaliador' : 'Encaminhar para entrevista'"></span>
                                                 </span>
+
+                                                <!-- Recebeu alta: entra como ouvinte, ou a recepção começa um tratamento novo em P2. -->
+                                                <form th:if="${alta}" method="post"
+                                                      th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}"
+                                                      onsubmit="return confirm('Esta pessoa recebeu alta. Iniciar um novo tratamento em P2, com esta presença como a 1ª sessão?');">
+                                                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                                    <input type="hidden" name="reiniciarP2" value="true">
+                                                    <input type="hidden" name="busca" th:value="${busca}">
+                                                    <button type="submit" class="btn btn-warning btn-sm">
+                                                        <i class="bi bi-arrow-repeat"></i> Novo tratamento em P2 e carimbar
+                                                    </button>
+                                                </form>
 
                                                 <form th:if="${expirado}" method="post"
                                                       th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
@@ -354,7 +367,7 @@
                                                     </button>
                                                 </form>
 
-                                                <form th:if="${!retido and !expirado and !outroDia}" method="post"
+                                                <form th:if="${!retido and !expirado and !alta and !outroDia}" method="post"
                                                       th:action="@{/sessao/{id}/presenca/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}">
                                                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                                     <input type="hidden" name="busca" th:value="${busca}">
@@ -364,7 +377,7 @@
                                                 </form>
 
                                                 <!-- Assistido de outro dia pedindo para mudar: troca com histórico e carimba. -->
-                                                <form th:if="${outroDia and !retido and !expirado}" method="post"
+                                                <form th:if="${outroDia and !retido and !expirado and !alta}" method="post"
                                                       th:action="@{/sessao/{id}/mudar-dia/{assistidoId}(id=${sessao.id},assistidoId=${a.id})}"
                                                       onsubmit="return confirm('Mudar o dia de assistência para o desta sessão (fica no histórico) e marcar presença?');">
                                                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">

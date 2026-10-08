@@ -40,7 +40,7 @@ jobs:
         id: testes
         run: |
           set -o pipefail
-          ./mvnw -B -ntp verify 2>&1 | tee build.log
+          bash ./mvnw -B -ntp verify 2>&1 | tee build.log
       - name: Relatório do build
         if: always()
         env:

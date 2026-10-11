@@ -810,7 +810,7 @@ try {
             Check "Avaliador abre o prontuário Em Avaliação (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/"
             Check "Listagem do Avaliador avisa que mostra só os Em Avaliação" (
-                $r.StatusCode -eq 200 -and $r.Body -match "Como Avaliador, você vê apenas")
+                $r.StatusCode -eq 200 -and $r.Body -match "Pela sua função, você vê[\s\S]{0,40}apenas os prontuários com o cartão Em Avaliação")
             Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
             Check "Avaliador não abre o prontuário depois de avaliado, Aguardando Entrevista (403)" ($r.StatusCode -eq 403)

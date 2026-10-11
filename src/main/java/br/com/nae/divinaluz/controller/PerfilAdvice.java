@@ -64,6 +64,24 @@ public class PerfilAdvice {
         return pode(authentication, Permissao.CONSULTA);
     }
 
+    /** Avaliador (2026-10-11): a listagem de prontuários, só com os cartões Em Avaliação. */
+    @ModelAttribute("podeConsultaEmAvaliacao")
+    public boolean podeConsultaEmAvaliacao(Authentication authentication) {
+        return pode(authentication, Permissao.CONSULTA_EM_AVALIACAO);
+    }
+
+    /** Entrevistador (2026-10-11): a listagem de prontuários, menos os cartões Em Avaliação. */
+    @ModelAttribute("podeConsultaExcetoEmAvaliacao")
+    public boolean podeConsultaExcetoEmAvaliacao(Authentication authentication) {
+        return pode(authentication, Permissao.CONSULTA_EXCETO_EM_AVALIACAO);
+    }
+
+    /** Passista, Avaliador e Entrevistador (2026-10-11): o próprio prontuário, pelo item "Meu Prontuário". */
+    @ModelAttribute("podeProntuarioProprio")
+    public boolean podeProntuarioProprio(Authentication authentication) {
+        return pode(authentication, Permissao.PRONTUARIO_PROPRIO);
+    }
+
     @ModelAttribute("podeCadastro")
     public boolean podeCadastro(Authentication authentication) {
         return pode(authentication, Permissao.CADASTRO);

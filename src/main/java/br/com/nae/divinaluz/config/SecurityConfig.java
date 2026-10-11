@@ -89,7 +89,11 @@ public class SecurityConfig {
                         // liberado a qualquer autenticado, e o ProntuarioController.index manda para o
                         // próprio cartão quem não tem CONSULTA, em vez de um 403 na porta de entrada.
                         .requestMatchers("/").authenticated()
-                        .requestMatchers("/prontuario/*").hasAuthority(Permissao.CONSULTA.getAuthority())
+                        // Quem vê qual prontuário (todos, só os Em Avaliação, ou só o próprio) é
+                        // conferido no ProntuarioController.verProntuario, porque depende do registro.
+                        .requestMatchers("/prontuario/*").hasAnyAuthority(Permissao.CONSULTA.getAuthority(),
+                                Permissao.CONSULTA_EM_AVALIACAO.getAuthority(), Permissao.CONSULTA_EXCETO_EM_AVALIACAO.getAuthority(),
+                                Permissao.PRONTUARIO_PROPRIO.getAuthority())
                         // Rede de segurança para qualquer rota nova ainda não classificada: continua
                         // exigindo staff, como era antes das permissões.
                         .anyRequest().hasAnyRole("ADMINISTRADOR", "TRABALHADOR"))

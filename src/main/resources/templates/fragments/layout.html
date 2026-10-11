@@ -61,16 +61,21 @@
                     <i class="bi bi-card-checklist"></i> Meu Cartão
                 </a>
                 <!--/* Prontuário (2026-10-04): a listagem de assistidos — o caminho para os prontuários é este
-                       item do menu (antes só se chegava clicando na marca do topo). Só com CONSULTA. */-->
-                <a th:if="${podeConsulta}" th:href="@{/}" class="btn btn-nav btn-sm">
+                       item do menu (antes só se chegava clicando na marca do topo). Com CONSULTA, ou com a
+                       consulta restrita do Avaliador (só Em Avaliação) ou do Entrevistador (todos menos Em
+                       Avaliação), de 2026-10-11. É também a fila de avaliação/entrevista (o item "Entrevistas"
+                       saiu em 2026-10-11): o número vermelho é o que a pessoa tem para atender. */-->
+                <a th:if="${podeConsulta or podeConsultaEmAvaliacao or podeConsultaExcetoEmAvaliacao}" th:href="@{/}" class="btn btn-nav btn-sm position-relative">
                     <i class="bi bi-folder2-open"></i> Prontuário
+                    <span class="dl-nav-badge" th:if="${filaEntrevistas > 0}" th:text="${filaEntrevistas}"></span>
+                </a>
+                <!--/* Passista, Avaliador e Entrevistador (2026-10-11): o próprio prontuário. */-->
+                <a th:if="${podeProntuarioProprio and !podeConsulta and meuAssistidoId != null}"
+                   th:href="@{/prontuario/{id}(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-folder2"></i> Meu Prontuário
                 </a>
                 <a th:if="${podeSessao}" th:href="@{/sessao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-speedometer2"></i> Sessão
-                </a>
-                <a th:if="${podeVerTratamentoProposto}" th:href="@{/entrevistas}" class="btn btn-nav btn-sm position-relative">
-                    <i class="bi bi-chat-square-text"></i> Entrevistas
-                    <span class="dl-nav-badge" th:if="${filaEntrevistas > 0}" th:text="${filaEntrevistas}"></span>
                 </a>
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções

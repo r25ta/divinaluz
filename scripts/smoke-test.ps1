@@ -294,11 +294,14 @@ try {
     $statusPos4 = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
     Check "Status do cartão vira 'Aguardando Avaliação' após a 4ª sessão" ($statusPos4 -eq "AGUARDANDO_AVALIACAO")
 
-    # 8b. Módulo de Entrevista (item 4): a fila /entrevistas reúne quem está com o cartão retido e
-    # aponta pro mesmo formulário de sempre; o prontuário ganha o mesmo atalho.
+    # 8b. A fila de avaliação/entrevista é a listagem de Prontuário (2026-10-11): a linha de quem
+    # está com o cartão retido traz o botão do formulário; o prontuário tem o mesmo atalho.
+    $r = Invoke-CurlForm -Url "$BaseUrl/?status=AGUARDANDO_AVALIACAO"
+    Check "Listagem traz o botão Registrar Avaliação na linha do assistido Em Avaliação" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
+    Check "Listagem tem o filtro por status e abre no filtro pedido" ($r.Body -match 'data-filtro-inicial="AGUARDANDO_AVALIACAO"')
+    Check "Navbar não tem mais o item Entrevistas" ($r.Body -notmatch 'href="[^"]*/entrevistas"')
     $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-    Check "Fila de Entrevista lista o assistido Em Avaliação" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
-    Check "Navbar tem o link do Módulo de Entrevista" ($r.Body -match "bi-chat-square-text")
+    Check "O endereço da antiga fila leva à listagem" ($r.StatusCode -eq 302 -and $r.Location -match "\?status=TODOS$")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Prontuário mostra o status 'Em Avaliação' e o botão de registrar" ($r.Body -match "Em Avaliação" -and $r.Body -match "prontuario/$assistidoId/nova-avaliacao")
@@ -347,16 +350,14 @@ try {
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/sessao" -Form @{ dataConsulta = "06/02/2024" }
     Check "5ª sessão continua bloqueada só com a Avaliação (falta a Entrevista)" ($r.StatusCode -eq 302 -and $r.Location -match "nova-sessao")
 
-    # Módulo de Entrevista: agora a fila e o prontuário devem apontar para a entrevista, com o
+    # A fila (a listagem) e o prontuário devem apontar para a entrevista, com o
     # avaliacaoId certo — a mesma avaliação recém-registrada. O check-in também oferece o atalho
     # (a recepção pode encaminhar direto da tela do scan, mesmo sem sessão aberta no momento).
-    $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-    Check "Fila de Entrevista lista o assistido em Aguardando Entrevista com o link certo" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
+    $r = Invoke-CurlForm -Url "$BaseUrl/"
+    Check "Listagem traz Registrar Entrevista na linha, com o avaliacaoId certo" ($r.Body -match [regex]::Escape($nomeTeste) -and $r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
 
     $r = Invoke-CurlForm -Url $prontuarioUrl
     Check "Prontuário mostra o botão de Registrar Entrevista com o avaliacaoId certo" ($r.Body -match "prontuario/$assistidoId/nova-entrevista\?avaliacaoId=$avaliacaoId")
-    Check "Fila mostra ao Dirigente/Admin o tratamento proposto (P3E)" (
-        (Invoke-CurlForm -Url "$BaseUrl/entrevistas").Body -match ">P3E<")
 
     # A Entrevista abre com o tratamento proposto pelo Avaliador já escolhido.
     $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-entrevista?avaliacaoId=$avaliacaoId"
@@ -390,8 +391,8 @@ try {
     $statusPosEntrevista = Invoke-SqlScalar "SELECT status_cartao || '|' || ciclo_iniciado_em FROM assistido WHERE id = $assistidoId;"
     Check "Status volta para 'Em Tratamento' e ciclo reinicia em 06/02/2024" ($statusPosEntrevista -eq "EM_TRATAMENTO|2024-02-06")
 
-    $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-    Check "Fila de Entrevista não lista mais o assistido após a entrevista" ($r.Body -notmatch "prontuario/$assistidoId/nova-avaliacao" -and $r.Body -notmatch "prontuario/$assistidoId/nova-entrevista")
+    $r = Invoke-CurlForm -Url "$BaseUrl/"
+    Check "Listagem não oferece mais avaliação nem entrevista ao assistido após a entrevista" ($r.Body -notmatch "prontuario/$assistidoId/nova-avaliacao" -and $r.Body -notmatch "prontuario/$assistidoId/nova-entrevista")
 
     $r = Invoke-CurlForm -Url $cartaoUrl
     Check "Cartão mostra a 1ª sessão automática do novo ciclo em 06/02/2024" ($r.Body -match "06/02/2024")
@@ -707,26 +708,27 @@ try {
         $adminCsrfMatriz = $script:CsrfToken
         $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-trab-$PID.txt"
         try {
-            # Passista: somente CONSULTA — abre prontuários, mas não cadastra, não atende na sessão,
-            # não entrevista, não monta a escala e não promove trabalhadores.
+            # Passista (2026-10-11): só o próprio cartão e o próprio prontuário — não consulta os outros,
+            # não cadastra, não atende na sessão, não entrevista, não monta a escala e não promove.
             $r = Login-Como $loginTrab $senhaTrab
             Check "Login do trabalhador Passista funciona" ($r.StatusCode -eq 302)
 
             $r = Invoke-CurlForm -Url "$BaseUrl/"
-            Check "Passista consulta a listagem de assistidos (200)" ($r.StatusCode -eq 200)
+            Check "Passista não tem a listagem: '/' leva ao próprio cartão" (
+                $r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId/cartao$")
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
             Check "Navbar do Passista esconde Sessão, Entrevistas, Trabalhadores e Novo Cadastro" (
                 $r.Body -notmatch 'href="[^"]*/sessao"' -and $r.Body -notmatch 'href="[^"]*/entrevistas"' -and
                 $r.Body -notmatch 'href="[^"]*/trabalhadores"' -and $r.Body -notmatch "Novo Cadastro")
-
-            # Tratamento proposto ainda não comunicado (avaliação sem entrevista): reservado a Avaliador,
-            # Entrevistador e Dirigente. A avaliação é inserida por SQL e removida logo depois.
-            $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
-            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
-            Check "Passista não vê o tratamento proposto antes da entrevista" ($r.Body -match "Reservado até a entrevista")
-            Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
+            Check "Navbar do Passista oferece Meu Prontuário" ($r.Body -match "Meu Prontuário")
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
-            Check "Passista abre o prontuário de outro assistido (200)" ($r.StatusCode -eq 200)
+            Check "Passista não abre o prontuário de outro assistido (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/cartao"
+            Check "Passista não abre o cartão de outro assistido (403)" ($r.StatusCode -eq 403)
+
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+            Check "Passista abre o próprio prontuário (200)" ($r.StatusCode -eq 200)
             Check "Prontuário não oferece ao Passista editar dados nem alterar tratamento" (
                 $r.Body -notmatch "Editar Dados" -and $r.Body -notmatch "Alterar Tratamento")
 
@@ -791,37 +793,58 @@ try {
             Check "Recepcionista não edita o acesso do Administrador (só leitura)" (
                 $r.StatusCode -eq 200 -and $r.Body -notmatch 'name="alterarAcesso"')
 
-            # Avaliador: consulta e registra a Avaliação (propondo o tratamento); não entrevista.
+            # Avaliador: registra a Avaliação (propondo o tratamento) e consulta só os cartões Em
+            # Avaliação (2026-10-11); não entrevista.
             Definir-Funcao $adminJarMatriz $trabalhadorId "AVALIADOR"
             Login-Como $loginTrab $senhaTrab | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-            Check "Avaliador alcança a fila (200)" ($r.StatusCode -eq 200)
+            Check "Antiga fila leva o Avaliador à listagem filtrada em Em Avaliação" (
+                $r.StatusCode -eq 302 -and $r.Location -match "\?status=AGUARDANDO_AVALIACAO$")
             # A avaliação só abre com o cartão Em Avaliação (posto por SQL e devolvido logo depois).
             $statusAntesMatriz = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
             Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_AVALIACAO' WHERE id = $assistidoId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Avaliador abre a avaliação, com o campo de tratamento proposto" (
                 $r.StatusCode -eq 200 -and $r.Body -match 'name="tratamentoProposto"')
-            Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAntesMatriz' WHERE id = $assistidoId;" | Out-Null
-            # Depois de registrada, a decisão do Avaliador fica só com quem entrevista (2026-10-07).
-            $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
-            Check "Avaliador não vê a decisão já registrada antes da entrevista" ($r.Body -match "Reservado até a entrevista")
-            Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
+            Check "Avaliador abre o prontuário Em Avaliação (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Listagem do Avaliador avisa que mostra só os Em Avaliação" (
+                $r.StatusCode -eq 200 -and $r.Body -match "Como Avaliador, você vê apenas")
+            Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Avaliador não abre o prontuário depois de avaliado, Aguardando Entrevista (403)" ($r.StatusCode -eq 403)
+            Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAntesMatriz' WHERE id = $assistidoId;" | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Avaliador não abre prontuário fora de Em Avaliação (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-entrevista?avaliacaoId=1"
             Check "Avaliador não registra entrevista (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
             Check "Avaliador não alcança o Módulo Sessão (403)" ($r.StatusCode -eq 403)
 
-            # Entrevistador: consulta e registra a Entrevista; não avalia nem atua na sessão.
+            # Entrevistador: registra a Entrevista e consulta todos os prontuários, menos os Em
+            # Avaliação (2026-10-11); não avalia nem atua na sessão.
             Definir-Funcao $adminJarMatriz $trabalhadorId "ENTREVISTADOR"
             Login-Como $loginTrab $senhaTrab | Out-Null
-            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-            Check "Entrevistador alcança a fila (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Listagem do Entrevistador abre em Aguardando Entrevista, sem o filtro Em Avaliação" (
+                $r.StatusCode -eq 200 -and $r.Body -match 'data-filtro-inicial="AGUARDANDO_ENTREVISTA"' -and
+                $r.Body -notmatch 'data-filtro="AGUARDANDO_AVALIACAO"')
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Entrevistador abre prontuário Em Tratamento (200)" ($r.StatusCode -eq 200)
+            $statusAntesMatriz = Invoke-SqlScalar "SELECT status_cartao FROM assistido WHERE id = $assistidoId;"
+            Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_AVALIACAO' WHERE id = $assistidoId;" | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
+            Check "Entrevistador não abre prontuário Em Avaliação (403)" ($r.StatusCode -eq 403)
+            Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
             $avaliacaoReservadaId = Invoke-SqlScalar "INSERT INTO avaliacao (assistido_id, numero_vez, data, tratamento_proposto_id) VALUES ($assistidoId, 9, DATE '2024-03-03', $p3eId) RETURNING id;"
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
-            Check "Entrevistador vê a decisão do Avaliador antes da entrevista" ($r.Body -notmatch "Reservado até a entrevista")
+            Check "Entrevistador abre o prontuário Aguardando Entrevista e vê a decisão do Avaliador" (
+                $r.StatusCode -eq 200 -and $r.Body -notmatch "Reservado até a entrevista")
             Invoke-Sql "DELETE FROM avaliacao WHERE id = $avaliacaoReservadaId;" | Out-Null
+            Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAntesMatriz' WHERE id = $assistidoId;" | Out-Null
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+            Check "Entrevistador abre o próprio prontuário (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Entrevistador não registra avaliação (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/sessao"
@@ -835,8 +858,9 @@ try {
 
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
             Check "Dirigente alcança 'Cadastrar Trabalhador' (200)" ($r.StatusCode -eq 200)
-            $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
-            Check "Dirigente alcança a fila de entrevistas (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/"
+            Check "Dirigente vê a listagem com os dois filtros da fila" (
+                $r.StatusCode -eq 200 -and $r.Body -match 'data-filtro="AGUARDANDO_AVALIACAO"' -and $r.Body -match 'data-filtro="AGUARDANDO_ENTREVISTA"')
 
             # Expositor/Preletor (o caso que motivou a mudança de 2026-10-04): entrava direto num 403,
             # porque o login levava à listagem e ele não tem CONSULTA. Agora entra pelo próprio cartão

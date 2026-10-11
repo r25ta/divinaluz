@@ -13,8 +13,8 @@
                     <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
                     <h1 th:text="'Registrar ' + ${entrevista.tipo.label}">Registrar Entrevista</h1>
                 </div>
-                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
-                    <i class="bi bi-arrow-left"></i> Voltar ao Prontuário
+                <a th:href="@{${voltarUrl}}" class="btn btn-outline-teal btn-sm">
+                    <i class="bi bi-arrow-left"></i> <span th:text="${voltarUrl == '/'} ? 'Voltar à Lista' : 'Voltar ao Prontuário'">Voltar ao Prontuário</span>
                 </a>
             </div>
 
@@ -70,7 +70,7 @@
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
-                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
+                            <a th:href="@{${voltarUrl}}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
                                 <i class="bi bi-check-lg"></i> Salvar Entrevista
                             </button>

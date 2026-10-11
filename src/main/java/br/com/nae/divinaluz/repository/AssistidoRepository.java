@@ -51,7 +51,7 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
     // e-mail do cadastro (único). Só quem tem acesso criado e ativo.
     Optional<Assistido> findFirstByEmailIgnoreCaseAndLoginIsNotNullAndAcessoAtivoTrue(String email);
 
-    // Módulo de Entrevista (fila de cartões retidos — ver EntrevistaController).
-    List<Assistido> findByStatusCartaoAndAtivoTrueOrderByNomeAsc(CartaoStatus statusCartao);
+    // Número de pendências no item Prontuário do menu (PerfilAdvice.filaEntrevistas). A fila em si é a
+    // listagem de Prontuário desde 2026-10-11.
     long countByStatusCartaoInAndAtivoTrue(Collection<CartaoStatus> status);
 }

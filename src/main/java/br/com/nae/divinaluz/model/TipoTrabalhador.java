@@ -34,11 +34,11 @@ public enum TipoTrabalhador {
     AVALIADOR(
             "Avaliador",
             "Faz a avaliação espiritual do cartão retido na 4ª sessão e propõe o novo tratamento, que o entrevistador comunica.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.AVALIACAO)),
+            EnumSet.of(Permissao.CONSULTA_EM_AVALIACAO, Permissao.AVALIACAO, Permissao.PRONTUARIO_PROPRIO)),
     ENTREVISTADOR(
             "Entrevistador",
             "Comunica ao assistido o tratamento proposto na avaliação e devolve o cartão para Em Tratamento.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA)),
+            EnumSet.of(Permissao.CONSULTA_EXCETO_EM_AVALIACAO, Permissao.ENTREVISTA, Permissao.PRONTUARIO_PROPRIO)),
     EXPOSITOR_PRELETOR(
             "Expositor / Preletor",
             "Membro encarregado de transmitir os ensinamentos evangélico-doutrinário nas palestras públicas e preleções que antecedem a assistência espiritual.",
@@ -46,7 +46,7 @@ public enum TipoTrabalhador {
     PASSISTA(
             "Passista",
             "Voluntário preparado para o atendimento fraterno, aplicação de passes magnéticos e amparo aos frequentadores.",
-            EnumSet.of(Permissao.CONSULTA));
+            EnumSet.of(Permissao.PRONTUARIO_PROPRIO));
 
     private final String label;
     private final String descricao;

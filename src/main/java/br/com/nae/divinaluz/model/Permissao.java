@@ -18,6 +18,27 @@ public enum Permissao {
     CONSULTA,
 
     /**
+     * Consulta restrita do Avaliador (2026-10-11): listagem, prontuário e cartão de terceiros só
+     * enquanto o cartão está "Em Avaliação". Registrada a avaliação, o cartão passa a Aguardando
+     * Entrevista e sai da visão dele. Quem tem {@link #CONSULTA} já vê tudo.
+     */
+    CONSULTA_EM_AVALIACAO,
+
+    /**
+     * Consulta do Entrevistador (2026-10-11): listagem, prontuário e cartão de todos, <em>exceto</em>
+     * quem está Em Avaliação — esse cartão ainda é do Avaliador. O próprio registro com o cartão
+     * retido continua fora, pela regra de que ninguém conduz o próprio tratamento.
+     */
+    CONSULTA_EXCETO_EM_AVALIACAO,
+
+    /**
+     * O próprio prontuário (2026-10-11: Passista, Avaliador e Entrevistador). Todo mundo já alcança o
+     * próprio cartão; isto abre também o prontuário — que, com o próprio cartão retido, continua
+     * levando ao cartão.
+     */
+    PRONTUARIO_PROPRIO,
+
+    /**
      * Dados cadastrais: cadastrar, editar os dados pessoais, desativar/reativar um assistido e criar
      * ou editar o login dele. <strong>Não</strong> inclui mexer no tratamento (ver {@link #PRONTUARIO}).
      */

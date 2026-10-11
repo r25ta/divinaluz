@@ -33,6 +33,32 @@
             <div class="alert alert-warning" th:if="${aviso}">
                 <i class="bi bi-exclamation-triangle-fill"></i> <span th:text="${aviso}"></span>
             </div>
+            <div class="alert alert-danger" th:if="${erro}">
+                <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+            <!--/* Avaliador e Entrevistador (2026-10-11): a consulta deles alcança só parte dos cartões. */-->
+            <div class="alert alert-info" th:if="${avisoListagem != null}">
+                <i class="bi bi-info-circle-fill"></i> Pela sua função, você vê <span th:text="${avisoListagem}"></span>.
+            </div>
+
+            <!--/* A fila de avaliação/entrevista é esta listagem (2026-10-11): filtro por status com a
+                   contagem. Quem só vê os Em Avaliação (o Avaliador) não precisa dele. */-->
+            <div class="dl-filtro-chips" th:if="${podeConsulta or podeConsultaExcetoEmAvaliacao}"
+                 th:attr="data-filtro-inicial=${filtroInicial}">
+                <button type="button" class="dl-filtro-chip" data-filtro="TODOS">
+                    <i class="bi bi-list-ul"></i> Todos
+                    <span class="dl-filtro-contagem" th:text="${#lists.size(assistidos)}">0</span>
+                </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_AVALIACAO"
+                        th:if="${podeConsulta or podeConsultaEmAvaliacao}">
+                    <i class="bi bi-clipboard2-pulse"></i> Em Avaliação
+                    <span class="dl-filtro-contagem" th:text="${totalEmAvaliacao}">0</span>
+                </button>
+                <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_ENTREVISTA">
+                    <i class="bi bi-chat-left-text"></i> Aguardando Entrevista
+                    <span class="dl-filtro-contagem" th:text="${totalAguardandoEntrevista}">0</span>
+                </button>
+            </div>
 
             <div class="dl-card">
                 <div class="dl-card-body-flush">
@@ -46,7 +72,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr th:each="a : ${assistidos}" class="linha-assistido">
+                            <tr th:each="a : ${assistidos}" class="linha-assistido"
+                                th:attr="data-status=${a.statusCartao != null ? a.statusCartao.name() : 'EM_TRATAMENTO'}">
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="fw-semibold nome-assistido" data-sort-value="nome" th:text="${a.nome}"></span>
@@ -65,7 +92,25 @@
                                         Em Tratamento
                                     </span>
                                 </td>
-                                <td class="text-end">
+                                <td class="text-end"
+                                    th:with="eu=${meuAssistidoId != null and meuAssistidoId == a.id},
+                                             emAvaliacao=${a.statusCartao != null and a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'},
+                                             aguardandoEntrevista=${a.statusCartao != null and a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
+                                    <!--/* A ação da fila na própria linha (2026-10-11). Ninguém atende a si mesmo. */-->
+                                    <a th:if="${emAvaliacao and podeAvaliacao and !eu}"
+                                       th:href="@{/prontuario/{id}/nova-avaliacao(id=${a.id})}"
+                                       class="btn btn-teal btn-sm text-white">
+                                        <i class="bi bi-plus-lg"></i> Registrar Avaliação
+                                    </a>
+                                    <a th:if="${aguardandoEntrevista and podeEntrevista and !eu and avaliacaoPendente[a.id] != null}"
+                                       th:href="@{/prontuario/{id}/nova-entrevista(id=${a.id}, avaliacaoId=${avaliacaoPendente[a.id]})}"
+                                       class="btn btn-teal btn-sm text-white">
+                                        <i class="bi bi-plus-lg"></i> Registrar Entrevista
+                                    </a>
+                                    <span th:if="${eu and (emAvaliacao or aguardandoEntrevista) and (podeAvaliacao or podeEntrevista)}"
+                                          class="dl-muted small">
+                                        <i class="bi bi-person-x"></i> É você — outro trabalhador atende
+                                    </span>
                                     <a th:href="@{/prontuario/{id}/cartao(id=${a.id})}" class="btn btn-outline-teal btn-sm">
                                         <i class="bi bi-card-checklist"></i> Cartão
                                     </a>
@@ -77,9 +122,14 @@
                         </tbody>
                     </table>
 
+                    <!--/* Mostrado pelo script quando o filtro (ou a busca) não deixa nenhuma linha. */-->
+                    <div class="dl-table-empty" id="filtroVazio" style="display: none">
+                        <i class="bi bi-check-circle"></i>
+                        <p class="mb-0">Ninguém neste filtro no momento.</p>
+                    </div>
                     <div class="dl-table-empty" th:if="${#lists.isEmpty(assistidos)}">
                         <i class="bi bi-people"></i>
-                        <p class="mb-2">Nenhum assistido cadastrado ainda.</p>
+                        <p class="mb-2" th:text="${avisoListagem != null} ? 'Nenhum prontuário para a sua função no momento.' : 'Nenhum assistido cadastrado ainda.'">Nenhum assistido cadastrado ainda.</p>
                         <a th:if="${podeCadastro}" th:href="@{/novo}" class="btn btn-teal btn-sm text-white">
                             <i class="bi bi-plus-lg"></i> Cadastrar o primeiro
                         </a>
@@ -100,14 +150,38 @@
         var corpo = tabela.querySelector('tbody');
         var linhas = Array.from(corpo.querySelectorAll('.linha-assistido'));
         var ordenacao = { campo: null, ascendente: true };
+        var barraFiltros = document.querySelector('.dl-filtro-chips');
+        var chips = document.querySelectorAll('.dl-filtro-chip');
+        var filtro = barraFiltros ? barraFiltros.getAttribute('data-filtro-inicial') || 'TODOS' : 'TODOS';
+        var vazio = document.getElementById('filtroVazio');
 
+        // Busca por nome e filtro por status juntos (2026-10-11: a listagem também é a fila).
         function atualizarBusca() {
             var termo = busca ? busca.value.trim().toLowerCase() : '';
+            var visiveis = 0;
             linhas.forEach(function (linha) {
                 var nome = linha.querySelector('.nome-assistido').textContent.toLowerCase();
-                linha.style.display = nome.includes(termo) ? '' : 'none';
+                var mostra = nome.includes(termo) && (filtro === 'TODOS' || linha.getAttribute('data-status') === filtro);
+                linha.style.display = mostra ? '' : 'none';
+                if (mostra) visiveis++;
+            });
+            if (vazio) vazio.style.display = visiveis === 0 ? '' : 'none';
+        }
+
+        function marcarChip() {
+            chips.forEach(function (chip) {
+                chip.classList.toggle('active', chip.getAttribute('data-filtro') === filtro);
             });
         }
+        chips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                filtro = chip.getAttribute('data-filtro');
+                marcarChip();
+                atualizarBusca();
+            });
+        });
+        marcarChip();
+        atualizarBusca();
 
         function ordenar(campo, botao) {
             ordenacao.ascendente = ordenacao.campo === campo ? !ordenacao.ascendente : true;

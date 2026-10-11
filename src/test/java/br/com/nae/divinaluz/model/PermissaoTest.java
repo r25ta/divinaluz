@@ -39,13 +39,24 @@ class PermissaoTest {
     }
 
     @Test
-    void avaliadorRegistraAAvaliacaoEPropoeOTratamento() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.AVALIACAO), TipoTrabalhador.AVALIADOR.getPermissoes());
+    void avaliadorRegistraAAvaliacaoEConsultaSoOsCartoesEmAvaliacao() {
+        assertEquals(EnumSet.of(Permissao.CONSULTA_EM_AVALIACAO, Permissao.AVALIACAO, Permissao.PRONTUARIO_PROPRIO),
+                TipoTrabalhador.AVALIADOR.getPermissoes());
     }
 
     @Test
-    void entrevistadorComunicaOTratamentoSemSessaoNemCadastro() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA), TipoTrabalhador.ENTREVISTADOR.getPermissoes());
+    void entrevistadorComunicaOTratamentoEConsultaTodosMenosOsEmAvaliacao() {
+        assertEquals(EnumSet.of(Permissao.CONSULTA_EXCETO_EM_AVALIACAO, Permissao.ENTREVISTA, Permissao.PRONTUARIO_PROPRIO),
+                TipoTrabalhador.ENTREVISTADOR.getPermissoes());
+    }
+
+    // 2026-10-11: a consulta completa ficou com quem atende na recepção e com o Dirigente.
+    @Test
+    void soDirigenteERecepcionistaConsultamTodos() {
+        List<TipoTrabalhador> consultam = EnumSet.allOf(TipoTrabalhador.class).stream()
+                .filter(f -> f.getPermissoes().contains(Permissao.CONSULTA))
+                .toList();
+        assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.RECEPCIONISTA), consultam);
     }
 
     @Test
@@ -54,8 +65,15 @@ class PermissaoTest {
     }
 
     @Test
-    void passistaSomenteConsulta() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA), TipoTrabalhador.PASSISTA.getPermissoes());
+    void passistaSoOProprioCartaoEOProprioProntuario() {
+        assertEquals(EnumSet.of(Permissao.PRONTUARIO_PROPRIO), TipoTrabalhador.PASSISTA.getPermissoes());
+    }
+
+    // Isabela (2026-10-11): Avaliador + Passista soma as duas visões, sem ganhar a consulta completa.
+    @Test
+    void avaliadorEPassistaNaoConsultamTodos() {
+        assertEquals(EnumSet.of(Permissao.CONSULTA_EM_AVALIACAO, Permissao.AVALIACAO, Permissao.PRONTUARIO_PROPRIO),
+                Permissao.de(List.of(TipoTrabalhador.AVALIADOR, TipoTrabalhador.PASSISTA)));
     }
 
     // O tratamento proposto, enquanto o cartão aguarda a entrevista, só é visto por Avaliador,
@@ -83,7 +101,8 @@ class PermissaoTest {
         Set<Permissao> permissoes = Permissao.de(
                 List.of(TipoTrabalhador.EXPOSITOR_PRELETOR, TipoTrabalhador.ENTREVISTADOR));
 
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.ENTREVISTA, Permissao.PRELECAO), permissoes);
+        assertEquals(EnumSet.of(Permissao.CONSULTA_EXCETO_EM_AVALIACAO, Permissao.ENTREVISTA,
+                Permissao.PRONTUARIO_PROPRIO, Permissao.PRELECAO), permissoes);
     }
 
     @Test

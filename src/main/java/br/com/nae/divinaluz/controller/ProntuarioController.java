@@ -47,6 +47,7 @@ import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 @Controller
 @RequestMapping("/")
@@ -111,12 +112,13 @@ public class ProntuarioController {
 
     @GetMapping
     public String index(@RequestParam(required = false, defaultValue = "false") boolean mostrarInativos,
-            Authentication authentication, Model model) {
-        // Sem CONSULTA (assistido, Expositor/Preletor...) a listagem não é para a pessoa: o
-        // endereço de entrada leva ao próprio cartão. A listagem em si continua exigindo CONSULTA.
-        boolean podeConsultar = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals(Permissao.CONSULTA.getAuthority()));
-        if (!podeConsultar) {
+            @RequestParam(required = false) String status, Authentication authentication, Model model) {
+        // Sem consulta nenhuma (assistido, Expositor/Preletor, Passista...) a listagem não é para a
+        // pessoa: o endereço de entrada leva ao próprio cartão. O Avaliador vê a listagem só com os
+        // cartões Em Avaliação, e o Entrevistador com todos menos esses (2026-10-11).
+        boolean consultaTudo = tem(authentication.getAuthorities(), Permissao.CONSULTA);
+        Set<CartaoStatus> statusVisiveis = statusVisiveis(authentication.getAuthorities());
+        if (!consultaTudo && statusVisiveis.isEmpty()) {
             return assistidoRepository.findByLoginAndAcessoAtivoTrue(authentication.getName())
                     .map(logado -> "redirect:/prontuario/" + logado.getId() + "/cartao")
                     .orElseThrow(() -> new AccessDeniedException("Acesso sem cadastro vinculado."));
@@ -125,9 +127,48 @@ public class ProntuarioController {
         // UMA consulta ao banco por assistido, e a tela já não o mostrava (300 assistidos = 300
         // consultas a cada abertura da listagem).
         List<Assistido> assistidos = mostrarInativos ? assistidoRepository.atendidos() : assistidoRepository.atendidosPorAtivo(true);
+        if (!consultaTudo) {
+            assistidos = assistidos.stream()
+                    .filter(a -> statusVisivel(a.getStatusCartao(), statusVisiveis))
+                    .toList();
+            model.addAttribute("avisoListagem", statusVisiveis.contains(CartaoStatus.AGUARDANDO_AVALIACAO)
+                    ? (statusVisiveis.size() == 1 ? "apenas os prontuários com o cartão Em Avaliação" : null)
+                    : "todos os prontuários, exceto os com o cartão Em Avaliação, que ainda estão com o Avaliador");
+        }
         model.addAttribute("assistidos", assistidos);
         model.addAttribute("mostrarInativos", mostrarInativos);
+
+        // A listagem é também a fila de avaliação/entrevista (2026-10-11, no lugar de /entrevistas):
+        // filtros por status com contagem, e a ação de cada linha conforme o status e a função.
+        model.addAttribute("totalEmAvaliacao",
+                assistidos.stream().filter(a -> a.getStatusCartao() == CartaoStatus.AGUARDANDO_AVALIACAO).count());
+        model.addAttribute("totalAguardandoEntrevista",
+                assistidos.stream().filter(a -> a.getStatusCartao() == CartaoStatus.AGUARDANDO_ENTREVISTA).count());
+        boolean entrevista = tem(authentication.getAuthorities(), Permissao.ENTREVISTA);
+        java.util.Map<Long, Long> avaliacaoPendente = new java.util.HashMap<>();
+        if (entrevista) {
+            assistidos.stream()
+                    .filter(a -> a.getStatusCartao() == CartaoStatus.AGUARDANDO_ENTREVISTA)
+                    .forEach(a -> avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(a.getId())
+                            .ifPresent(av -> avaliacaoPendente.put(a.getId(), av.getId())));
+        }
+        model.addAttribute("avaliacaoPendente", avaliacaoPendente);
+        model.addAttribute("filtroInicial", filtroInicial(status, authentication));
         return "index";
+    }
+
+    /**
+     * O filtro com que a listagem abre: o pedido na URL (vindo do menu ou da antiga /entrevistas) ou,
+     * para quem só entrevista, já em Aguardando Entrevista — senão o trabalho dele se perde entre todos.
+     */
+    private static String filtroInicial(String pedido, Authentication authentication) {
+        if (pedido != null && java.util.Set.of("TODOS", CartaoStatus.AGUARDANDO_AVALIACAO.name(),
+                CartaoStatus.AGUARDANDO_ENTREVISTA.name()).contains(pedido)) {
+            return pedido;
+        }
+        boolean soEntrevista = !tem(authentication.getAuthorities(), Permissao.CONSULTA)
+                && tem(authentication.getAuthorities(), Permissao.ENTREVISTA);
+        return soEntrevista ? CartaoStatus.AGUARDANDO_ENTREVISTA.name() : "TODOS";
     }
 
     @GetMapping("/novo")
@@ -515,6 +556,9 @@ public class ProntuarioController {
                     + "\": o seu prontuário fica reservado até a entrevista, que outro entrevistador vai fazer.");
             return "redirect:/prontuario/" + id + "/cartao";
         }
+        if (!podeVerProntuario(assistido, proprio, usuarioLogado)) {
+            throw new AccessDeniedException("Sem permissão para consultar este prontuário.");
+        }
 
         // Busca o histórico de sessões ordenado pela data
         List<SessaoTratamento> sessoes = sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(id);
@@ -621,17 +665,80 @@ public class ProntuarioController {
 
     /**
      * Todo mundo alcança o próprio cartão (e o próprio QR); o cartão de outro exige a permissão de
-     * consulta. Fica aqui, e não no {@code SecurityConfig}, porque a rota é a mesma nos dois casos —
-     * é a posse que decide.
+     * consulta — a completa, ou a do Avaliador com o cartão Em Avaliação. Fica aqui, e não no
+     * {@code SecurityConfig}, porque a rota é a mesma nos dois casos — é a posse (e o status) que decide.
      */
     private Assistido exigirAcessoAoCartao(Long id, Assistido logado, UserDetails usuarioLogado) {
-        boolean podeConsultarDeOutro = usuarioLogado != null && usuarioLogado.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals(Permissao.CONSULTA.getAuthority()));
-        if (!podeConsultarDeOutro && !id.equals(logado.getId())) {
+        Assistido assistido = assistidoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        if (!id.equals(logado.getId()) && !podeVerDeOutro(assistido, usuarioLogado)) {
             throw new AccessDeniedException("Sem permissão para consultar o cartão de outro assistido.");
         }
-        return assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+        return assistido;
+    }
+
+    /**
+     * Visibilidade por função (2026-10-11): CONSULTA vê todos; o Avaliador só quem está Em Avaliação
+     * e o Entrevistador todos menos esses. Vale para o prontuário e para o cartão de terceiros.
+     */
+    private static boolean podeVerDeOutro(Assistido alvo, UserDetails usuarioLogado) {
+        if (usuarioLogado == null) {
+            return false;
+        }
+        return tem(usuarioLogado.getAuthorities(), Permissao.CONSULTA)
+                || statusVisivel(alvo.getStatusCartao(), statusVisiveis(usuarioLogado.getAuthorities()));
+    }
+
+    /** Os status que a consulta restrita alcança (vazio para quem não tem nenhuma). */
+    private static Set<CartaoStatus> statusVisiveis(
+            java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> autoridades) {
+        Set<CartaoStatus> status = java.util.EnumSet.noneOf(CartaoStatus.class);
+        if (tem(autoridades, Permissao.CONSULTA_EM_AVALIACAO)) {
+            status.add(CartaoStatus.AGUARDANDO_AVALIACAO);
+        }
+        if (tem(autoridades, Permissao.CONSULTA_EXCETO_EM_AVALIACAO)) {
+            status.addAll(java.util.EnumSet.complementOf(java.util.EnumSet.of(CartaoStatus.AGUARDANDO_AVALIACAO)));
+        }
+        return status;
+    }
+
+    /** Cadastro sem status (antigo) conta como Em Tratamento, que é o padrão da entidade. */
+    private static boolean statusVisivel(CartaoStatus status, Set<CartaoStatus> visiveis) {
+        return visiveis.contains(status != null ? status : CartaoStatus.EM_TRATAMENTO);
+    }
+
+    /** O botão Voltar dos formulários de atendimento: o prontuário, se a pessoa pode vê-lo; senão a listagem. */
+    private String urlDeVolta(Assistido assistido, UserDetails usuarioLogado) {
+        return podeVerProntuario(assistido, ehOProprioRegistro(assistido.getId(), usuarioLogado), usuarioLogado)
+                ? "/prontuario/" + assistido.getId() : "/";
+    }
+
+    /** O próprio prontuário: com CONSULTA ou PRONTUARIO_PROPRIO (o Passista). */
+    private static boolean podeVerProntuario(Assistido alvo, boolean proprio, UserDetails usuarioLogado) {
+        if (proprio) {
+            return usuarioLogado != null && (tem(usuarioLogado.getAuthorities(), Permissao.CONSULTA)
+                    || tem(usuarioLogado.getAuthorities(), Permissao.PRONTUARIO_PROPRIO));
+        }
+        return podeVerDeOutro(alvo, usuarioLogado);
+    }
+
+    private static boolean tem(java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> autoridades,
+            Permissao permissao) {
+        return autoridades.stream().anyMatch(a -> a.getAuthority().equals(permissao.getAuthority()));
+    }
+
+    /**
+     * Para onde volta quem avalia ou entrevista: o prontuário, se ainda puder vê-lo; senão a listagem.
+     * Salva a avaliação, o cartão vai a Aguardando Entrevista e sai da visão do Avaliador; salva a
+     * entrevista, vai a Em Tratamento (ou Alta) e sai da visão do Entrevistador.
+     */
+    private String voltarAoProntuarioOuFila(Long assistidoId, UserDetails usuarioLogado) {
+        boolean pode = assistidoRepository.findById(assistidoId)
+                .map(a -> podeVerProntuario(a, ehOProprioRegistro(assistidoId, usuarioLogado), usuarioLogado)
+                        || (a.getStatusCartao() != null && a.getStatusCartao().isRetido()
+                                && ehOProprioRegistro(assistidoId, usuarioLogado)))
+                .orElse(false);
+        return pode ? "redirect:/prontuario/" + assistidoId : "redirect:/";
     }
 
     @GetMapping("/prontuario/{id}/cartao")
@@ -798,14 +905,14 @@ public class ProntuarioController {
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(id, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
         if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_AVALIACAO) {
             redirectAttributes.addFlashAttribute("erro", "A avaliação só é registrada com o cartão \""
                     + CartaoStatus.AGUARDANDO_AVALIACAO.getLabel() + "\" (4 sessões cumpridas).");
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         return exibirAvaliacao(model, assistido, new Avaliacao(), null);
     }
@@ -834,7 +941,7 @@ public class ProntuarioController {
             @AuthenticationPrincipal UserDetails usuarioLogado, Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + assistidoId;
+            return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
@@ -849,7 +956,7 @@ public class ProntuarioController {
         redirectAttributes.addFlashAttribute("sucesso", avaliacao.isAlta()
                 ? "Avaliação registrada com ALTA. O cartão aguarda a entrevista, que comunica a alta."
                 : "Avaliação registrada. O cartão aguarda a entrevista, que comunica o novo tratamento.");
-        return "redirect:/prontuario/" + assistidoId;
+        return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
     }
 
     // Item 3/1: a Entrevista segue uma Avaliação específica (por isso o avaliacaoId na URL) e sua
@@ -860,7 +967,7 @@ public class ProntuarioController {
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(id, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
@@ -869,7 +976,7 @@ public class ProntuarioController {
         String problema = problemaParaEntrevistar(assistido, avaliacao);
         if (problema != null) {
             redirectAttributes.addFlashAttribute("erro", problema);
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
 
         // A Entrevista comunica o que o Avaliador decidiu (V36/V42); o entrevistador confirma ou ajusta.
@@ -914,7 +1021,7 @@ public class ProntuarioController {
             Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + assistidoId;
+            return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
@@ -935,7 +1042,7 @@ public class ProntuarioController {
                 ? "Entrevista registrada: alta comunicada e tratamento encerrado."
                 : "Entrevista registrada: " + entrevista.getTratamentoIndicado().getCodigo()
                         + " liberado, com a 1ª sessão em " + entrevista.getData().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".");
-        return "redirect:/prontuario/" + assistidoId;
+        return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
     }
 
     /**
@@ -949,10 +1056,10 @@ public class ProntuarioController {
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(id, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         if (!tipo.isAvulsa()) {
-            return "redirect:/prontuario/" + id;
+            return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
@@ -967,6 +1074,8 @@ public class ProntuarioController {
         model.addAttribute("assistido", assistido);
         model.addAttribute("entrevista", entrevista);
         model.addAttribute("entrevistadorNome", assistidoLogado(usuarioLogado).getNome());
+        // Quem não abre o prontuário desta pessoa (2026-10-11) volta à listagem.
+        model.addAttribute("voltarUrl", urlDeVolta(assistido, usuarioLogado));
         if (erro != null) {
             model.addAttribute("erro", erro);
         }
@@ -979,7 +1088,7 @@ public class ProntuarioController {
             Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
-            return "redirect:/prontuario/" + assistidoId;
+            return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
@@ -993,6 +1102,6 @@ public class ProntuarioController {
         redirectAttributes.addFlashAttribute("sucesso", tipo.getLabel() + " registrada em "
                 + entrevista.getData().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
                 + ". O cartão não muda.");
-        return "redirect:/prontuario/" + assistidoId;
+        return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
     }
 }

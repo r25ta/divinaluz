@@ -129,10 +129,12 @@ public class ProntuarioController {
         List<Assistido> assistidos = mostrarInativos ? assistidoRepository.atendidos() : assistidoRepository.atendidosPorAtivo(true);
         if (!consultaTudo) {
             assistidos = assistidos.stream()
-                    .filter(a -> statusVisivel(a.getStatusCartao(), statusVisiveis))
+                    .filter(a -> statusVisivel(a.getStatusCartao(), statusVisiveis)
+                            || avaliadoPorQuemConsulta(a, authentication.getAuthorities(), authentication.getName()))
                     .toList();
             model.addAttribute("avisoListagem", statusVisiveis.contains(CartaoStatus.AGUARDANDO_AVALIACAO)
-                    ? (statusVisiveis.size() == 1 ? "apenas os prontuários com o cartão Em Avaliação" : null)
+                    ? (statusVisiveis.size() == 1 ? "apenas os prontuários com o cartão Em Avaliação"
+                            + " e, até a entrevista, os que você avaliou" : null)
                     : "todos os prontuários, exceto os com o cartão Em Avaliação, que ainda estão com o Avaliador");
         }
         model.addAttribute("assistidos", assistidos);
@@ -681,12 +683,30 @@ public class ProntuarioController {
      * Visibilidade por função (2026-10-11): CONSULTA vê todos; o Avaliador só quem está Em Avaliação
      * e o Entrevistador todos menos esses. Vale para o prontuário e para o cartão de terceiros.
      */
-    private static boolean podeVerDeOutro(Assistido alvo, UserDetails usuarioLogado) {
+    private boolean podeVerDeOutro(Assistido alvo, UserDetails usuarioLogado) {
         if (usuarioLogado == null) {
             return false;
         }
         return tem(usuarioLogado.getAuthorities(), Permissao.CONSULTA)
-                || statusVisivel(alvo.getStatusCartao(), statusVisiveis(usuarioLogado.getAuthorities()));
+                || statusVisivel(alvo.getStatusCartao(), statusVisiveis(usuarioLogado.getAuthorities()))
+                || avaliadoPorQuemConsulta(alvo, usuarioLogado.getAuthorities(), usuarioLogado.getUsername());
+    }
+
+    /**
+     * O Avaliador continua vendo o que ele mesmo decidiu (2026-10-11, decisão do responsável do
+     * projeto): depois de avaliar, o cartão vai a Aguardando Entrevista e sairia da visão dele; ele
+     * segue abrindo esse prontuário até a entrevista, mas só quando a avaliação pendente é dele.
+     */
+    private boolean avaliadoPorQuemConsulta(Assistido alvo,
+            java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> autoridades, String login) {
+        if (alvo.getStatusCartao() != CartaoStatus.AGUARDANDO_ENTREVISTA
+                || !tem(autoridades, Permissao.CONSULTA_EM_AVALIACAO)) {
+            return false;
+        }
+        return avaliacaoRepository.findFirstByAssistidoIdAndEntrevistaIsNullOrderByDataDesc(alvo.getId())
+                .map(Avaliacao::getAvaliador)
+                .map(avaliador -> login.equalsIgnoreCase(avaliador.getLogin()))
+                .orElse(false);
     }
 
     /** Os status que a consulta restrita alcança (vazio para quem não tem nenhuma). */
@@ -714,7 +734,7 @@ public class ProntuarioController {
     }
 
     /** O próprio prontuário: com CONSULTA ou PRONTUARIO_PROPRIO (o Passista). */
-    private static boolean podeVerProntuario(Assistido alvo, boolean proprio, UserDetails usuarioLogado) {
+    private boolean podeVerProntuario(Assistido alvo, boolean proprio, UserDetails usuarioLogado) {
         if (proprio) {
             return usuarioLogado != null && (tem(usuarioLogado.getAuthorities(), Permissao.CONSULTA)
                     || tem(usuarioLogado.getAuthorities(), Permissao.PRONTUARIO_PROPRIO));
@@ -922,7 +942,6 @@ public class ProntuarioController {
         model.addAttribute("assistido", assistido);
         model.addAttribute("avaliacao", avaliacao);
         model.addAttribute("numeroVez", anteriores + 1);
-        model.addAttribute("evolucoes", Evolucao.values());
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("ultimaPresenca", sessaoRepository
                 .findFirstByAssistidoIdAndOuvinteFalseOrderByDataConsultaDesc(assistido.getId())
@@ -985,14 +1004,20 @@ public class ProntuarioController {
         entrevista.setResultado(avaliacao.getResultado());
         entrevista.setTratamentoIndicado(avaliacao.isAlta() ? null : avaliacao.getTratamentoProposto() != null
                 ? avaliacao.getTratamentoProposto() : assistido.getTratamentoAtual());
-        return exibirEntrevista(model, assistido, avaliacao, entrevista, usuarioLogado, null);
+        return exibirEntrevista(model, assistido, avaliacao, entrevista, avaliacao.getHistorico(),
+                avaliacao.getEvolucao(), usuarioLogado, null);
     }
 
+    // O histórico e a evolução (M/P/I/B) da VEZ são do Entrevistador desde 2026-10-11; chegam como
+    // campos soltos porque ficam gravados na Avaliação, e não na Entrevista.
     private String exibirEntrevista(Model model, Assistido assistido, Avaliacao avaliacao, Entrevista entrevista,
-            UserDetails usuarioLogado, String erro) {
+            String historico, Evolucao evolucao, UserDetails usuarioLogado, String erro) {
         model.addAttribute("assistido", assistido);
         model.addAttribute("avaliacao", avaliacao);
         model.addAttribute("entrevista", entrevista);
+        model.addAttribute("historico", historico);
+        model.addAttribute("evolucao", evolucao);
+        model.addAttribute("evolucoes", Evolucao.values());
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("entrevistadorNome", assistidoLogado(usuarioLogado).getNome());
         if (erro != null) {
@@ -1017,7 +1042,8 @@ public class ProntuarioController {
 
     @PostMapping("/prontuario/{assistidoId}/entrevista")
     public String salvarEntrevista(@PathVariable Long assistidoId, @RequestParam Long avaliacaoId,
-            @ModelAttribute Entrevista entrevista, @AuthenticationPrincipal UserDetails usuarioLogado,
+            @ModelAttribute Entrevista entrevista, @RequestParam(required = false) String historico,
+            @RequestParam(required = false) Evolucao evolucao, @AuthenticationPrincipal UserDetails usuarioLogado,
             Model model, RedirectAttributes redirectAttributes) {
         if (ehOProprioRegistro(assistidoId, usuarioLogado)) {
             redirectAttributes.addFlashAttribute("erro", ERRO_ATENDER_A_SI);
@@ -1033,9 +1059,10 @@ public class ProntuarioController {
         entrevista.setTipo(TipoEntrevista.TRATAMENTO);
 
         try {
-            tratamentoService.registrarEntrevista(entrevista, assistidoLogado(usuarioLogado));
+            tratamentoService.registrarEntrevista(entrevista, historico, evolucao, assistidoLogado(usuarioLogado));
         } catch (RegraNegocioException e) {
-            return exibirEntrevista(model, assistido, avaliacao, entrevista, usuarioLogado, e.getMessage());
+            return exibirEntrevista(model, assistido, avaliacao, entrevista, historico, evolucao, usuarioLogado,
+                    e.getMessage());
         }
 
         redirectAttributes.addFlashAttribute("sucesso", entrevista.isAlta()

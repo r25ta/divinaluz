@@ -161,6 +161,50 @@ class VisibilidadePorFuncaoFluxoTest {
                         + "/nova-entrevista?avaliacaoId=" + avaliacao.getId())));
     }
 
+    // O Avaliador continua vendo o que decidiu (2026-10-11): o cartão que ele avaliou, já Aguardando
+    // Entrevista, segue na listagem e abre com a decisão à vista; o avaliado por outro, não.
+    @Test
+    void avaliadorContinuaVendoOQueEleAvaliouAteAEntrevista() throws Exception {
+        Assistido avaliador = trabalhador("visib.aval.meu", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.AVALIADOR);
+        Assistido outroAvaliador = trabalhador("visib.aval.outro", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.AVALIADOR);
+        Assistido avaliadoPorOutro = assistido("Visib Avaliado Por Outro", CartaoStatus.AGUARDANDO_ENTREVISTA);
+        avaliacaoComAlta(aguardandoEntrevista, avaliador);
+        avaliacaoComAlta(avaliadoPorOutro, outroAvaliador);
+        UserDetails eu = autoridades.usuario(avaliador);
+
+        mvc.perform(get("/").with(user(eu)))
+                .andExpect(content().string(containsString("Visib Aguardando Entrevista")))
+                .andExpect(content().string(not(containsString("Visib Avaliado Por Outro"))))
+                .andExpect(content().string(containsString("os que você avaliou")));
+        mvc.perform(get("/prontuario/" + aguardandoEntrevista.getId()).with(user(eu)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("Reservado até a entrevista"))));
+        mvc.perform(get("/prontuario/" + avaliadoPorOutro.getId()).with(user(eu))).andExpect(status().isForbidden());
+    }
+
+    private void avaliacaoComAlta(Assistido assistido, Assistido avaliador) {
+        Avaliacao avaliacao = new Avaliacao();
+        avaliacao.setAssistido(assistido);
+        avaliacao.setData(java.time.LocalDate.now());
+        avaliacao.setNumeroVez(1);
+        avaliacao.setResultado(br.com.nae.divinaluz.model.ResultadoAvaliacao.ALTA);
+        avaliacao.setAvaliador(avaliador);
+        avaliacaoRepository.save(avaliacao);
+    }
+
+    // O nº do prontuário (o quadrado do canto da ficha azul) no cartão e no prontuário.
+    @Test
+    void cartaoEProntuarioMostramONumeroDoProntuario() throws Exception {
+        Assistido avaliador = trabalhador("visib.numero", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.AVALIADOR);
+        UserDetails eu = autoridades.usuario(avaliador);
+        String numero = String.format("%06d", avaliador.getId());
+
+        mvc.perform(get("/prontuario/" + avaliador.getId() + "/cartao").with(user(eu)))
+                .andExpect(content().string(containsString(">" + numero + "<")));
+        mvc.perform(get("/prontuario/" + avaliador.getId()).with(user(eu)))
+                .andExpect(content().string(containsString(">" + numero + "<")));
+    }
+
     @Test
     void entrevistadorNaoAbreOProprioProntuarioAguardandoEntrevista() throws Exception {
         Assistido entrevistador = trabalhador("visib.entrev.retido", CartaoStatus.AGUARDANDO_ENTREVISTA,

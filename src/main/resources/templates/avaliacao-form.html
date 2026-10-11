@@ -28,7 +28,7 @@
                 <strong th:text="${assistido.tratamentoAtual != null ? assistido.tratamentoAtual.codigo : 'tratamento'}">P2</strong>
                 foram cumpridas<span th:if="${ultimaPresenca != null}"> (última em
                 <strong th:text="${#temporals.format(ultimaPresenca, 'dd/MM/yyyy')}"></strong>)</span>.
-                Classifique o próximo tratamento ou dê alta. O que você decidir aqui só é visto por quem entrevista,
+                Classifique o próximo tratamento ou dê alta. O que você decidir aqui só é visto por você e por quem entrevista,
                 até a entrevista comunicar ao assistido.
             </div>
 
@@ -38,7 +38,8 @@
                     <form th:action="@{/prontuario/{id}/avaliacao(id=${assistido.id})}" th:object="${avaliacao}" method="post">
                         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-                        <!--/* Frente do cartão físico: cada "VEZ" tem histórico, M/P/I/B e data. */-->
+                        <!--/* Frente do cartão físico: cada "VEZ" tem histórico, M/P/I/B, data e entrevistador.
+                               O histórico e o M/P/I/B são do Entrevistador desde 2026-10-11 (entrevista-form). */-->
                         <div class="dl-form-section">
                             <div class="dl-form-section-title">Avaliação</div>
                             <div class="row g-3">
@@ -51,24 +52,9 @@
                                            placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
                                            pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
                                 </div>
-                                <!--/* A 1ª VEZ do cartão físico não tem M/P/I/B: não há com o que comparar. */-->
-                                <div class="col-md-8" th:if="${numeroVez > 1}">
-                                    <label class="form-label">Evolução</label>
-                                    <div class="d-flex flex-wrap gap-3 pt-1">
-                                        <div class="form-check" th:each="e : ${evolucoes}">
-                                            <input class="form-check-input" type="radio" th:field="*{evolucao}" th:value="${e}" required>
-                                            <label class="form-check-label" th:for="${#ids.prev('evolucao')}"
-                                                   th:text="${e.name() == 'MELHOR' ? 'M — Melhor' : (e.name() == 'PIOR' ? 'P — Pior' : (e.name() == 'INDIFERENTE' ? 'I — Indiferente' : 'B — Bom'))}">Bom</label>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
-                            <div class="form-text mt-2">A data da avaliação é livre — quem precisa cair no dia de assistência do assistido é a Entrevista, registrada depois.</div>
-                        </div>
-
-                        <div class="dl-form-section">
-                            <div class="dl-form-section-title">Histórico</div>
-                            <textarea class="form-control" th:field="*{historico}" rows="4" placeholder="Relato da avaliação..."></textarea>
+                            <div class="form-text mt-2">A data da avaliação é livre — quem precisa cair no dia de assistência do assistido é a Entrevista, registrada depois.
+                                O histórico e a evolução (M/P/I/B) desta VEZ são registrados pelo entrevistador.</div>
                         </div>
 
                         <!--/* Decisão do Avaliador: novo tratamento (próximas 4 sessões) ou alta. */-->

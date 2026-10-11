@@ -38,10 +38,6 @@
                                   th:text="${avaliacao.tratamentoProposto.codigo + ' - ' + avaliacao.tratamentoProposto.nome}">P2</span>
                             <span th:if="${!avaliacao.alta and avaliacao.tratamentoProposto == null}" class="value">—</span>
                         </div>
-                        <div class="dl-info-strip-item">
-                            <span class="label">Evolução</span>
-                            <span class="value" th:text="${avaliacao.evolucao ?: '—'}">BOM</span>
-                        </div>
                         <div class="dl-info-strip-item" th:if="${avaliacao.avaliador != null}">
                             <span class="label">Avaliador</span>
                             <span class="value" th:text="${avaliacao.avaliador.nome}">Nome</span>
@@ -51,8 +47,7 @@
                         <span class="label dl-muted small d-block mb-1">Recomendações</span>
                         <span class="dl-badge dl-badge-neutral me-1" th:each="r : ${avaliacao.recomendacoes}" th:text="${r}">Leituras</span>
                     </div>
-                    <p class="mb-1 small" th:if="${avaliacao.observacoes}"><strong>Observações:</strong> <span th:text="${avaliacao.observacoes}"></span></p>
-                    <p class="mb-0 small" th:if="${avaliacao.historico}"><strong>Histórico:</strong> <span th:text="${avaliacao.historico}"></span></p>
+                    <p class="mb-0 small" th:if="${avaliacao.observacoes}"><strong>Observações:</strong> <span th:text="${avaliacao.observacoes}"></span></p>
                 </div>
             </div>
 
@@ -83,6 +78,25 @@
                                 <div class="col-md-8">
                                     <label class="form-label">Entrevistador</label>
                                     <input type="text" class="form-control" th:value="${entrevistadorNome}" readonly>
+                                </div>
+                                <!--/* O bloco da VEZ no cartão físico tem histórico, M/P/I/B e o campo "Entrevistador":
+                                       desde 2026-10-11 é o entrevistador quem os preenche (antes era o Avaliador).
+                                       A 1ª VEZ não tem M/P/I/B — não há com o que comparar. */-->
+                                <div class="col-12" th:if="${avaliacao.numeroVez != null and avaliacao.numeroVez > 1}">
+                                    <label class="form-label">Evolução</label>
+                                    <div class="d-flex flex-wrap gap-3 pt-1">
+                                        <div class="form-check" th:each="e : ${evolucoes}">
+                                            <input class="form-check-input" type="radio" name="evolucao" required
+                                                   th:id="${'evolucao' + e.name()}" th:value="${e.name()}" th:checked="${evolucao == e}">
+                                            <label class="form-check-label" th:for="${'evolucao' + e.name()}"
+                                                   th:text="${e.name() == 'MELHOR' ? 'M — Melhor' : (e.name() == 'PIOR' ? 'P — Pior' : (e.name() == 'INDIFERENTE' ? 'I — Indiferente' : 'B — Bom'))}">Bom</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="historico">Histórico</label>
+                                    <textarea class="form-control" id="historico" name="historico" rows="4"
+                                              th:text="${historico}" th:placeholder="${avaliacao.numeroVez + 'ª VEZ: relato da entrevista...'}"></textarea>
                                 </div>
                             </div>
                         </div>

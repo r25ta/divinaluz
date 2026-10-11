@@ -319,21 +319,25 @@ try {
     $r = Invoke-CurlForm -Url "$prontuarioUrl/nova-avaliacao"
     Check "Formulário do Avaliador mostra a VEZ, as recomendações do verso e a opção de Alta" (
         $r.StatusCode -eq 200 -and $r.Body -match "1ª VEZ" -and $r.Body -match 'name="recEvangelhoNoLar"' -and $r.Body -match 'value="ALTA"')
-    Check "1ª VEZ não pede a evolução (o cartão físico não tem M/P/I/B nela)" ($r.Body -notmatch 'name="evolucao"')
+    # Desde 2026-10-11 o histórico e o M/P/I/B da VEZ são do entrevistador (seção 10b).
+    Check "Formulário do Avaliador não pede histórico nem evolução (são do entrevistador)" (
+        $r.Body -notmatch 'name="evolucao"' -and $r.Body -notmatch 'name="historico"')
     $script:CsrfToken = Extract-Csrf $r.Body
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; historico = "Historico digitado" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; observacoes = "Observacao digitada" }
     Check "Avaliação sem tratamento proposto volta ao formulário preenchido, explicando o que faltou" (
-        $r.StatusCode -eq 200 -and $r.Body -match "tratamento proposto" -and $r.Body -match "Historico digitado")
+        $r.StatusCode -eq 200 -and $r.Body -match "tratamento proposto" -and $r.Body -match "Observacao digitada")
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "29/01/2024"; tratamentoProposto = $p3eId }
     Check "Avaliação com data anterior à última presença do cartão é recusada" ($r.StatusCode -eq 200 -and $r.Body -match "anterior à última presença")
 
-    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; historico = "Historico de teste"; observacoes = "Observacoes de teste"; tratamentoProposto = $p3eId; recEvangelhoNoLar = "true"; recLeituras = "true" }
+    $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; historico = "Historico do Avaliador"; observacoes = "Observacoes de teste"; tratamentoProposto = $p3eId; recEvangelhoNoLar = "true"; recLeituras = "true" }
     Check "Avaliação registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
     $propostoGravado = Invoke-SqlScalar "SELECT COALESCE(tratamento_proposto_id::text, 'NULL') FROM avaliacao WHERE assistido_id = $assistidoId ORDER BY id DESC LIMIT 1;"
     Check "Tratamento proposto gravado na avaliação" ($propostoGravado -eq $p3eId)
     $auditoriaAvaliacao = Invoke-SqlScalar "SELECT (a.avaliador_id = u.id)::text || '|' || a.rec_evangelho_no_lar::text || '|' || a.rec_medico::text || '|' || a.numero_vez FROM avaliacao a, assistido u WHERE u.login = '$AdminLogin' AND a.assistido_id = $assistidoId ORDER BY a.id DESC LIMIT 1;"
     Check "Avaliação grava quem avaliou (login), as recomendações marcadas e a 1ª VEZ" ($auditoriaAvaliacao -eq "true|true|false|1")
+    $historicoDoAvaliador = Invoke-SqlScalar "SELECT COALESCE(historico, 'NULL') FROM avaliacao WHERE assistido_id = $assistidoId ORDER BY id DESC LIMIT 1;"
+    Check "Histórico mandado pelo Avaliador é descartado (é do entrevistador)" ($historicoDoAvaliador -eq "NULL")
     $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/avaliacao" -Form @{ data = "06/02/2024"; tratamentoProposto = $p3eId }
     $totalAvaliacoes = Invoke-SqlScalar "SELECT count(*) FROM avaliacao WHERE assistido_id = $assistidoId;"
     Check "Segunda avaliação com o cartão já avaliado é recusada" ($totalAvaliacoes -eq "1")
@@ -365,6 +369,7 @@ try {
         $r.Body -match "Decisão do Avaliador" -and $r.Body -match "value=""$p3eId""\s+selected")
     Check "Entrevista mostra ao entrevistador as recomendações do Avaliador" ($r.Body -match "Evangelho no Lar")
     Check "Entrevistador vem do login (não é mais digitado)" ($r.Body -notmatch 'name="entrevistador"')
+    Check "Entrevista pede o histórico da VEZ, sem M/P/I/B na 1ª VEZ" ($r.Body -match 'name="historico"' -and $r.Body -notmatch 'name="evolucao"')
 
     $codigoCartaoEntrevista = Invoke-SqlScalar "SELECT codigo_cartao FROM assistido WHERE id = $assistidoId;"
     if ($codigoCartaoEntrevista) {
@@ -377,8 +382,10 @@ try {
     if ($avaliacaoId) {
         $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "01/02/2024"; tratamentoIndicado = $p3eId }
         Check "Entrevista anterior à avaliação é recusada" ($r.StatusCode -eq 200 -and $r.Body -match "anterior à avaliação")
-        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "06/02/2024"; tratamentoIndicado = $p3eId; observacoes = "Obs da entrevista" }
+        $r = Invoke-CurlForm -Method POST -Url "$prontuarioUrl/entrevista?avaliacaoId=$avaliacaoId" -Form @{ data = "06/02/2024"; tratamentoIndicado = $p3eId; observacoes = "Obs da entrevista"; historico = "Historico da entrevista" }
         Check "Entrevista registrada (redireciona para prontuário)" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$assistidoId$")
+        $historicoDaVez = Invoke-SqlScalar "SELECT historico FROM avaliacao WHERE id = $avaliacaoId;"
+        Check "Histórico da VEZ gravado pela entrevista" ($historicoDaVez -eq "Historico da entrevista")
         $auditoriaEntrevista = Invoke-SqlScalar "SELECT (e.entrevistador_id = u.id)::text || '|' || e.observacoes FROM entrevista e, assistido u WHERE u.login = '$AdminLogin' AND e.avaliacao_id = $avaliacaoId;"
         Check "Entrevista grava quem entrevistou (login) e a observação" ($auditoriaEntrevista -eq "true|Obs da entrevista")
     }
@@ -813,7 +820,8 @@ try {
                 $r.StatusCode -eq 200 -and $r.Body -match "Pela sua função, você vê[\s\S]{0,40}apenas os prontuários com o cartão Em Avaliação")
             Invoke-Sql "UPDATE assistido SET status_cartao = 'AGUARDANDO_ENTREVISTA' WHERE id = $assistidoId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
-            Check "Avaliador não abre o prontuário depois de avaliado, Aguardando Entrevista (403)" ($r.StatusCode -eq 403)
+            # Só abriria se a avaliação pendente fosse dele (2026-10-11); aqui não há nenhuma dele.
+            Check "Avaliador não abre o Aguardando Entrevista que não avaliou (403)" ($r.StatusCode -eq 403)
             Invoke-Sql "UPDATE assistido SET status_cartao = '$statusAntesMatriz' WHERE id = $assistidoId;" | Out-Null
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
             Check "Avaliador não abre prontuário fora de Em Avaliação (403)" ($r.StatusCode -eq 403)

@@ -31,11 +31,18 @@
                                 <div class="sub">Assistência Espiritual</div>
                             </div>
                         </div>
-                        <span class="dl-cartao-status"
-                              th:classappend="${statusCartao != null ? statusCartao.badgeClasse : 'dl-badge-success'}">
-                            <i class="bi" th:classappend="${statusCartao != null ? statusCartao.icone : 'bi-heart-pulse-fill'}"></i>
-                            <span th:text="${statusCartao != null ? statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
-                        </span>
+                        <div class="dl-cartao-topo-direita">
+                            <span class="dl-cartao-status"
+                                  th:classappend="${statusCartao != null ? statusCartao.badgeClasse : 'dl-badge-success'}">
+                                <i class="bi" th:classappend="${statusCartao != null ? statusCartao.icone : 'bi-heart-pulse-fill'}"></i>
+                                <span th:text="${statusCartao != null ? statusCartao.label : 'Em Tratamento'}">Em Tratamento</span>
+                            </span>
+                            <!--/* O quadrado do canto da ficha azul, onde se anota o nº do prontuário (2026-10-11). */-->
+                            <span class="dl-cartao-numero" title="Nº do prontuário">
+                                <span class="rotulo">Nº</span>
+                                <span class="dl-numero-prontuario" th:text="${#numbers.formatInteger(assistido.id, 6)}">000123</span>
+                            </span>
+                        </div>
                     </div>
 
                     <div class="dl-cartao-titular">

@@ -100,7 +100,9 @@ public class PerfilAdvice {
     /**
      * Quem enxerga o que o Avaliador decidiu (tratamento proposto ou alta, e as recomendações)
      * enquanto o cartão aguarda a entrevista: só quem entrevista — Entrevistador e Dirigente
-     * (2026-10-07; de 2026-10-04 até ali o Avaliador também via). Sobre o próprio cartão, ninguém:
+     * (2026-10-07; de 2026-10-04 até ali o Avaliador também via). Desde 2026-10-11 o Avaliador volta a
+     * ver a decisão que ele mesmo registrou — isso é por linha, no prontuario.html (avaliador da
+     * avaliação = quem está logado), e não por este atributo. Sobre o próprio cartão, ninguém:
      * o prontuário nem abre (ProntuarioController.verProntuario) e a fila esconde a própria linha.
      */
     @ModelAttribute("podeVerTratamentoProposto")

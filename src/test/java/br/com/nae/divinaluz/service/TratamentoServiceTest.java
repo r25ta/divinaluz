@@ -355,7 +355,6 @@ class TratamentoServiceTest {
         Assistido avaliador = outraPessoa(7L);
 
         br.com.nae.divinaluz.model.Avaliacao av = avaliacao(LocalDate.of(2026, 9, 23)); // data livre
-        av.setEvolucao(br.com.nae.divinaluz.model.Evolucao.MELHOR);
         tratamentoService.registrarAvaliacao(av, avaliador);
 
         assertEquals(2, av.getNumeroVez());
@@ -393,15 +392,50 @@ class TratamentoServiceTest {
         verify(avaliacaoRepository, never()).save(any());
     }
 
-    // A 1ª VEZ do cartão físico não tem M/P/I/B; da 2ª em diante a evolução é obrigatória.
+    // Histórico e M/P/I/B são do Entrevistador desde 2026-10-11: a Avaliação descarta o que vier do
+    // formulário e não exige a evolução, nem na 2ª VEZ.
     @Test
-    void evolucaoObrigatoriaAPartirDaSegundaVez() {
+    void avaliacaoNaoGravaHistoricoNemEvolucao() {
         assistido.setStatusCartao(CartaoStatus.AGUARDANDO_AVALIACAO);
         when(avaliacaoRepository.countByAssistidoId(1L)).thenReturn(1L);
+        when(avaliacaoRepository.save(any(br.com.nae.divinaluz.model.Avaliacao.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(RegraNegocioException.class,
-                () -> tratamentoService.registrarAvaliacao(avaliacao(LocalDate.of(2026, 9, 23)), null));
-        verify(avaliacaoRepository, never()).save(any());
+        br.com.nae.divinaluz.model.Avaliacao av = avaliacao(LocalDate.of(2026, 9, 23));
+        av.setHistorico("digitado pelo Avaliador");
+        av.setEvolucao(br.com.nae.divinaluz.model.Evolucao.MELHOR);
+        tratamentoService.registrarAvaliacao(av, outraPessoa(7L));
+
+        assertEquals(2, av.getNumeroVez());
+        assertNull(av.getHistorico());
+        assertNull(av.getEvolucao());
+    }
+
+    // A 1ª VEZ do cartão físico não tem M/P/I/B; da 2ª em diante o entrevistador precisa informar a
+    // evolução. O histórico e a evolução ficam gravados na avaliação (a VEZ).
+    @Test
+    void entrevistaGravaHistoricoEEvolucaoEExigeAEvolucaoDaSegundaVez() {
+        assistido.setStatusCartao(CartaoStatus.AGUARDANDO_ENTREVISTA);
+        assistido.setCicloIniciadoEm(LocalDate.of(2026, 8, 25));
+        when(entrevistaRepository.save(any(br.com.nae.divinaluz.model.Entrevista.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        br.com.nae.divinaluz.model.Entrevista semEvolucao = entrevista(LocalDate.of(2026, 9, 22));
+        semEvolucao.getAvaliacao().setNumeroVez(2);
+        semEvolucao.setTratamentoIndicado(tratamento);
+        assertThrows(RegraNegocioException.class, () -> tratamentoService.registrarEntrevista(
+                semEvolucao, "relato", null, outraPessoa(7L)));
+        verify(entrevistaRepository, never()).save(any());
+
+        br.com.nae.divinaluz.model.Entrevista e = entrevista(LocalDate.of(2026, 9, 22));
+        e.getAvaliacao().setNumeroVez(2);
+        e.setTratamentoIndicado(tratamento);
+        tratamentoService.registrarEntrevista(e, "  relato da entrevista  ",
+                br.com.nae.divinaluz.model.Evolucao.MELHOR, outraPessoa(7L));
+
+        assertEquals("relato da entrevista", e.getAvaliacao().getHistorico());
+        assertEquals(br.com.nae.divinaluz.model.Evolucao.MELHOR, e.getAvaliacao().getEvolucao());
+        verify(avaliacaoRepository).save(e.getAvaliacao());
     }
 
     @Test

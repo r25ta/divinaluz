@@ -10,6 +10,7 @@ import br.com.nae.divinaluz.model.CartaoStatus;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.DiaFrequencia;
 import br.com.nae.divinaluz.model.Entrevista;
+import br.com.nae.divinaluz.model.Evolucao;
 import br.com.nae.divinaluz.model.HistoricoDiaFrequencia;
 import br.com.nae.divinaluz.model.ResultadoAvaliacao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
@@ -185,15 +186,16 @@ public class TratamentoService {
 
     /**
      * Avaliação (Módulo do Avaliador, 2026-10-07): o cartão completou as 4 sessões e está "Em
-     * Avaliação". O Avaliador registra o diagnóstico (histórico, evolução), as recomendações do verso
-     * do cartão e decide o resultado — novo tratamento (proposto aqui) ou alta. O cartão passa a
+     * Avaliação". O Avaliador registra as recomendações do verso do cartão e as observações, e decide o
+     * resultado — novo tratamento (proposto aqui) ou alta. O histórico e a evolução (M/P/I/B) da VEZ não
+     * são dele: desde 2026-10-11 quem os preenche é o Entrevistador ({@link #registrarEntrevista}),
+     * como no cartão físico, em que o bloco da VEZ tem o campo "Entrevistador". O cartão passa a
      * Aguardando Entrevista. Não mexe em Assistido.tratamentoAtual: o que o Avaliador decidiu só vale
      * quando a Entrevista o comunica.
      *
      * <p>Controles: só com o cartão Em Avaliação (antes dava para registrar avaliação a qualquer
      * momento); ninguém avalia a si mesmo (conferido aqui, não só no controller); data não futura e
-     * não anterior à presença que completou o cartão; evolução obrigatória a partir da 2ª VEZ (a 1ª
-     * VEZ do cartão físico não tem M/P/I/B: não há com o que comparar).</p>
+     * não anterior à presença que completou o cartão.</p>
      *
      * @param responsavel quem está registrando (o login); gravado como avaliador
      */
@@ -234,10 +236,9 @@ public class TratamentoService {
         // falta de espaço no papel) — contada no
         // ciclo, como era até a V42, saía sempre "1ª VEZ", porque cada entrevista reinicia o ciclo.
         int vez = (int) avaliacaoRepository.countByAssistidoId(assistido.getId()) + 1;
-        if (vez > 1 && novaAvaliacao.getEvolucao() == null) {
-            throw new RegraNegocioException("Informe a evolução (Melhor, Pior, Indiferente ou Bom) — "
-                    + "obrigatória a partir da 2ª avaliação.");
-        }
+        // Histórico e evolução são da Entrevista (2026-10-11): o que viesse do formulário é descartado.
+        novaAvaliacao.setHistorico(null);
+        novaAvaliacao.setEvolucao(null);
         novaAvaliacao.setNumeroVez(vez);
         novaAvaliacao.setAvaliador(responsavel);
 
@@ -261,6 +262,20 @@ public class TratamentoService {
      */
     @Transactional
     public Entrevista registrarEntrevista(Entrevista novaEntrevista, Assistido responsavel) {
+        Avaliacao avaliacao = novaEntrevista.getAvaliacao();
+        return registrarEntrevista(novaEntrevista,
+                avaliacao != null ? avaliacao.getHistorico() : null,
+                avaliacao != null ? avaliacao.getEvolucao() : null, responsavel);
+    }
+
+    /**
+     * A entrevista com o histórico e a evolução (M/P/I/B) da VEZ, que desde 2026-10-11 são do
+     * Entrevistador e ficam gravados na Avaliação (a VEZ do cartão físico). A evolução é obrigatória a
+     * partir da 2ª VEZ — a 1ª VEZ do cartão físico não tem M/P/I/B: não há com o que comparar.
+     */
+    @Transactional
+    public Entrevista registrarEntrevista(Entrevista novaEntrevista, String historico, Evolucao evolucao,
+            Assistido responsavel) {
         Assistido assistido = novaEntrevista.getAssistido();
         Avaliacao avaliacao = novaEntrevista.getAvaliacao();
         exigirOutraPessoa(assistido, responsavel, "entrevista");
@@ -300,11 +315,18 @@ public class TratamentoService {
         } else if (novaEntrevista.getTratamentoIndicado() == null) {
             throw new RegraNegocioException("Informe o tratamento das próximas sessões (ou marque Alta).");
         }
+        if (avaliacao.getNumeroVez() != null && avaliacao.getNumeroVez() > 1 && evolucao == null) {
+            throw new RegraNegocioException("Informe a evolução (Melhor, Pior, Indiferente ou Bom) — "
+                    + "obrigatória a partir da 2ª VEZ.");
+        }
         if (responsavel != null) {
             novaEntrevista.setEntrevistadorResponsavel(responsavel);
             novaEntrevista.setEntrevistador(responsavel.getNome());
         }
 
+        avaliacao.setHistorico(historico == null || historico.isBlank() ? null : historico.trim());
+        avaliacao.setEvolucao(evolucao);
+        avaliacaoRepository.save(avaliacao);
         Entrevista entrevistaSalva = entrevistaRepository.save(novaEntrevista);
 
         // A entrevista fecha o ciclo que estava retido (4 sessões + avaliação cumpridas) — ele vai

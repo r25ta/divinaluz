@@ -10,7 +10,9 @@
 
             <div class="dl-page-header">
                 <div>
-                    <span class="dl-eyebrow">Prontuário</span>
+                    <!--/* O nº do prontuário é o do quadrado no canto da ficha azul (2026-10-11): o id do cadastro. */-->
+                    <span class="dl-eyebrow">Prontuário · Nº <span class="dl-numero-prontuario"
+                          th:text="${#numbers.formatInteger(assistido.id, 6)}">000123</span></span>
                     <h1 th:text="${assistido.nome}">Nome do Assistido</h1>
                 </div>
                 <a th:href="@{/}" class="btn btn-outline-teal btn-sm">
@@ -279,8 +281,10 @@
                             </thead>
                             <tbody>
                                 <!--/* Avaliação ainda sem entrevista: a decisão, as recomendações e as observações
-                                       ficam reservadas a quem entrevista (2026-10-07). */-->
-                                <tr th:each="av : ${avaliacoes}" th:with="reservada=${av.entrevista == null and !podeVerTratamentoProposto}">
+                                       ficam reservadas a quem entrevista (2026-10-07) e a quem avaliou (2026-10-11). */-->
+                                <tr th:each="av : ${avaliacoes}"
+                                    th:with="reservada=${av.entrevista == null and !podeVerTratamentoProposto
+                                             and (av.avaliador == null or meuAssistidoId == null or av.avaliador.id != meuAssistidoId)}">
                                     <td class="text-center" th:text="${av.numeroVez} + 'ª VEZ'"></td>
                                     <td class="text-center" th:text="${#temporals.format(av.data, 'dd/MM/yyyy')}"></td>
                                     <td class="text-center">
@@ -322,6 +326,9 @@
                                             <span class="dl-badge dl-badge-teal" th:if="${av.entrevista.tratamentoIndicado != null}" th:text="${av.entrevista.tratamentoIndicado.codigo}"></span>
                                             <span class="dl-muted small d-block" th:text="${#temporals.format(av.entrevista.data, 'dd/MM/yyyy')} + (${av.entrevista.entrevistador} ? ' · ' + ${av.entrevista.entrevistador} : '')"></span>
                                             <span class="small d-block" th:if="${av.entrevista.observacoes}" th:text="${av.entrevista.observacoes}"></span>
+                                            <!--/* O histórico da VEZ é registrado na entrevista desde 2026-10-11. */-->
+                                            <span class="small d-block dl-truncate" th:if="${av.historico}"
+                                                  th:text="'Histórico: ' + ${av.historico}" th:title="${av.historico}"></span>
                                         </div>
                                         <span th:if="${av.entrevista == null}" class="dl-badge dl-badge-info">Aguardando</span>
                                     </td>

@@ -868,6 +868,37 @@ a {
 }
 
 /* O badge de status vive sobre o teal, então mantém fundo claro próprio (não usa .dl-badge). */
+.dl-cartao-topo-direita {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* O quadrado do canto da ficha azul, com o nº do prontuário (2026-10-11). */
+.dl-cartao-numero {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+  padding: 0.25rem 0.55rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-cartao-numero .rotulo {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.dl-cartao-numero .dl-numero-prontuario {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .dl-cartao-status {
   display: inline-flex;
   align-items: center;

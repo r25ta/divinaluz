@@ -216,7 +216,7 @@
                                             <option th:each="p : ${perfis}" th:value="${p.name()}" th:text="${p.name()}"
                                                     th:selected="${assistido.perfilAcesso == p}"></option>
                                         </select>
-                                        <div class="form-text">Trabalhadores ganham o perfil sozinhos em "Cadastrar Trabalhador".</div>
+                                        <div class="form-text">Trabalhadores ganham o perfil sozinhos em "Perfis de Trabalho", no prontuário.</div>
                                     </div>
                                     <div class="col-md-4" th:unless="${podeEscolherPerfil}">
                                         <label class="form-label">Perfil</label>

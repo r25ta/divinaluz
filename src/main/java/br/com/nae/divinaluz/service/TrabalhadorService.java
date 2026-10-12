@@ -9,24 +9,19 @@ import br.com.nae.divinaluz.repository.TrabalhadorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.text.Normalizer;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
 
 /**
- * Módulo "Cadastrar Trabalhador": todo trabalhador é, antes, um assistido — não existe cadastro de
- * trabalhador do zero. Aqui um assistido já cadastrado <em>evolui</em> para trabalhador ganhando um
- * ou mais perfis de trabalho ({@link TipoTrabalhador}), e pode voltar a ser só assistido.
+ * Perfis de trabalho: todo trabalhador é, antes, um assistido — não existe cadastro de trabalhador
+ * do zero. Pelo prontuário ("Perfis de Trabalho") um assistido <em>evolui</em> para trabalhador
+ * ganhando um ou mais perfis ({@link TipoTrabalhador}), e pode voltar a ser só assistido.
  */
 @Service
 public class TrabalhadorService {
 
     public static final String VINCULO_ASSISTIDO = "ASSISTIDO";
     public static final String VINCULO_TRABALHADOR = "TRABALHADOR";
-    private static final int MAXIMO_RESULTADOS_BUSCA = 20;
 
     private final AssistidoRepository assistidoRepository;
     private final TrabalhadorRepository trabalhadorRepository;
@@ -74,39 +69,5 @@ public class TrabalhadorService {
         }
         assistidoRepository.save(assistido);
         return perfilMudou;
-    }
-
-    /** Trabalhadores de fato: quem tem pelo menos um perfil de trabalho, por nome. */
-    public List<Trabalhador> listarTrabalhadores() {
-        return trabalhadorRepository.findAll().stream()
-                .filter(t -> t.getFuncoes() != null && !t.getFuncoes().isEmpty())
-                .filter(t -> t.getAssistido() != null)
-                .sorted(Comparator.comparing(t -> t.getAssistido().getNome(), String.CASE_INSENSITIVE_ORDER))
-                .toList();
-    }
-
-    /**
-     * Busca entre os assistidos ativos para escolher quem vai virar trabalhador. Sem acento, sem
-     * diferenciar maiúsculas e pedindo ao menos 2 letras — mesmo critério da busca da recepção.
-     */
-    public List<Assistido> buscarAssistidos(String termo) {
-        String busca = normalizar(termo);
-        if (busca.length() < 2) {
-            return List.of();
-        }
-        return assistidoRepository.atendidosPorAtivo(true).stream()
-                .filter(a -> normalizar(a.getNome()).contains(busca))
-                .sorted(Comparator.comparing(Assistido::getNome, String.CASE_INSENSITIVE_ORDER))
-                .limit(MAXIMO_RESULTADOS_BUSCA)
-                .toList();
-    }
-
-    private String normalizar(String texto) {
-        if (texto == null) {
-            return "";
-        }
-        return Normalizer.normalize(texto.trim(), Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT);
     }
 }

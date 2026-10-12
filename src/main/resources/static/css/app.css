@@ -1712,14 +1712,6 @@ a {
   gap: 0.25rem;
 }
 
-.dl-popover-rodape {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--dl-border);
-}
-
 /* Tela média (tablet deitado, notebook pequeno): sai a coluna do endereço e Cartão/Prontuário ficam
    só com o ícone (o nome está no title e no aria-label), para tudo caber numa linha. */
 @media (min-width: 768px) and (max-width: 1199.98px) {

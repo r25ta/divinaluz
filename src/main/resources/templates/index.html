@@ -104,30 +104,27 @@
                                 <td class="dl-col-vinculo" th:with="funcoes=${funcoesTrabalhador[a.id]},
                                              trabalhador=${a.vinculo == 'TRABALHADOR'},
                                              popoverId=${'perfis-' + a.id}">
-                                    <!--/* O selo TRABALHADOR abre os perfis de trabalho da pessoa (2026-10-11). Para
-                                           quem tem TRABALHADORES (o Dirigente), o selo ASSISTIDO também abre, com
-                                           o atalho para torná-lo trabalhador: o módulo Trabalhadores entra na
-                                           listagem pelo próprio selo, sem mais um botão em cada linha. */-->
-                                    <button th:if="${trabalhador or podeTrabalhadores}" type="button"
-                                            class="dl-badge dl-badge-botao"
-                                            th:classappend="${trabalhador ? 'dl-badge-teal' : 'dl-badge-neutral'}"
+                                    <!--/* O selo TRABALHADOR abre os perfis de trabalho da pessoa (2026-10-11), só
+                                           para informar: desde 2026-10-12 o quadro não tem mais atalho para
+                                           alterá-los — isso é feito no prontuário ("Perfis de Trabalho"). */-->
+                                    <button th:if="${trabalhador}" type="button"
+                                            class="dl-badge dl-badge-botao dl-badge-teal"
                                             th:attr="popovertarget=${popoverId},aria-controls=${popoverId}"
-                                            aria-haspopup="dialog"
-                                            th:title="${trabalhador ? 'Ver os perfis de trabalho' : 'Tornar trabalhador'}">
-                                        <i class="bi" th:classappend="${trabalhador ? 'bi-person-badge' : 'bi-person'}"></i>
+                                            aria-haspopup="dialog" title="Ver os perfis de trabalho">
+                                        <i class="bi bi-person-badge"></i>
                                         <span data-sort-value="vinculo" th:text="${a.vinculo}">TRABALHADOR</span>
                                         <i class="bi bi-chevron-down dl-badge-seta" aria-hidden="true"></i>
                                     </button>
-                                    <span th:unless="${trabalhador or podeTrabalhadores}" class="dl-badge dl-badge-neutral">
+                                    <span th:unless="${trabalhador}" class="dl-badge dl-badge-neutral">
                                         <span data-sort-value="vinculo" th:text="${a.vinculo}">ASSISTIDO</span>
                                     </span>
 
-                                    <div th:if="${trabalhador or podeTrabalhadores}" th:id="${popoverId}" popover
+                                    <div th:if="${trabalhador}" th:id="${popoverId}" popover
                                          class="dl-popover" role="dialog"
-                                         th:attr="aria-label=${(trabalhador ? 'Perfis de trabalho de ' : 'Vínculo de ') + a.nome}">
+                                         th:attr="aria-label=${'Perfis de trabalho de ' + a.nome}">
                                         <div class="dl-popover-cabeca">
                                             <div>
-                                                <span class="dl-eyebrow" th:text="${trabalhador ? 'Perfis de trabalho' : 'Vínculo'}">Perfis de trabalho</span>
+                                                <span class="dl-eyebrow">Perfis de trabalho</span>
                                                 <strong class="d-block" th:text="${a.nome}">Nome</strong>
                                             </div>
                                             <button type="button" class="dl-btn-icone" th:attr="popovertarget=${popoverId}"
@@ -135,25 +132,15 @@
                                                 <i class="bi bi-x-lg"></i>
                                             </button>
                                         </div>
-                                        <ul class="dl-popover-lista" th:if="${trabalhador and funcoes != null and not #lists.isEmpty(funcoes)}">
+                                        <ul class="dl-popover-lista" th:if="${funcoes != null and not #lists.isEmpty(funcoes)}">
                                             <li th:each="f : ${funcoes}">
                                                 <span class="dl-badge dl-badge-teal" th:text="${f.label}">Passista</span>
                                                 <span class="small dl-muted" th:text="${f.descricao}"></span>
                                             </li>
                                         </ul>
-                                        <p th:if="${trabalhador and (funcoes == null or #lists.isEmpty(funcoes))}" class="small dl-muted mb-0">
+                                        <p th:if="${funcoes == null or #lists.isEmpty(funcoes)}" class="small dl-muted mb-0">
                                             Nenhum perfil de trabalho definido.
                                         </p>
-                                        <p th:unless="${trabalhador}" class="small dl-muted mb-0">
-                                            Ainda não é trabalhador da casa. Todo trabalhador é antes um assistido —
-                                            ao torná-lo trabalhador, você escolhe as funções dele.
-                                        </p>
-                                        <div class="dl-popover-rodape" th:if="${podeTrabalhadores}">
-                                            <a th:href="@{/trabalhadores/{id}(id=${a.id})}" class="btn btn-teal btn-sm text-white">
-                                                <i class="bi" th:classappend="${trabalhador ? 'bi-pencil' : 'bi-person-badge'}"></i>
-                                                <span th:text="${trabalhador ? 'Alterar perfis' : 'Tornar trabalhador'}">Alterar perfis</span>
-                                            </a>
-                                        </div>
                                     </div>
                                 </td>
                                 <td class="dl-col-status">

@@ -16,9 +16,10 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.util.List;
 
 /**
- * Módulo "Cadastrar Trabalhador" (substituiu a antiga tela /usuarios). Como todo trabalhador é
- * antes um assistido, aqui não se cadastra ninguém do zero: busca-se um assistido já cadastrado e
- * escolhem-se os perfis de trabalho dele (ver {@link TrabalhadorService}).
+ * Perfis de trabalho de um assistido, aberto pelo botão "Perfis de Trabalho"/"Tornar Trabalhador"
+ * do prontuário. Como todo trabalhador é antes um assistido, aqui não se cadastra ninguém do zero
+ * (ver {@link TrabalhadorService}). A lista {@code /trabalhadores} (e o redirecionamento da antiga
+ * {@code /usuarios}) foi removida em 2026-10-12: ficou sem link quando o item saiu do menu.
  */
 @Controller
 public class TrabalhadorController {
@@ -32,21 +33,6 @@ public class TrabalhadorController {
         this.trabalhadorService = trabalhadorService;
         this.trabalhadorRepository = trabalhadorRepository;
         this.assistidoRepository = assistidoRepository;
-    }
-
-    @GetMapping("/trabalhadores")
-    public String listar(@RequestParam(required = false) String busca, Model model) {
-        model.addAttribute("trabalhadores", trabalhadorService.listarTrabalhadores());
-        model.addAttribute("busca", busca);
-        model.addAttribute("resultados", trabalhadorService.buscarAssistidos(busca));
-        model.addAttribute("buscou", busca != null && !busca.isBlank());
-        return "trabalhador-lista";
-    }
-
-    /** Rota antiga da tela de usuários — agora este módulo. */
-    @GetMapping("/usuarios")
-    public String usuariosRedireciona() {
-        return "redirect:/trabalhadores";
     }
 
     @GetMapping("/trabalhadores/{id}")

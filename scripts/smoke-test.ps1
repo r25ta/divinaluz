@@ -653,15 +653,14 @@ try {
         $vinculoInicial = Invoke-SqlScalar "SELECT vinculo FROM assistido WHERE id = $trabalhadorId;"
         Check "Cadastro nasce como ASSISTIDO (categoria Trabalhador saiu do formulário)" ($vinculoInicial -eq "ASSISTIDO")
 
+        # A lista /trabalhadores e a rota antiga /usuarios saíram em 2026-10-12: promover é pelo prontuário.
         $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-        Check "Módulo 'Cadastrar Trabalhador' responde 200" ($r.StatusCode -eq 200 -and $r.Body -match "Cadastrar Trabalhador")
-
+        Check "Lista /trabalhadores não existe mais (404)" ($r.StatusCode -eq 404)
         $r = Invoke-CurlForm -Url "$BaseUrl/usuarios"
-        Check "Rota antiga /usuarios redireciona para o novo módulo" ($r.StatusCode -eq 302 -and $r.Location -match "trabalhadores$")
+        Check "Rota antiga /usuarios não existe mais (404)" ($r.StatusCode -eq 404)
 
-        # A busca só retorna assistidos já cadastrados — é por ela que se escolhe quem promover.
-        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores?busca=SMOKE_TEST_TRAB"
-        Check "Busca do módulo encontra o assistido para promover" ($r.Body -match [regex]::Escape($nomeTrabalhador) -and $r.Body -match "Tornar Trabalhador")
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+        Check "Prontuário do assistido oferece Tornar Trabalhador" ($r.Body -match "Tornar Trabalhador" -and $r.Body -match "trabalhadores/$trabalhadorId")
 
         $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$trabalhadorId"
         Check "Formulário de perfis de trabalho responde 200" ($r.StatusCode -eq 200 -and $r.Body -match "Perfis de Trabalho")
@@ -681,8 +680,11 @@ try {
         $perfilPromovido = Invoke-SqlScalar "SELECT a.vinculo || '|' || tf.funcao FROM assistido a JOIN trabalhador t ON t.assistido_id = a.id JOIN trabalhador_funcao tf ON tf.trabalhador_id = t.id WHERE a.id = $trabalhadorId;"
         Check "Assistido evoluiu para TRABALHADOR com o perfil Entrevistador" ($perfilPromovido -eq "TRABALHADOR|ENTREVISTADOR")
 
-        $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-        Check "Trabalhador aparece na lista do módulo com o perfil" ($r.Body -match [regex]::Escape($nomeTrabalhador) -and $r.Body -match "Entrevistador")
+        # O selo da listagem mostra os perfis, só para informar (sem atalho para alterá-los, 2026-10-12).
+        $r = Invoke-CurlForm -Url "$BaseUrl/"
+        Check "Selo da listagem mostra o perfil do trabalhador, sem botão para alterar" (
+            $r.Body -match "popovertarget=""perfis-$trabalhadorId""" -and $r.Body -match "Entrevistador" -and
+            $r.Body -notmatch "Alterar perfis")
 
         # Editar os dados cadastrais não pode rebaixar quem já é trabalhador (o vínculo não vem
         # mais do formulário).
@@ -759,8 +761,8 @@ try {
             Check "Passista não alcança a fila de entrevistas (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Passista não registra avaliação (403)" ($r.StatusCode -eq 403)
-            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-            Check "Passista não alcança 'Cadastrar Trabalhador' (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
+            Check "Passista não alcança os perfis de trabalho (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao/novo"
             Check "Passista não monta a escala de preleções (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
@@ -780,7 +782,7 @@ try {
             Check "Recepcionista alcança o Módulo Sessão (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Recepcionista não alcança a fila de avaliação/entrevista (403)" ($r.StatusCode -eq 403)
-            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
             Check "Recepcionista não promove trabalhadores (403)" ($r.StatusCode -eq 403)
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
@@ -872,8 +874,8 @@ try {
             Definir-Funcao $adminJarMatriz $trabalhadorId "DIRIGENTE"
             Login-Como $loginTrab $senhaTrab | Out-Null
 
-            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-            Check "Dirigente alcança 'Cadastrar Trabalhador' (200)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
+            Check "Dirigente alcança os perfis de trabalho (200)" ($r.StatusCode -eq 200)
             $r = Invoke-CurlForm -Url "$BaseUrl/"
             Check "Dirigente vê a listagem com os dois filtros da fila" (
                 $r.StatusCode -eq 200 -and $r.Body -match 'data-filtro="AGUARDANDO_AVALIACAO"' -and $r.Body -match 'data-filtro="AGUARDANDO_ENTREVISTA"')
@@ -960,8 +962,8 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/"
             Check "Função de Dirigente com perfil ASSISTIDO não libera a listagem (vai ao próprio cartão)" (
                 $r.StatusCode -eq 302 -and $r.Location -match "cartao$")
-            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
-            Check "Função de Dirigente com perfil ASSISTIDO não libera 'Cadastrar Trabalhador' (403)" (
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
+            Check "Função de Dirigente com perfil ASSISTIDO não libera os perfis de trabalho (403)" (
                 $r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId/cartao"
             Check "Com perfil ASSISTIDO o trabalhador ainda vê o próprio cartão (200)" ($r.StatusCode -eq 200)
@@ -973,7 +975,7 @@ try {
             Check "Salvar funções promove o perfil a TRABALHADOR e avisa" (
                 $script:UltimaPaginaTrabalhadores -match "Perfil do acesso alterado para TRABALHADOR")
             Login-Como $loginTrab $senhaTrab | Out-Null
-            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores"
+            $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
             Check "Perfil promovido automaticamente libera o módulo (200)" ($r.StatusCode -eq 200)
 
             # Desmarcar todas as funções devolve o perfil a ASSISTIDO.

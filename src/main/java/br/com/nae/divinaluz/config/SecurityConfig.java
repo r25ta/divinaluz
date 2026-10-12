@@ -62,7 +62,7 @@ public class SecurityConfig {
                         // Ver a escala é de todos (inclusive do perfil ASSISTIDO); montá-la, não.
                         .requestMatchers(HttpMethod.GET, "/prelecao").authenticated()
                         .requestMatchers("/prelecao/**").hasAuthority(Permissao.PRELECAO.getAuthority())
-                        .requestMatchers("/trabalhadores/**", "/usuarios", "/prontuario/*/trabalhador")
+                        .requestMatchers("/trabalhadores/**", "/prontuario/*/trabalhador")
                                 .hasAuthority(Permissao.TRABALHADORES.getAuthority())
                         .requestMatchers("/sessao", "/sessao/**", "/checkin/**",
                                         "/prontuario/*/nova-sessao", "/prontuario/*/sessao")

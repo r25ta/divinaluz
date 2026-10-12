@@ -119,6 +119,9 @@
                             </span>
                             <span class="numero" th:text="${sessao.numeroSerie != null ? sessao.numeroSerie + 'ª' : '—'}">1ª</span>
                             <span class="data" th:text="${#temporals.format(sessao.dataConsulta, 'dd/MM')}">30/08</span>
+                            <!--/* Tema da preleção do dia (2026-10-12), o mesmo do histórico de presenças. */-->
+                            <span class="tema" th:if="${sessao.prelecao != null}"
+                                  th:text="${sessao.prelecao.tema}" th:title="${sessao.prelecao.tema}">Evangelho no Lar</span>
                         </div>
                         <div class="dl-marcacao vazia" th:each="numero : ${marcacoesVazias}">
                             <span class="selo"><i class="bi bi-dash"></i></span>

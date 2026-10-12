@@ -1040,6 +1040,20 @@ a {
   color: var(--dl-ink);
 }
 
+/* Tema da preleção do dia: até 3 linhas, o resto com reticências (o texto inteiro fica no title). */
+.dl-marcacao .tema {
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--dl-teal-800);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .dl-marcacao.ok {
   border-color: var(--dl-teal-400);
   background: var(--dl-teal-100);

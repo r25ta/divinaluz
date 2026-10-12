@@ -13,6 +13,7 @@ import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.Permissao;
 import br.com.nae.divinaluz.model.SessaoTratamento;
 import br.com.nae.divinaluz.model.TipoEntrevista;
+import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.TipoTratamento;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.AvaliacaoRepository;
@@ -155,6 +156,11 @@ public class ProntuarioController {
                             .ifPresent(av -> avaliacaoPendente.put(a.getId(), av.getId())));
         }
         model.addAttribute("avaliacaoPendente", avaliacaoPendente);
+        // O selo TRABALHADOR de cada linha abre os perfis de trabalho da pessoa (2026-10-11).
+        java.util.Map<Long, List<TipoTrabalhador>> funcoesTrabalhador = new java.util.HashMap<>();
+        trabalhadorRepository.comFuncoes().forEach(t -> funcoesTrabalhador.put(t.getAssistido().getId(),
+                t.getFuncoes().stream().sorted().toList()));
+        model.addAttribute("funcoesTrabalhador", funcoesTrabalhador);
         model.addAttribute("filtroInicial", filtroInicial(status, authentication));
         return "index";
     }

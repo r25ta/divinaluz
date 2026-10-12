@@ -205,6 +205,38 @@ class VisibilidadePorFuncaoFluxoTest {
                 .andExpect(content().string(containsString(">" + numero + "<")));
     }
 
+    // Listagem de 2026-10-11: o selo TRABALHADOR abre os perfis de trabalho; o Novo Cadastro fica na
+    // listagem (saiu do menu); e o atalho para os perfis só aparece a quem tem TRABALHADORES.
+    @Test
+    void seloDoTrabalhadorMostraOsPerfisENovoCadastroFicaNaListagem() throws Exception {
+        Assistido passista = trabalhador("visib.selo.passista", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.PASSISTA);
+        Assistido recepcionista = trabalhador("visib.selo.recep", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.RECEPCIONISTA);
+        Assistido dirigente = trabalhador("visib.selo.dirig", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.DIRIGENTE);
+
+        mvc.perform(get("/").with(user(autoridades.usuario(recepcionista))))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("popovertarget=\"perfis-" + passista.getId() + "\"")))
+                .andExpect(content().string(containsString(TipoTrabalhador.PASSISTA.getDescricao())))
+                .andExpect(content().string(containsString("dl-lista-novo")))
+                // Sem TRABALHADORES: o selo do assistido não abre nada e não há atalho para os perfis.
+                .andExpect(content().string(not(containsString("popovertarget=\"perfis-" + emTratamento.getId() + "\""))))
+                .andExpect(content().string(not(containsString("/trabalhadores/" + passista.getId()))));
+
+        mvc.perform(get("/").with(user(autoridades.usuario(dirigente))))
+                .andExpect(content().string(containsString("/trabalhadores/" + passista.getId())))
+                .andExpect(content().string(containsString("popovertarget=\"perfis-" + emTratamento.getId() + "\"")))
+                .andExpect(content().string(containsString("Tornar trabalhador")));
+    }
+
+    // Health check público para monitor externo (2026-10-11), só com o status.
+    @Test
+    void healthCheckEPublicoESoComOStatus() throws Exception {
+        mvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"status\"")))
+                .andExpect(content().string(not(containsString("components"))));
+    }
+
     @Test
     void entrevistadorNaoAbreOProprioProntuarioAguardandoEntrevista() throws Exception {
         Assistido entrevistador = trabalhador("visib.entrev.retido", CartaoStatus.AGUARDANDO_ENTREVISTA,

@@ -1547,6 +1547,250 @@ a {
   font-size: 0.68rem;
 }
 
+/* ---------- Listagem de assistidos (2026-10-11) ----------
+   Uma linha por assistido: o que não cabe é cortado com reticências (o texto inteiro fica no title),
+   em vez de quebrar a linha. Barra acima da tabela com os filtros e o Novo Cadastro. */
+
+.dl-lista-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.dl-lista-barra .dl-filtro-chips {
+  margin-bottom: 0;
+}
+
+.dl-lista-novo {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Larguras fixas: o endereço fica com o que sobra, cortado com reticências — senão a linha única
+   alargaria a tabela além do cartão e a coluna das ações seria cortada. */
+.dl-table-assistidos {
+  table-layout: fixed;
+}
+
+/* Os títulos com ordenação são botões (que não herdam o caixa-alta); o Endereço acompanha. */
+.dl-table-assistidos thead th {
+  text-transform: none;
+}
+
+.dl-table-assistidos td {
+  white-space: nowrap;
+}
+
+.dl-table-assistidos .dl-col-nome { width: 23%; }
+.dl-table-assistidos .dl-col-vinculo { width: 160px; }
+.dl-table-assistidos .dl-col-status { width: 180px; }
+.dl-table-assistidos .dl-col-acoes { width: 262px; text-align: right; }
+
+.dl-table-assistidos .dl-col-nome,
+.dl-table-assistidos .dl-col-endereco {
+  overflow: hidden;
+}
+
+.dl-linha-nome {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.dl-texto-linha {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.dl-col-endereco .dl-texto-linha { font-size: 0.86rem; }
+
+/* Com a ação da fila na linha, Cartão e Prontuário ficam só com o ícone: o botão principal se destaca
+   e a linha continua cabendo. */
+.dl-acoes-linha.dl-com-fila .dl-rotulo-acao {
+  display: none;
+}
+
+.dl-acoes-linha {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* Selo que abre um quadro (perfis de trabalho): parece selo, comporta-se como botão. */
+.dl-badge-botao {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.dl-badge-botao:hover,
+.dl-badge-botao:focus-visible {
+  border-color: var(--dl-teal-400);
+  box-shadow: 0 0 0 3px rgba(23, 180, 188, 0.15);
+  outline: none;
+}
+
+.dl-badge-seta {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+/* Quadro dos perfis: o atributo popover do navegador (fecha com Esc e tocando fora). Sem suporte a
+   popover, o script da listagem liga .dl-popover-aberto. */
+.dl-popover {
+  display: none;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(92vw, 400px);
+  height: fit-content;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--dl-border);
+  border-radius: var(--dl-radius-lg);
+  background: var(--dl-surface);
+  color: var(--dl-ink);
+  box-shadow: 0 24px 48px -16px rgba(11, 74, 77, 0.35);
+  white-space: normal;
+  text-align: left;
+  z-index: 1080;
+}
+
+.dl-popover:popover-open {
+  display: block;
+}
+
+.dl-popover.dl-popover-aberto {
+  display: block;
+}
+
+.dl-popover::backdrop {
+  background: rgba(11, 74, 77, 0.28);
+}
+
+.dl-popover-cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dl-popover-cabeca .dl-eyebrow {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--dl-teal-600);
+}
+
+.dl-popover-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.dl-popover-lista li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.dl-popover-rodape {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--dl-border);
+}
+
+/* Tela média (tablet deitado, notebook pequeno): sai a coluna do endereço e Cartão/Prontuário ficam
+   só com o ícone (o nome está no title e no aria-label), para tudo caber numa linha. */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .dl-table-assistidos .dl-col-endereco {
+    display: none;
+  }
+  .dl-table-assistidos .dl-rotulo-acao {
+    display: none;
+  }
+  .dl-table-assistidos .dl-col-nome { width: auto; }
+  .dl-table-assistidos .dl-col-acoes { width: 260px; }
+}
+
+@media (max-width: 767.98px) {
+  /* Celular: o Novo Cadastro vem logo abaixo da busca, na largura toda; os filtros depois. */
+  .dl-lista-novo {
+    order: -1;
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+  /* No cartão o texto quebra linha normalmente, e as ações ocupam a largura toda, com o texto. */
+  .dl-table-assistidos {
+    table-layout: auto;
+  }
+  .dl-table-assistidos td,
+  .dl-table-assistidos .dl-col-nome,
+  .dl-table-assistidos .dl-col-vinculo,
+  .dl-table-assistidos .dl-col-status,
+  .dl-table-assistidos .dl-col-acoes {
+    white-space: normal;
+    width: 100%;
+  }
+  .dl-acoes-linha.dl-com-fila .dl-rotulo-acao {
+    display: inline;
+  }
+  .dl-table-assistidos .dl-texto-linha {
+    max-width: 100%;
+    white-space: normal;
+  }
+  .dl-table-assistidos .dl-col-endereco .dl-texto-linha {
+    text-align: right;
+  }
+  .dl-table-assistidos .dl-col-acoes {
+    padding-top: 0.6rem;
+  }
+  .dl-acoes-linha {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .dl-acoes-linha .btn {
+    flex: 1 1 0;
+  }
+  /* A ação da fila (Registrar Avaliação/Entrevista) numa linha só dela, acima de Cartão e Prontuário. */
+  .dl-acoes-linha .dl-acao-fila,
+  .dl-acoes-linha > .dl-badge {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+  /* O quadro dos perfis vira uma folha que sobe do pé da tela, ao alcance do polegar. */
+  .dl-popover {
+    inset: auto 0 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 75vh;
+    border-radius: var(--dl-radius-lg) var(--dl-radius-lg) 0 0;
+    padding-bottom: calc(1.1rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* ---------- Módulo Sessão (painel da sessão) ---------- */
 
 .dl-kpi-grid {

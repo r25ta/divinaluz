@@ -83,9 +83,8 @@
                 <a th:if="${podeTrabalhadores}" th:href="@{/trabalhadores}" class="btn btn-nav btn-sm">
                     <i class="bi bi-people"></i> Trabalhadores
                 </a>
-                <a th:if="${podeCadastro}" th:href="@{/novo}" class="btn btn-nav btn-sm">
-                    <i class="bi bi-plus-lg"></i> Novo Cadastro
-                </a>
+                <!--/* "Novo Cadastro" saiu do menu em 2026-10-11: mora na listagem do Prontuário, à direita,
+                       abaixo da busca. Quem cadastra (Recepcionista, Dirigente) sempre tem a listagem. */-->
                 <form th:action="@{/logout}" method="post" class="d-inline">
                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-nav btn-sm" title="Sair">

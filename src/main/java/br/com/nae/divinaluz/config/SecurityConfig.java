@@ -45,7 +45,10 @@ public class SecurityConfig {
                                         // Bootstrap/ícones servidos pelo sistema e o manifesto do app no
                                         // celular (2026-10-05): o navegador os pede sem login (o manifesto,
                                         // inclusive, sem cookies).
-                                        "/vendor/**", "/icones/**", "/manifest*.json").permitAll()
+                                        "/vendor/**", "/icones/**", "/manifest*.json",
+                                        // Health check para monitor externo (2026-10-11): só o status
+                                        // (UP/DOWN), sem detalhes — management.endpoint.health.show-details=never.
+                                        "/actuator/health", "/actuator/health/**").permitAll()
                         // Próprio cartão e próprio QR: liberados a qualquer autenticado porque todo
                         // mundo alcança o seu (inclusive quem não tem permissão nenhuma). Quem pode
                         // ver o cartão DE OUTRO é checado no ProntuarioController

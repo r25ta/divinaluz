@@ -22,7 +22,8 @@
                     </a>
                     <div class="dl-search">
                         <i class="bi bi-search"></i>
-                        <input type="search" id="buscaAssistido" class="form-control" placeholder="Buscar por nome...">
+                        <input type="search" id="buscaAssistido" class="form-control" placeholder="Buscar por nome..."
+                               aria-label="Buscar assistido por nome">
                     </div>
                 </div>
             </div>
@@ -41,50 +42,121 @@
                 <i class="bi bi-info-circle-fill"></i> Pela sua função, você vê <span th:text="${avisoListagem}"></span>.
             </div>
 
-            <!--/* A fila de avaliação/entrevista é esta listagem (2026-10-11): filtro por status com a
-                   contagem. Quem só vê os Em Avaliação (o Avaliador) não precisa dele. */-->
-            <div class="dl-filtro-chips" th:if="${podeConsulta or podeConsultaExcetoEmAvaliacao}"
-                 th:attr="data-filtro-inicial=${filtroInicial}">
-                <button type="button" class="dl-filtro-chip" data-filtro="TODOS">
-                    <i class="bi bi-list-ul"></i> Todos
-                    <span class="dl-filtro-contagem" th:text="${#lists.size(assistidos)}">0</span>
-                </button>
-                <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_AVALIACAO"
-                        th:if="${podeConsulta or podeConsultaEmAvaliacao}">
-                    <i class="bi bi-clipboard2-pulse"></i> Em Avaliação
-                    <span class="dl-filtro-contagem" th:text="${totalEmAvaliacao}">0</span>
-                </button>
-                <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_ENTREVISTA">
-                    <i class="bi bi-chat-left-text"></i> Aguardando Entrevista
-                    <span class="dl-filtro-contagem" th:text="${totalAguardandoEntrevista}">0</span>
-                </button>
+            <!--/* Barra acima da tabela (2026-10-11): os filtros da fila à esquerda e o Novo Cadastro à
+                   direita, abaixo da busca — o cadastro saiu do menu e mora no módulo Prontuário. No
+                   celular o botão vem primeiro, na largura toda. */-->
+            <div class="dl-lista-barra" th:if="${podeConsulta or podeConsultaExcetoEmAvaliacao or podeCadastro}">
+                <!--/* A fila de avaliação/entrevista é esta listagem (2026-10-11): filtro por status com a
+                       contagem. Quem só vê os Em Avaliação (o Avaliador) não precisa dele. */-->
+                <div class="dl-filtro-chips" th:if="${podeConsulta or podeConsultaExcetoEmAvaliacao}"
+                     th:attr="data-filtro-inicial=${filtroInicial}" role="group" aria-label="Filtrar por status do cartão">
+                    <button type="button" class="dl-filtro-chip" data-filtro="TODOS">
+                        <i class="bi bi-list-ul"></i> Todos
+                        <span class="dl-filtro-contagem" th:text="${#lists.size(assistidos)}">0</span>
+                    </button>
+                    <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_AVALIACAO"
+                            th:if="${podeConsulta or podeConsultaEmAvaliacao}">
+                        <i class="bi bi-clipboard2-pulse"></i> Em Avaliação
+                        <span class="dl-filtro-contagem" th:text="${totalEmAvaliacao}">0</span>
+                    </button>
+                    <button type="button" class="dl-filtro-chip" data-filtro="AGUARDANDO_ENTREVISTA">
+                        <i class="bi bi-chat-left-text"></i> Aguardando Entrevista
+                        <span class="dl-filtro-contagem" th:text="${totalAguardandoEntrevista}">0</span>
+                    </button>
+                </div>
+                <a th:if="${podeCadastro}" th:href="@{/novo}" class="btn btn-teal btn-sm text-white dl-lista-novo">
+                    <i class="bi bi-person-plus"></i> Novo Cadastro
+                </a>
             </div>
 
             <div class="dl-card">
                 <div class="dl-card-body-flush">
-                    <table class="dl-table" id="tabelaAssistidos" th:if="${not #lists.isEmpty(assistidos)}">
+                    <!--/* Uma linha por assistido (2026-10-11): o endereço virou coluna própria, cortado com
+                           reticências (o texto inteiro fica no title), em vez de quebrar em duas ou três
+                           linhas embaixo do nome. Entre 768 e 1199px a coluna do endereço sai e os botões
+                           Cartão/Prontuário ficam só com o ícone; abaixo de 768px cada linha vira cartão
+                           (tabela-responsiva.js) e tudo volta com o texto. */-->
+                    <table class="dl-table dl-table-assistidos" id="tabelaAssistidos" th:if="${not #lists.isEmpty(assistidos)}">
                         <thead>
                             <tr>
-                                <th><button type="button" class="sort-button" data-sort="nome">Nome <i class="bi bi-arrow-down-up"></i></button></th>
-                                <th><button type="button" class="sort-button" data-sort="vinculo">Vínculo <i class="bi bi-arrow-down-up"></i></button></th>
-                                <th><button type="button" class="sort-button" data-sort="status">Status Atual <i class="bi bi-arrow-down-up"></i></button></th>
-                                <th></th>
+                                <th class="dl-col-nome"><button type="button" class="sort-button" data-sort="nome">Nome <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th class="dl-col-endereco">Endereço</th>
+                                <th class="dl-col-vinculo"><button type="button" class="sort-button" data-sort="vinculo">Vínculo <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th class="dl-col-status"><button type="button" class="sort-button" data-sort="status">Status Atual <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th class="dl-col-acoes"><span class="visually-hidden">Ações</span></th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr th:each="a : ${assistidos}" class="linha-assistido"
                                 th:attr="data-status=${a.statusCartao != null ? a.statusCartao.name() : 'EM_TRATAMENTO'}">
-                                <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-semibold nome-assistido" data-sort-value="nome" th:text="${a.nome}"></span>
+                                <td class="dl-col-nome">
+                                    <div class="dl-linha-nome">
+                                        <span class="fw-semibold dl-texto-linha nome-assistido" data-sort-value="nome"
+                                              th:text="${a.nome}" th:title="${a.nome}"></span>
                                         <span th:unless="${a.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
                                     </div>
-                                    <div class="dl-muted small" th:if="${a.residencia}" th:text="${a.residencia}"></div>
                                 </td>
-                                <td>
-                                    <span class="dl-badge dl-badge-neutral" data-sort-value="vinculo" th:text="${a.vinculo}"></span>
+                                <td class="dl-col-endereco" data-label="Endereço">
+                                    <span class="dl-texto-linha dl-muted" th:if="${a.residencia}"
+                                          th:text="${a.residencia}" th:title="${a.residencia}"></span>
+                                    <span class="dl-muted" th:unless="${a.residencia}">—</span>
                                 </td>
-                                <td>
+                                <td class="dl-col-vinculo" th:with="funcoes=${funcoesTrabalhador[a.id]},
+                                             trabalhador=${a.vinculo == 'TRABALHADOR'},
+                                             popoverId=${'perfis-' + a.id}">
+                                    <!--/* O selo TRABALHADOR abre os perfis de trabalho da pessoa (2026-10-11). Para
+                                           quem tem TRABALHADORES (o Dirigente), o selo ASSISTIDO também abre, com
+                                           o atalho para torná-lo trabalhador: o módulo Trabalhadores entra na
+                                           listagem pelo próprio selo, sem mais um botão em cada linha. */-->
+                                    <button th:if="${trabalhador or podeTrabalhadores}" type="button"
+                                            class="dl-badge dl-badge-botao"
+                                            th:classappend="${trabalhador ? 'dl-badge-teal' : 'dl-badge-neutral'}"
+                                            th:attr="popovertarget=${popoverId},aria-controls=${popoverId}"
+                                            aria-haspopup="dialog"
+                                            th:title="${trabalhador ? 'Ver os perfis de trabalho' : 'Tornar trabalhador'}">
+                                        <i class="bi" th:classappend="${trabalhador ? 'bi-person-badge' : 'bi-person'}"></i>
+                                        <span data-sort-value="vinculo" th:text="${a.vinculo}">TRABALHADOR</span>
+                                        <i class="bi bi-chevron-down dl-badge-seta" aria-hidden="true"></i>
+                                    </button>
+                                    <span th:unless="${trabalhador or podeTrabalhadores}" class="dl-badge dl-badge-neutral">
+                                        <span data-sort-value="vinculo" th:text="${a.vinculo}">ASSISTIDO</span>
+                                    </span>
+
+                                    <div th:if="${trabalhador or podeTrabalhadores}" th:id="${popoverId}" popover
+                                         class="dl-popover" role="dialog"
+                                         th:attr="aria-label=${(trabalhador ? 'Perfis de trabalho de ' : 'Vínculo de ') + a.nome}">
+                                        <div class="dl-popover-cabeca">
+                                            <div>
+                                                <span class="dl-eyebrow" th:text="${trabalhador ? 'Perfis de trabalho' : 'Vínculo'}">Perfis de trabalho</span>
+                                                <strong class="d-block" th:text="${a.nome}">Nome</strong>
+                                            </div>
+                                            <button type="button" class="dl-btn-icone" th:attr="popovertarget=${popoverId}"
+                                                    popovertargetaction="hide" aria-label="Fechar">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                        <ul class="dl-popover-lista" th:if="${trabalhador and funcoes != null and not #lists.isEmpty(funcoes)}">
+                                            <li th:each="f : ${funcoes}">
+                                                <span class="dl-badge dl-badge-teal" th:text="${f.label}">Passista</span>
+                                                <span class="small dl-muted" th:text="${f.descricao}"></span>
+                                            </li>
+                                        </ul>
+                                        <p th:if="${trabalhador and (funcoes == null or #lists.isEmpty(funcoes))}" class="small dl-muted mb-0">
+                                            Nenhum perfil de trabalho definido.
+                                        </p>
+                                        <p th:unless="${trabalhador}" class="small dl-muted mb-0">
+                                            Ainda não é trabalhador da casa. Todo trabalhador é antes um assistido —
+                                            ao torná-lo trabalhador, você escolhe as funções dele.
+                                        </p>
+                                        <div class="dl-popover-rodape" th:if="${podeTrabalhadores}">
+                                            <a th:href="@{/trabalhadores/{id}(id=${a.id})}" class="btn btn-teal btn-sm text-white">
+                                                <i class="bi" th:classappend="${trabalhador ? 'bi-pencil' : 'bi-person-badge'}"></i>
+                                                <span th:text="${trabalhador ? 'Alterar perfis' : 'Tornar trabalhador'}">Alterar perfis</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="dl-col-status">
                                     <span class="dl-badge"
                                           th:classappend="${a.statusCartao != null ? a.statusCartao.badgeClasse : 'dl-badge-success'}"
                                           data-sort-value="status"
@@ -92,31 +164,37 @@
                                         Em Tratamento
                                     </span>
                                 </td>
-                                <td class="text-end"
+                                <td class="dl-col-acoes" data-label=""
                                     th:with="eu=${meuAssistidoId != null and meuAssistidoId == a.id},
                                              emAvaliacao=${a.statusCartao != null and a.statusCartao.name() == 'AGUARDANDO_AVALIACAO'},
-                                             aguardandoEntrevista=${a.statusCartao != null and a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA'}">
-                                    <!--/* A ação da fila na própria linha (2026-10-11). Ninguém atende a si mesmo. */-->
-                                    <a th:if="${emAvaliacao and podeAvaliacao and !eu}"
-                                       th:href="@{/prontuario/{id}/nova-avaliacao(id=${a.id})}"
-                                       class="btn btn-teal btn-sm text-white">
-                                        <i class="bi bi-plus-lg"></i> Registrar Avaliação
-                                    </a>
-                                    <a th:if="${aguardandoEntrevista and podeEntrevista and !eu and avaliacaoPendente[a.id] != null}"
-                                       th:href="@{/prontuario/{id}/nova-entrevista(id=${a.id}, avaliacaoId=${avaliacaoPendente[a.id]})}"
-                                       class="btn btn-teal btn-sm text-white">
-                                        <i class="bi bi-plus-lg"></i> Registrar Entrevista
-                                    </a>
-                                    <span th:if="${eu and (emAvaliacao or aguardandoEntrevista) and (podeAvaliacao or podeEntrevista)}"
-                                          class="dl-muted small">
-                                        <i class="bi bi-person-x"></i> É você — outro trabalhador atende
-                                    </span>
-                                    <a th:href="@{/prontuario/{id}/cartao(id=${a.id})}" class="btn btn-outline-teal btn-sm">
-                                        <i class="bi bi-card-checklist"></i> Cartão
-                                    </a>
-                                    <a th:href="@{/prontuario/{id}(id=${a.id})}" class="btn btn-outline-teal btn-sm">
-                                        Ver Prontuário <i class="bi bi-arrow-right"></i>
-                                    </a>
+                                             aguardandoEntrevista=${a.statusCartao != null and a.statusCartao.name() == 'AGUARDANDO_ENTREVISTA'},
+                                             comFila=${(emAvaliacao and podeAvaliacao) or (aguardandoEntrevista and podeEntrevista)}">
+                                    <div class="dl-acoes-linha" th:classappend="${comFila ? 'dl-com-fila' : ''}">
+                                        <!--/* A ação da fila na própria linha (2026-10-11). Ninguém atende a si mesmo. */-->
+                                        <a th:if="${emAvaliacao and podeAvaliacao and !eu}"
+                                           th:href="@{/prontuario/{id}/nova-avaliacao(id=${a.id})}"
+                                           class="btn btn-teal btn-sm text-white dl-acao-fila">
+                                            <i class="bi bi-clipboard2-pulse"></i> Registrar Avaliação
+                                        </a>
+                                        <a th:if="${aguardandoEntrevista and podeEntrevista and !eu and avaliacaoPendente[a.id] != null}"
+                                           th:href="@{/prontuario/{id}/nova-entrevista(id=${a.id}, avaliacaoId=${avaliacaoPendente[a.id]})}"
+                                           class="btn btn-teal btn-sm text-white dl-acao-fila">
+                                            <i class="bi bi-chat-left-text"></i> Registrar Entrevista
+                                        </a>
+                                        <span th:if="${eu and (emAvaliacao or aguardandoEntrevista) and (podeAvaliacao or podeEntrevista)}"
+                                              class="dl-badge dl-badge-neutral"
+                                              title="Ninguém conduz o próprio tratamento: outro trabalhador atende.">
+                                            <i class="bi bi-person-x"></i> É você
+                                        </span>
+                                        <a th:href="@{/prontuario/{id}/cartao(id=${a.id})}" class="btn btn-outline-teal btn-sm"
+                                           title="Cartão" th:attr="aria-label=${'Cartão de ' + a.nome}">
+                                            <i class="bi bi-card-checklist"></i><span class="dl-rotulo-acao"> Cartão</span>
+                                        </a>
+                                        <a th:href="@{/prontuario/{id}(id=${a.id})}" class="btn btn-outline-teal btn-sm"
+                                           title="Prontuário" th:attr="aria-label=${'Prontuário de ' + a.nome}">
+                                            <i class="bi bi-folder2-open"></i><span class="dl-rotulo-acao"> Prontuário</span>
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -143,6 +221,20 @@
 
 <script th:inline="javascript">
     (function () {
+        // Navegador sem o atributo popover (anterior a 2024): o selo abre e fecha o quadro à mão.
+        if (!HTMLElement.prototype.hasOwnProperty('popover')) {
+            document.addEventListener('click', function (evento) {
+                var botao = evento.target.closest('[popovertarget]');
+                document.querySelectorAll('.dl-popover.dl-popover-aberto').forEach(function (aberto) {
+                    if (!botao || aberto.id !== botao.getAttribute('popovertarget')) aberto.classList.remove('dl-popover-aberto');
+                });
+                if (!botao) return;
+                var alvo = document.getElementById(botao.getAttribute('popovertarget'));
+                if (alvo) alvo.classList.toggle('dl-popover-aberto', botao.getAttribute('popovertargetaction') !== 'hide'
+                        && !alvo.classList.contains('dl-popover-aberto'));
+            });
+        }
+
         var tabela = document.getElementById('tabelaAssistidos');
         var busca = document.getElementById('buscaAssistido');
         if (!tabela) return;
@@ -170,7 +262,9 @@
 
         function marcarChip() {
             chips.forEach(function (chip) {
-                chip.classList.toggle('active', chip.getAttribute('data-filtro') === filtro);
+                var ativo = chip.getAttribute('data-filtro') === filtro;
+                chip.classList.toggle('active', ativo);
+                chip.setAttribute('aria-pressed', ativo ? 'true' : 'false');
             });
         }
         chips.forEach(function (chip) {

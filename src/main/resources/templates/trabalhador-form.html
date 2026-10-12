@@ -13,7 +13,7 @@
                     <span class="dl-eyebrow" th:text="${assistido.nome}">Assistido</span>
                     <h1>Perfil de Trabalho</h1>
                 </div>
-                <a th:href="@{/trabalhadores}" class="btn btn-outline-teal btn-sm">
+                <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
                     <i class="bi bi-arrow-left"></i> Voltar
                 </a>
             </div>
@@ -74,7 +74,7 @@
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
-                            <a th:href="@{/trabalhadores}" class="btn btn-outline-teal">Cancelar</a>
+                            <a th:href="@{/prontuario/{id}(id=${assistido.id})}" class="btn btn-outline-teal">Cancelar</a>
                             <button type="submit" class="btn btn-teal text-white">
                                 <i class="bi bi-check-lg"></i> Salvar Perfil de Trabalho
                             </button>

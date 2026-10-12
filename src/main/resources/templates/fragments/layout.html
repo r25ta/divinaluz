@@ -80,9 +80,8 @@
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções
                 </a>
-                <a th:if="${podeTrabalhadores}" th:href="@{/trabalhadores}" class="btn btn-nav btn-sm">
-                    <i class="bi bi-people"></i> Trabalhadores
-                </a>
+                <!--/* "Trabalhadores" saiu do menu em 2026-10-11: os perfis de trabalho de cada pessoa ficam
+                       no prontuário dela, junto de Editar Dados e Criar Acesso (e no selo da listagem). */-->
                 <!--/* "Novo Cadastro" saiu do menu em 2026-10-11: mora na listagem do Prontuário, à direita,
                        abaixo da busca. Quem cadastra (Recepcionista, Dirigente) sempre tem a listagem. */-->
                 <form th:action="@{/logout}" method="post" class="d-inline">

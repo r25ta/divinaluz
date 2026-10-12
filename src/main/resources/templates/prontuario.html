@@ -86,6 +86,13 @@
                         <a th:href="@{/prontuario/{id}/editar(id=${assistido.id})} + '#acesso'" class="btn btn-outline-teal btn-sm">
                             <i class="bi bi-person-plus"></i> <span th:text="${assistido.login == null ? 'Criar Acesso' : 'Editar Acesso'}">Criar Acesso</span>
                         </a>
+                        <!-- Perfis de trabalho (2026-10-11): saíram do menu e ficam aqui, só para quem tem
+                             TRABALHADORES (o Dirigente). Convidado não vira trabalhador. -->
+                        <a th:if="${podeTrabalhadores and !assistido.convidado}"
+                           th:href="@{/trabalhadores/{id}(id=${assistido.id})}" class="btn btn-outline-teal btn-sm">
+                            <i class="bi bi-people"></i>
+                            <span th:text="${assistido.vinculo == 'TRABALHADOR' ? 'Perfis de Trabalho' : 'Tornar Trabalhador'}">Perfis de Trabalho</span>
+                        </a>
                         <!-- Quem entra por código de e-mail às vezes diz, no atendimento, que o código não
                              chegou; a recepção reenvia daqui sem mexer no banco. O código vai para o e-mail
                              do cadastro (ou, nos acessos antigos, para o login que é um e-mail). -->

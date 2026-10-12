@@ -124,7 +124,7 @@ function Definir-Funcao([string]$AdminJar, [string]$AssistidoId, [string]$Funcao
     # Segue o redirect para consumir a mensagem flash: duas POSTs seguidas sem o GET empilhariam
     # flash maps para o mesmo destino e o Spring entregaria o mais antigo (ver CLAUDE.md, item 6).
     # A página fica guardada para quem quiser conferir a mensagem desta ação.
-    $script:UltimaPaginaTrabalhadores = (Invoke-CurlForm -Url "$BaseUrl/trabalhadores").Body
+    $script:UltimaPaginaTrabalhadores = (Invoke-CurlForm -Url "$BaseUrl/prontuario/$AssistidoId").Body
     $script:CookieJar = $jarAnterior
     $script:CsrfToken = $csrfAnterior
 }
@@ -671,7 +671,12 @@ try {
             $r.Body -notmatch "func-SECRETARIA" -and $r.Body -notmatch "func-FACILITADOR" -and $r.Body -notmatch "func-EDUCADOR")
 
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "ENTREVISTADOR" }
-        Check "Promover a trabalhador redireciona para o módulo" ($r.StatusCode -eq 302 -and $r.Location -match "trabalhadores$")
+        Check "Promover a trabalhador volta ao prontuário" ($r.StatusCode -eq 302 -and $r.Location -match "prontuario/$trabalhadorId$")
+        # Segue o redirect (consome a mensagem flash) e confere o botão que substituiu o item do menu.
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+        Check "Prontuário mostra a mensagem e o botão Perfis de Trabalho" (
+            $r.Body -match "cadastrado\(a\) como trabalhador" -and $r.Body -match "Perfis de Trabalho" -and
+            $r.Body -match "trabalhadores/$trabalhadorId")
 
         $perfilPromovido = Invoke-SqlScalar "SELECT a.vinculo || '|' || tf.funcao FROM assistido a JOIN trabalhador t ON t.assistido_id = a.id JOIN trabalhador_funcao tf ON tf.trabalhador_id = t.id WHERE a.id = $trabalhadorId;"
         Check "Assistido evoluiu para TRABALHADOR com o perfil Entrevistador" ($perfilPromovido -eq "TRABALHADOR|ENTREVISTADOR")
@@ -687,11 +692,14 @@ try {
 
         # Despromover: sem nenhum perfil marcado ele volta a ser só assistido.
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{}
+        $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+        Check "Somente assistido, o prontuário oferece Tornar Trabalhador" ($r.Body -match "Tornar Trabalhador")
         $vinculoDespromovido = Invoke-SqlScalar "SELECT vinculo FROM assistido WHERE id = $trabalhadorId;"
         Check "Sem nenhum perfil marcado, volta a ser somente assistido" ($vinculoDespromovido -eq "ASSISTIDO")
 
         # ...e volta a ser trabalhador (Passista) para o teste do preletor da sessão, adiante.
         $r = Invoke-CurlForm -Method POST -Url "$BaseUrl/trabalhadores/$trabalhadorId" -Form @{ funcoes = "PASSISTA" }
+        Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId" | Out-Null
         $funcaoAtualizada = Invoke-SqlScalar "SELECT tf.funcao FROM trabalhador_funcao tf JOIN trabalhador t ON t.id = tf.trabalhador_id WHERE t.assistido_id = $trabalhadorId;"
         Check "Perfil atualizado para Passista (Entrevistador removido)" ($funcaoAtualizada -eq "PASSISTA")
     }

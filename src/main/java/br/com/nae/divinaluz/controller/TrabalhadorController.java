@@ -92,6 +92,7 @@ public class TrabalhadorController {
             redirectAttributes.addFlashAttribute("aviso", assistido.getNome()
                     + " ainda não tem login, então as funções não liberam módulo nenhum. Crie o acesso pelo prontuário.");
         }
-        return "redirect:/trabalhadores";
+        // Volta ao prontuário: desde 2026-10-11 é de lá que se chega aqui (o item saiu do menu).
+        return "redirect:/prontuario/" + assistidoId;
     }
 }

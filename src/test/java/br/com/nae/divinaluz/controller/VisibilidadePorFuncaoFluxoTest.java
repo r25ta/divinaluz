@@ -24,9 +24,11 @@ import java.util.Set;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -226,6 +228,31 @@ class VisibilidadePorFuncaoFluxoTest {
                 .andExpect(content().string(containsString("/trabalhadores/" + passista.getId())))
                 .andExpect(content().string(containsString("popovertarget=\"perfis-" + emTratamento.getId() + "\"")))
                 .andExpect(content().string(containsString("Tornar trabalhador")));
+    }
+
+    // "Trabalhadores" saiu do menu (2026-10-11) e virou botão do prontuário, só para quem tem
+    // TRABALHADORES; salvar os perfis volta ao prontuário.
+    @Test
+    void perfisDeTrabalhoFicamNoProntuarioENaoNoMenu() throws Exception {
+        Assistido passista = trabalhador("visib.botao.passista", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.PASSISTA);
+        Assistido recepcionista = trabalhador("visib.botao.recep", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.RECEPCIONISTA);
+        Assistido dirigente = trabalhador("visib.botao.dirig", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.DIRIGENTE);
+        UserDetails dirig = autoridades.usuario(dirigente);
+
+        mvc.perform(get("/prontuario/" + passista.getId()).with(user(dirig)))
+                .andExpect(content().string(containsString("/trabalhadores/" + passista.getId() + "\"")))
+                .andExpect(content().string(containsString("Perfis de Trabalho")))
+                .andExpect(content().string(not(containsString("/trabalhadores\""))));
+        mvc.perform(get("/prontuario/" + emTratamento.getId()).with(user(dirig)))
+                .andExpect(content().string(containsString("Tornar Trabalhador")));
+        mvc.perform(get("/prontuario/" + passista.getId()).with(user(autoridades.usuario(recepcionista))))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("/trabalhadores/" + passista.getId()))));
+
+        mvc.perform(post("/trabalhadores/" + passista.getId()).with(user(dirig)).with(csrf())
+                        .param("funcoes", "PASSISTA"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/prontuario/" + passista.getId()));
     }
 
     // Health check público para monitor externo (2026-10-11), só com o status.

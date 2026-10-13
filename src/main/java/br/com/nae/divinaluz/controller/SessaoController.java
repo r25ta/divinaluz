@@ -9,6 +9,7 @@ import br.com.nae.divinaluz.service.CheckinService;
 import br.com.nae.divinaluz.service.CodigoQrSessao;
 import br.com.nae.divinaluz.service.QrCodeService;
 import br.com.nae.divinaluz.service.SessaoService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -67,7 +68,14 @@ public class SessaoController {
     public String abrirSessao(@RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate data,
             RedirectAttributes redirectAttributes) {
         try {
-            SessaoAssistencia sessao = sessaoService.garantirSessao(data);
+            SessaoAssistencia sessao;
+            try {
+                sessao = sessaoService.garantirSessao(data);
+            } catch (DataIntegrityViolationException e) {
+                // Duas recepções abriram a mesma data no mesmo instante: a outra criou a sessão (data é
+                // única) e esta tentativa foi desfeita. Basta buscar a que ficou (2026-10-13).
+                sessao = sessaoService.garantirSessao(data);
+            }
             LocalDate hoje = LocalDate.now();
             if (hoje.equals(sessao.getData()) && sessao.isEditavel() && !sessao.isCheckinAberto()) {
                 checkinService.abrirCheckin(sessao.getId(), hoje);

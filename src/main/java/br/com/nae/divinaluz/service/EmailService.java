@@ -2,16 +2,23 @@ package br.com.nae.divinaluz.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import br.com.nae.divinaluz.exception.EnvioDeEmailException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 /**
- * Envio do e-mail de definição de senha do acesso do assistido (ver AcessoService). Sem
- * {@code app.mail.habilitado=true} configurado (precisa de credenciais SMTP reais — ver
- * application.properties), o e-mail não é enviado de verdade: o link fica só no log, para
- * continuar testável em dev sem depender de um provedor de e-mail configurado.
+ * E-mails do acesso ao sistema: o código de entrada (ver CodigoAcessoService) e o aviso de boas-vindas
+ * (ver AcessoService). Sem {@code app.mail.habilitado=true} configurado (precisa de credenciais SMTP
+ * reais — ver application.properties), o e-mail não é enviado de verdade: o conteúdo fica só no log,
+ * para continuar testável em dev sem depender de um provedor de e-mail configurado.
+ *
+ * <p>Uma falha do servidor de e-mail vira {@link EnvioDeEmailException} (2026-10-13), com o motivo no
+ * log: antes, ela subia como erro 500 — e um SMTP fora do ar derrubava até o cadastro, que já tinha
+ * sido gravado. Os tempos de espera do SMTP ficam em application.properties, para um servidor que não
+ * responde não prender a tela.</p>
  */
 @Service
 public class EmailService {
@@ -33,17 +40,6 @@ public class EmailService {
     /** Envio real ligado? Sem isso a entrada por código não funciona (o código só iria ao log). */
     public boolean isHabilitado() {
         return habilitado;
-    }
-
-    public void enviarDefinicaoSenha(String destinatario, String nomeAssistido, String link) {
-        String assunto = "Defina sua senha de acesso — N.A.E. Divina Luz";
-        String corpo = "Olá, " + nomeAssistido + "!\n\n"
-                + "Seu cadastro foi criado no sistema do N.A.E. Divina Luz. Para acessar seu "
-                + "cartão de assistência espiritual, defina sua senha pelo link abaixo (válido por "
-                + "48 horas):\n\n" + link + "\n\n"
-                + "Se você não reconhece esse cadastro, pode ignorar este e-mail.";
-
-        enviar(destinatario, assunto, corpo, "Link de definição de senha: " + link);
     }
 
     /**
@@ -93,6 +89,14 @@ public class EmailService {
         mensagem.setTo(destinatario);
         mensagem.setSubject(assunto);
         mensagem.setText(corpo);
-        mailSender.send(mensagem);
+        try {
+            mailSender.send(mensagem);
+        } catch (MailException e) {
+            // Nem o destinatário nem o assunto vão para o log: o e-mail de quem frequenta a casa é dado
+            // pessoal, e o assunto do código de entrada carrega o próprio código.
+            log.error("Falha ao enviar e-mail: {}", e.getMessage());
+            throw new EnvioDeEmailException("O servidor de e-mail não respondeu e a mensagem não foi enviada. "
+                    + "Tente de novo em alguns minutos.", e);
+        }
     }
 }

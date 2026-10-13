@@ -1,9 +1,12 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.EnvioDeEmailException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,8 @@ import java.util.regex.Pattern;
  */
 @Service
 public class AcessoService {
+
+    private static final Logger log = LoggerFactory.getLogger(AcessoService.class);
 
     public static final int SENHA_MINIMA = 6;
     private static final int LOGIN_MAXIMO = 80;
@@ -228,13 +233,17 @@ public class AcessoService {
                 ? PerfilAcesso.TRABALHADOR : PerfilAcesso.ASSISTIDO);
         assistido.setAcessoAtivo(true);
         assistido.setSenha(senha == null || senha.isBlank() ? null : passwordEncoder.encode(senha));
-        assistido.setTokenDefinicaoSenha(null);
-        assistido.setTokenDefinicaoSenhaExpiraEm(null);
         assistidoRepository.save(assistido);
 
         // Só avisa por e-mail quem pode entrar por código — com o envio desligado isto só iria ao log.
+        // O aviso é cortesia: o acesso já foi gravado e a pessoa entra pedindo o código em /entrar. Um
+        // servidor de e-mail fora do ar não pode transformar o cadastro em erro (2026-10-13).
         if (assistido.getEmail() != null && envioDeEmailLigado()) {
-            emailService.enviarBoasVindas(assistido.getEmail(), assistido.getNome(), baseUrl + "/entrar");
+            try {
+                emailService.enviarBoasVindas(assistido.getEmail(), assistido.getNome(), baseUrl + "/entrar");
+            } catch (EnvioDeEmailException e) {
+                log.warn("Acesso do cadastro #{} criado, mas o aviso de boas-vindas não foi enviado.", assistido.getId());
+            }
         }
     }
 

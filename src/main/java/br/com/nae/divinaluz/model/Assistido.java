@@ -105,14 +105,8 @@ public class Assistido {
     @Column(name = "acesso_ativo", nullable = false)
     private boolean acessoAtivo = true;
 
-    // Token de definição de senha enviado por e-mail no cadastro (ver AcessoService). Some quando
-    // a senha é definida (ou o link expira/é reemitido); nunca é bindado do form de cadastro.
-    @ToString.Exclude
-    @Column(name = "token_definicao_senha", unique = true, length = 64)
-    private String tokenDefinicaoSenha;
-
-    @Column(name = "token_definicao_senha_expira_em")
-    private LocalDateTime tokenDefinicaoSenhaExpiraEm;
+    // As colunas token_definicao_senha/..._expira_em (V30) ficaram sem uso: o link de definição de
+    // senha deu lugar ao código de e-mail em 2026-10-02 e a tela dele saiu em 2026-10-13.
 
     // Entrada por código de e-mail (ver CodigoAcessoService). Guarda o HASH do código, nunca o código:
     // são só 6 dígitos, e há dump diário do banco. Os quatro campos andam juntos e são limpos assim

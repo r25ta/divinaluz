@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -298,6 +300,24 @@ class CheckinServiceTest {
 
         assertTrue(resultado.jaEstavaPresente());
         verify(tratamentoService, never()).registrarSessao(any(), anyBoolean());
+    }
+
+    // Toque duplo no "Confirmar" (2026-10-13): os dois pedidos chegam juntos, e o segundo só confere se a
+    // pessoa já está na lista depois de o primeiro terminar — a trava vem antes da conferência.
+    @Test
+    void autoCheckinTravaOCadastroAntesDeConferirSeJaEstaPresente() {
+        String codigo = qrValido();
+        assistido.setAtivo(true);
+        SessaoTratamento existente = new SessaoTratamento();
+        existente.setAssistido(assistido);
+        existente.setDataConsulta(DOMINGO);
+        when(sessaoRepository.findByDataConsulta(DOMINGO)).thenReturn(java.util.List.of(existente));
+
+        checkinService.registrarAutoCheckin(10L, codigo, assistido);
+
+        InOrder ordem = inOrder(assistidoRepository, sessaoRepository);
+        ordem.verify(assistidoRepository).travarParaAtualizacao(5L);
+        ordem.verify(sessaoRepository).findByDataConsulta(DOMINGO);
     }
 
     @Test

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -104,6 +106,20 @@ class TratamentoServiceTest {
         assertTrue(novaSessao.isOuvinte());
         assertEquals(null, novaSessao.getNumeroSerie());
         verify(sessaoRepository).save(novaSessao);
+    }
+
+    // Duas marcações da mesma pessoa ao mesmo tempo (2026-10-13): a trava do cadastro vem antes de
+    // conferir a semana, senão as duas viam a semana vazia e o cartão ganhava duas presenças efetivas.
+    @Test
+    void registrarSessaoTravaOCadastroAntesDeConferirASemana() {
+        when(sessaoRepository.findByAssistidoIdOrderByDataConsultaDesc(1L))
+                .thenReturn(List.of(sessao(LocalDate.of(2026, 9, 20))));
+
+        tratamentoService.registrarSessao(sessao(LocalDate.of(2026, 9, 22)));
+
+        InOrder ordem = inOrder(assistidoRepository, sessaoRepository);
+        ordem.verify(assistidoRepository).travarParaAtualizacao(1L);
+        ordem.verify(sessaoRepository).findByAssistidoIdOrderByDataConsultaDesc(1L);
     }
 
     @Test

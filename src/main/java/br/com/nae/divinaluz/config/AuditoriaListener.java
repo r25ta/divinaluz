@@ -80,7 +80,7 @@ public class AuditoriaListener implements PostInsertEventListener, PostUpdateEve
     public static final String SISTEMA = "(sistema)";
 
     /** Hashes, senhas e códigos: a auditoria diz que mudaram, nunca o valor. */
-    private static final Set<String> CAMPOS_OCULTOS = Set.of("senha", "codigoAcesso", "tokenDefinicaoSenha",
+    private static final Set<String> CAMPOS_OCULTOS = Set.of("senha", "codigoAcesso",
             "conviteCelularHash", "checkinSegredo", "tokenHash", "codigoCartao");
     private static final String OCULTO = "(oculto)";
 

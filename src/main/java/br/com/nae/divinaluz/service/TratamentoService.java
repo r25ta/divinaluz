@@ -104,6 +104,11 @@ public class TratamentoService {
         if (novaSessao.getDataConsulta() == null) {
             throw new RegraNegocioException("Informe a data da sessão.");
         }
+        // Uma marcação de cada vez para a mesma pessoa: com duas ao mesmo tempo, as duas viam a semana
+        // vazia e o cartão ganhava duas presenças efetivas (ver AssistidoRepository.travarParaAtualizacao).
+        if (assistidoId != null) {
+            assistidoRepository.travarParaAtualizacao(assistidoId);
+        }
         validarSessaoNaoCancelada(novaSessao.getDataConsulta());
         if (assistido.getStatusCartao() == CartaoStatus.ALTA) {
             return registrarSessaoAposAlta(novaSessao, confirmarReinicio);

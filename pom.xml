@@ -48,7 +48,7 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
-		<!-- E-mail de definição de senha no cadastro de assistido (ver EmailService) -->
+		<!-- Código de entrada e aviso de boas-vindas por e-mail (ver EmailService) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
@@ -94,12 +94,10 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- Source: https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-thymeleaf -->
+		<!-- Versão gerida pelo spring-boot-starter-parent: fixada aqui, ela ficaria para trás no próximo upgrade. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
-			<version>4.1.1</version>
-			<scope>compile</scope>
 		</dependency>
 
 		<!-- QR code do cartão de assistência (gerado como PNG no servidor, ver CheckinController) -->
@@ -113,8 +111,6 @@
 			<artifactId>javase</artifactId>
 			<version>3.5.3</version>
 		</dependency>
-
-		
 	</dependencies>
 
 	<build>

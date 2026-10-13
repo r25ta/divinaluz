@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.EnvioDeEmailException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -113,6 +115,29 @@ class CodigoAcessoServiceTest {
         codigoAcessoService.solicitar(EMAIL);
 
         verify(emailService).enviarCodigoAcesso(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    // Pedidos em paralelo liam o mesmo contador de tentativas (2026-10-13): a trava vem antes de conferir.
+    @Test
+    void conferirTravaOCadastroAntesDeConferir() {
+        String codigo = solicitarECapturarCodigo();
+
+        codigoAcessoService.conferir(EMAIL, codigo);
+
+        verify(assistidoRepository).travarParaAtualizacao(7L);
+    }
+
+    // Servidor de e-mail fora do ar (2026-10-13): o pedido não vira erro na tela (que diz a mesma frase
+    // para qualquer e-mail) e a pessoa pode pedir de novo na hora, sem esperar o intervalo mínimo.
+    @Test
+    void falhaDoServidorDeEmailNaoDerrubaOPedidoNemSeguraOProximo() {
+        when(assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(EMAIL)).thenReturn(Optional.of(maria));
+        doThrow(new EnvioDeEmailException("fora do ar", new RuntimeException("SMTP")))
+                .when(emailService).enviarCodigoAcesso(anyString(), anyString(), anyString(), anyInt());
+
+        codigoAcessoService.solicitar(EMAIL);
+
+        assertNull(maria.getCodigoAcessoEnviadoEm(), "sem envio, o intervalo mínimo não pode valer");
     }
 
     @Test

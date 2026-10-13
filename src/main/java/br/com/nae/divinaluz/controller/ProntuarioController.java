@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.exception.AvaliacaoPendenteException;
 import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
@@ -283,7 +284,7 @@ public class ProntuarioController {
     @GetMapping("/prontuario/{id}/editar")
     public String editarAssistido(@PathVariable Long id, Authentication authentication, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
         return exibirEdicao(model, assistido, null, false, authentication, null);
     }
 
@@ -339,7 +340,7 @@ public class ProntuarioController {
             @RequestParam(defaultValue = "false") boolean acessoAtivo,
             Authentication authentication, Model model, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
 
         boolean temAcesso = assistido.getLogin() != null;
         boolean vaiCriarAcesso = !temAcesso && criarAcesso;
@@ -512,7 +513,7 @@ public class ProntuarioController {
     @PostMapping("/prontuario/{assistidoId}/desativar")
     public String desativarAssistido(@PathVariable Long assistidoId) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         assistido.setAtivo(false);
         assistidoRepository.save(assistido);
         return "redirect:/prontuario/" + assistidoId;
@@ -521,7 +522,7 @@ public class ProntuarioController {
     @PostMapping("/prontuario/{assistidoId}/reativar")
     public String reativarAssistido(@PathVariable Long assistidoId) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         assistido.setAtivo(true);
         assistidoRepository.save(assistido);
         return "redirect:/prontuario/" + assistidoId;
@@ -535,14 +536,19 @@ public class ProntuarioController {
     @PostMapping("/prontuario/{assistidoId}/reenviar-codigo")
     public String reenviarCodigoAcesso(@PathVariable Long assistidoId, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
 
-        if (codigoAcessoService.reenviarPara(assistido)) {
-            redirectAttributes.addFlashAttribute("sucesso",
-                    "Código enviado para " + assistido.getLogin() + ". Vale por 15 minutos.");
-        } else {
-            redirectAttributes.addFlashAttribute("erro",
-                    "Este assistido não entra por código: o acesso dele não é um e-mail ativo.");
+        try {
+            if (codigoAcessoService.reenviarPara(assistido)) {
+                redirectAttributes.addFlashAttribute("sucesso",
+                        "Código enviado para " + CodigoAcessoService.destinoDoCodigo(assistido) + ". Vale por 15 minutos.");
+            } else {
+                redirectAttributes.addFlashAttribute("erro",
+                        "Este assistido não entra por código: o acesso dele não é um e-mail ativo.");
+            }
+        } catch (RegraNegocioException e) {
+            // O servidor de e-mail não respondeu (EnvioDeEmailException): nada foi gravado.
+            redirectAttributes.addFlashAttribute("erro", e.getMessage());
         }
         return "redirect:/prontuario/" + assistidoId;
     }
@@ -553,7 +559,7 @@ public class ProntuarioController {
             @AuthenticationPrincipal UserDetails usuarioLogado, RedirectAttributes redirectAttributes) {
         // Busca o assistido pelo ID
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
 
         // Todo trabalhador é também assistido: com o PRÓPRIO cartão em avaliação ou aguardando a
         // entrevista, ele não vê o próprio prontuário (onde está o que o Avaliador decidiu) — só outro
@@ -678,7 +684,7 @@ public class ProntuarioController {
      */
     private Assistido exigirAcessoAoCartao(Long id, Assistido logado, UserDetails usuarioLogado) {
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
         if (!id.equals(logado.getId()) && !podeVerDeOutro(assistido, usuarioLogado)) {
             throw new AccessDeniedException("Sem permissão para consultar o cartão de outro assistido.");
         }
@@ -841,7 +847,7 @@ public class ProntuarioController {
             @RequestParam(required = false) DiaFrequencia diaFrequencia,
             @RequestParam(required = false) String motivo) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
 
         tratamentoService.alterarDiaFrequencia(assistido, diaFrequencia, motivo);
 
@@ -855,7 +861,7 @@ public class ProntuarioController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
 
         TipoTratamento tratamento = tratamentoAtualId != null
                 ? tipoTratamentoRepository.findById(tratamentoAtualId).orElse(null)
@@ -880,7 +886,7 @@ public class ProntuarioController {
     @GetMapping("/prontuario/{id}/nova-sessao")
     public String novaSessao(@PathVariable Long id, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
 
         model.addAttribute("assistido", assistido);
         model.addAttribute("sessao", new SessaoTratamento());
@@ -894,7 +900,7 @@ public class ProntuarioController {
     public String salvarSessao(@PathVariable Long assistidoId, @ModelAttribute SessaoTratamento sessao,
             @RequestParam(defaultValue = "false") boolean reiniciarP2, RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         sessao.setAssistido(assistido);
 
         try {
@@ -934,7 +940,7 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
         if (assistido.getStatusCartao() != CartaoStatus.AGUARDANDO_AVALIACAO) {
             redirectAttributes.addFlashAttribute("erro", "A avaliação só é registrada com o cartão \""
                     + CartaoStatus.AGUARDANDO_AVALIACAO.getLabel() + "\" (4 sessões cumpridas).");
@@ -969,7 +975,7 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         avaliacao.setAssistido(assistido);
 
         try {
@@ -995,9 +1001,9 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Avaliação inválida: " + avaliacaoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Avaliação inválida: " + avaliacaoId));
         String problema = problemaParaEntrevistar(assistido, avaliacao);
         if (problema != null) {
             redirectAttributes.addFlashAttribute("erro", problema);
@@ -1056,9 +1062,9 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         Avaliacao avaliacao = avaliacaoRepository.findById(avaliacaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Avaliação inválida: " + avaliacaoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Avaliação inválida: " + avaliacaoId));
 
         entrevista.setAssistido(assistido);
         entrevista.setAvaliacao(avaliacao);
@@ -1095,7 +1101,7 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(id, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
         Entrevista entrevista = new Entrevista();
         entrevista.setTipo(tipo);
         entrevista.setData(data != null ? data : LocalDate.now());
@@ -1124,7 +1130,7 @@ public class ProntuarioController {
             return voltarAoProntuarioOuFila(assistidoId, usuarioLogado);
         }
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         entrevista.setAssistido(assistido);
         entrevista.setTipo(tipo);
         try {

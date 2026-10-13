@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -110,7 +111,7 @@ public class ConvidadoController {
     private Assistido buscar(Long convidadoId) {
         return assistidoRepository.findById(convidadoId)
                 .filter(Assistido::isConvidado)
-                .orElseThrow(() -> new IllegalArgumentException("Convidado inválido: " + convidadoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Convidado inválido: " + convidadoId));
     }
 
     private static String opcional(String valor, int maximo) {

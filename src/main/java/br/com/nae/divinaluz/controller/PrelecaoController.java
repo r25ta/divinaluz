@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.Prelecao;
 import br.com.nae.divinaluz.model.SituacaoPrelecao;
@@ -236,7 +237,7 @@ public class PrelecaoController {
             return;
         }
         Trabalhador preletor = trabalhadorRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Preletor inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Preletor inválido: " + id));
         validarPreletor(preletor);
         prelecao.setPreletor(preletor);
     }
@@ -324,7 +325,7 @@ public class PrelecaoController {
 
     private Prelecao buscar(Long prelecaoId) {
         return prelecaoRepository.findById(prelecaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Preleção inválida: " + prelecaoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Preleção inválida: " + prelecaoId));
     }
 
     private void prepararFormulario(Model model, Prelecao prelecao, String preletorEscolhido) {

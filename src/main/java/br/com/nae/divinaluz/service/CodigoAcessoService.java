@@ -1,7 +1,10 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.EnvioDeEmailException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,6 +55,11 @@ public class CodigoAcessoService {
     private final EmailService emailService;
     private final SecureRandom random = new SecureRandom();
 
+    // Para reler o cadastro depois de travá-lo (ver travarParaConferir). Por campo, e não pelo construtor,
+    // para os testes de unidade continuarem montando o serviço só com os mocks.
+    @PersistenceContext
+    private EntityManager entityManager;
+
     public CodigoAcessoService(AssistidoRepository assistidoRepository, PasswordEncoder passwordEncoder,
             EmailService emailService) {
         this.assistidoRepository = assistidoRepository;
@@ -89,7 +97,14 @@ public class CodigoAcessoService {
             log.debug("Pedido de código repetido dentro do intervalo mínimo; nada enviado.");
             return;
         }
-        gerarEEnviar(assistido);
+        try {
+            gerarEEnviar(assistido);
+        } catch (EnvioDeEmailException e) {
+            // A tela continua dizendo a mesma frase para qualquer e-mail (não revela quem é cadastrado).
+            // Sem o envio, o intervalo mínimo não vale: a pessoa pode pedir de novo em seguida.
+            assistido.setCodigoAcessoEnviadoEm(null);
+            assistidoRepository.save(assistido);
+        }
     }
 
     /**
@@ -104,6 +119,7 @@ public class CodigoAcessoService {
             return new Conferencia(Resultado.INVALIDO, null);
         }
         Assistido assistido = encontrado.get();
+        travarParaConferir(assistido);
 
         if (assistido.getCodigoAcesso() == null || assistido.getCodigoAcessoExpiraEm() == null) {
             return new Conferencia(Resultado.EXPIRADO, null);
@@ -162,6 +178,20 @@ public class CodigoAcessoService {
         }
         return assistidoRepository.findFirstByEmailIgnoreCaseAndLoginIsNotNullAndAcessoAtivoTrue(informado)
                 .or(() -> assistidoRepository.findByLoginIgnoreCaseAndAcessoAtivoTrue(informado));
+    }
+
+    /**
+     * Trava o cadastro até o fim da transação e relê o estado do código do banco (2026-10-13). Sem isso,
+     * pedidos enviados em paralelo liam todos o mesmo contador de tentativas antes de qualquer um gravar:
+     * em vez de 5 tentativas por código, quem disparasse 100 pedidos de uma vez testava 100 códigos. Com
+     * a trava, eles são conferidos um de cada vez, cada um vendo as tentativas já gastas pelos anteriores.
+     */
+    private void travarParaConferir(Assistido assistido) {
+        assistidoRepository.travarParaAtualizacao(assistido.getId());
+        // Com a trava em mãos, a releitura traz o que o pedido anterior acabou de gravar.
+        if (entityManager != null && entityManager.contains(assistido)) {
+            entityManager.refresh(assistido);
+        }
     }
 
     /** Para onde vai o código: o e-mail do cadastro ou, nos acessos antigos, o login que é e-mail. */

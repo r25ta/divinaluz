@@ -36,6 +36,10 @@ public class DatabaseUrlConfig {
         dataSource.setUsername(conexao.usuario());
         dataSource.setPassword(conexao.senha());
         dataSource.setMaximumPoolSize(env.getProperty("spring.datasource.hikari.maximum-pool-size", Integer.class, 4));
+        // Montado à mão, este pool não lê o spring.datasource.hikari.*: os mesmos cuidados de
+        // application.properties (2026-10-13) — conexão que caiu sem avisar não prende a tela para sempre.
+        dataSource.addDataSourceProperty("socketTimeout", "120");
+        dataSource.addDataSourceProperty("tcpKeepAlive", "true");
         return dataSource;
     }
 

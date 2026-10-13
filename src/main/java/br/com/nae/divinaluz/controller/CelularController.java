@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.config.CookieCelular;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
@@ -110,6 +111,6 @@ public class CelularController {
 
     private Assistido buscar(Long assistidoId) {
         return assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
     }
 }

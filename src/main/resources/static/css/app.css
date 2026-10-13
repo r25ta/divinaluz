@@ -1,5 +1,5 @@
 /* N.A.E. Divina Luz — Design system
-   Paleta baseada no cartão físico turquesa/teal original (ver src/main/resources/spec/). */
+   Paleta baseada no cartão físico turquesa/teal original (ver docs/spec/ na raiz do repositório). */
 
 :root {
   --dl-teal-900: #0B4A4D;
@@ -516,29 +516,6 @@ a {
   vertical-align: bottom;
 }
 
-/* Marcador de frequência mensal (grid principal): mostra a própria data em vez de um ícone,
-   já que precisa caber "dd/MM" em vez de um glifo único. */
-.dl-freq-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.dl-freq-mark.on {
-  background: var(--dl-success-bg);
-  color: var(--dl-success);
-}
-
-.dl-freq-mark.off {
-  background: var(--dl-neutral-bg);
-  color: #B7C0C4;
-}
-
 .dl-table thead th {
   background: var(--dl-teal-900);
   color: #fff;
@@ -580,26 +557,6 @@ a {
   color: var(--dl-teal-300, var(--dl-teal-400));
   display: block;
   margin-bottom: 0.5rem;
-}
-
-.dl-check-dot {
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.85rem;
-}
-
-.dl-check-dot.on {
-  background: var(--dl-success-bg);
-  color: var(--dl-success);
-}
-
-.dl-check-dot.off {
-  background: var(--dl-neutral-bg);
-  color: #B7C0C4;
 }
 
 /* ---------- Badges / pills ---------- */
@@ -754,59 +711,6 @@ a {
 .dl-summary-actions {
   padding-top: 1rem;
   border-top: 1px dashed var(--dl-teal-200);
-}
-
-/* ---------- Abas de histórico ---------- */
-
-.dl-tabs {
-  border-bottom: 1px solid var(--dl-border);
-  padding: 0 1.4rem;
-}
-
-.dl-tabs .nav-link {
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--dl-muted);
-  font-weight: 600;
-  font-size: 0.88rem;
-  padding: 0.9rem 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.dl-tabs .nav-link:hover {
-  color: var(--dl-teal-700);
-  border-color: transparent;
-}
-
-.dl-tabs .nav-link.active {
-  color: var(--dl-teal-800);
-  border-bottom-color: var(--dl-teal-600);
-  background: transparent;
-}
-
-.dl-tab-count {
-  background: var(--dl-neutral-bg);
-  color: var(--dl-neutral);
-  font-size: 0.72rem;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 0.05rem 0.5rem;
-}
-
-.dl-tabs .nav-link.active .dl-tab-count {
-  background: var(--dl-teal-100);
-  color: var(--dl-teal-800);
-}
-
-.dl-tab-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1.1rem 1.4rem;
-  flex-wrap: wrap;
 }
 
 /* ---------- Cartão virtual de presença ---------- */

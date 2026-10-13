@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
@@ -218,9 +219,11 @@ public class CheckinService {
         SessaoAssistencia sessao = conferirQrDaSessao(sessaoId, codigo);
         exigirCartaoUtilizavel(assistido);
 
-        Optional<SessaoTratamento> jaPresente = sessaoRepository.findByDataConsulta(sessao.getData()).stream()
-                .filter(s -> s.getAssistido() != null && assistido.getId().equals(s.getAssistido().getId()))
-                .findFirst();
+        // A trava vem antes da conferência: o toque duplo no "Confirmar" (ou a família marcando a mesma
+        // pessoa em dois celulares) chega em dois pedidos ao mesmo tempo, e o segundo precisa ver a
+        // presença que o primeiro gravou.
+        assistidoRepository.travarParaAtualizacao(assistido.getId());
+        Optional<SessaoTratamento> jaPresente = presencaNaData(assistido, sessao);
         if (jaPresente.isPresent()) {
             return new ResultadoAutoCheckin(sessao, assistido, jaPresente.get(), jaPresente.get().isOuvinte(), true);
         }
@@ -271,6 +274,7 @@ public class CheckinService {
     }
 
     /** Presença normal pelo QR: aplica todas as regras do cartão (semana, ciclo de 4, 21 dias, dia da semana). */
+    @Transactional(noRollbackFor = CartaoExpiradoException.class)
     public ResultadoCheckin registrarPresenca(String codigoCartao) {
         return registrarPresenca(codigoCartao, false);
     }
@@ -289,6 +293,8 @@ public class CheckinService {
         return carimbar(exigirCartaoUtilizavel(buscarAssistido(assistidoId)), sessao, confirmarReinicio);
     }
 
+    // A trava contra duas marcações simultâneas da mesma pessoa fica no TratamentoService.registrarSessao.
+    // Uma 2ª leitura do mesmo cartão continua entrando como ouvinte (regra semanal, ver CLAUDE.md 3.12).
     private ResultadoCheckin carimbar(Assistido assistido, SessaoAssistencia sessao, boolean confirmarReinicio) {
         TratamentoService.ResultadoSessao resultado = tratamentoService.registrarSessao(
                 novaPresenca(assistido, sessao), confirmarReinicio);
@@ -318,6 +324,13 @@ public class CheckinService {
         ouvinte.setOuvinte(true);
         ouvinte.setNumeroSerie(null);
         return new ResultadoCheckin(assistido, sessao, sessaoRepository.save(ouvinte), true, false);
+    }
+
+    /** A presença (efetiva ou de ouvinte) que a pessoa já tem na data da sessão, se tiver. */
+    private Optional<SessaoTratamento> presencaNaData(Assistido assistido, SessaoAssistencia sessao) {
+        return sessaoRepository.findByDataConsulta(sessao.getData()).stream()
+                .filter(s -> s.getAssistido() != null && assistido.getId().equals(s.getAssistido().getId()))
+                .findFirst();
     }
 
     private SessaoTratamento novaPresenca(Assistido assistido, SessaoAssistencia sessao) {
@@ -353,11 +366,11 @@ public class CheckinService {
 
     private Assistido buscarAssistido(Long assistidoId) {
         return assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
     }
 
     private SessaoAssistencia buscarSessao(Long sessaoId) {
         return sessaoAssistenciaRepository.findById(sessaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Sessão inválida: " + sessaoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Sessão inválida: " + sessaoId));
     }
 }

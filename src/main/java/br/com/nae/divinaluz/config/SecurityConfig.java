@@ -40,7 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // "/entrar/**" é a entrada por código de e-mail (ver CodigoAcessoService): é
                         // pública por natureza, como o /login — quem a usa ainda não está autenticado.
-                        .requestMatchers("/login", "/entrar", "/entrar/**", "/definir-senha/**", "/acesso-negado", "/error",
+                        .requestMatchers("/login", "/entrar", "/entrar/**", "/acesso-negado", "/error",
                                         "/css/**", "/js/**", "/images/**", "/webjars/**",
                                         // Bootstrap/ícones servidos pelo sistema e o manifesto do app no
                                         // celular (2026-10-05): o navegador os pede sem login (o manifesto,

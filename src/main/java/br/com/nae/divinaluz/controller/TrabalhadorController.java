@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.controller;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
@@ -38,7 +39,7 @@ public class TrabalhadorController {
     @GetMapping("/trabalhadores/{id}")
     public String perfis(@PathVariable Long id, Model model) {
         Assistido assistido = assistidoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + id));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + id));
 
         model.addAttribute("assistido", assistido);
         model.addAttribute("funcoes", TipoTrabalhador.values());
@@ -59,7 +60,7 @@ public class TrabalhadorController {
             @RequestParam(required = false) List<TipoTrabalhador> funcoes,
             RedirectAttributes redirectAttributes) {
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
 
         boolean trocouPerfil = trabalhadorService.definirPerfis(assistido, funcoes);
 

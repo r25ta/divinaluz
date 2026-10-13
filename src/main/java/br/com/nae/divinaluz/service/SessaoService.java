@@ -1,5 +1,6 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.exception.RegistroNaoEncontradoException;
 import br.com.nae.divinaluz.exception.CartaoExpiradoException;
 import br.com.nae.divinaluz.exception.RegraNegocioException;
 import br.com.nae.divinaluz.model.Assistido;
@@ -34,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +48,9 @@ import java.util.stream.Collectors;
 public class SessaoService {
 
     static final int MAXIMO_RESULTADOS_BUSCA = 20;
+    // Compiladas uma vez: a busca da recepção normaliza o nome de cada cadastro a cada letra digitada.
+    private static final Pattern ACENTOS = Pattern.compile("\\p{M}");
+    private static final Pattern ESPACOS = Pattern.compile("\\s+");
     private static final String SEM_TRATAMENTO = "Sem tratamento";
 
     private final SessaoAssistenciaRepository sessaoAssistenciaRepository;
@@ -117,7 +122,7 @@ public class SessaoService {
 
     public SessaoAssistencia buscar(Long sessaoId) {
         return sessaoAssistenciaRepository.findById(sessaoId)
-                .orElseThrow(() -> new IllegalArgumentException("Sessão inválida: " + sessaoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Sessão inválida: " + sessaoId));
     }
 
     public List<SessaoAssistencia> listar() {
@@ -196,7 +201,7 @@ public class SessaoService {
     public Assistido removerPresenca(Long sessaoId, Long assistidoId) {
         SessaoAssistencia sessao = checkinService.exigirCheckinAberto(sessaoId);
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         if (!tratamentoService.desfazerPresenca(assistidoId, sessao.getData())) {
             throw new RegraNegocioException(assistido.getNome() + " não tem presença nesta sessão.");
         }
@@ -422,7 +427,7 @@ public class SessaoService {
     public CheckinService.ResultadoCheckin mudarDiaEMarcarPresenca(Long sessaoId, Long assistidoId) {
         SessaoAssistencia sessao = checkinService.exigirCheckinAberto(sessaoId);
         Assistido assistido = assistidoRepository.findById(assistidoId)
-                .orElseThrow(() -> new IllegalArgumentException("Assistido inválido: " + assistidoId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Assistido inválido: " + assistidoId));
         tratamentoService.alterarDiaFrequencia(assistido, sessao.getDiaFrequencia(),
                 "Solicitado na recepção, na sessão de " + sessao.getDiaFrequencia().getLabel() + ".");
         return checkinService.registrarPresenca(sessaoId, assistidoId, false);
@@ -478,18 +483,15 @@ public class SessaoService {
 
     private Trabalhador buscarTrabalhador(Long trabalhadorId) {
         return trabalhadorRepository.findById(trabalhadorId)
-                .orElseThrow(() -> new IllegalArgumentException("Trabalhador inválido: " + trabalhadorId));
+                .orElseThrow(() -> new RegistroNaoEncontradoException("Trabalhador inválido: " + trabalhadorId));
     }
 
     static String normalizar(String texto) {
         if (texto == null) {
             return "";
         }
-        return Normalizer.normalize(texto, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT)
-                .trim()
-                .replaceAll("\\s+", " ");
+        String semAcento = ACENTOS.matcher(Normalizer.normalize(texto, Normalizer.Form.NFD)).replaceAll("");
+        return ESPACOS.matcher(semAcento.toLowerCase(Locale.ROOT).trim()).replaceAll(" ");
     }
 
     private static boolean preenchido(String texto) {

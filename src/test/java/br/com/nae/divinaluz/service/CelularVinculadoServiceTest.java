@@ -88,6 +88,24 @@ class CelularVinculadoServiceTest {
         assertTrue(vinculos.get(CelularVinculadoService.hash(token)).getUltimoUsoEm() != null);
     }
 
+    // Cada abertura da tela de presença gravava o horário de uso — e cada gravação virava uma linha na
+    // auditoria (2026-10-13). Dentro da mesma hora, o horário fica como está.
+    @Test
+    void identificarSoRegravaOUltimoUsoDepoisDeUmaHora() {
+        String token = service.vincular(List.of(), maria).get(0);
+        CelularVinculado celular = vinculos.get(CelularVinculadoService.hash(token));
+
+        java.time.LocalDateTime recente = java.time.LocalDateTime.now().minusMinutes(10);
+        celular.setUltimoUsoEm(recente);
+        service.identificar(List.of(token));
+        assertEquals(recente, celular.getUltimoUsoEm());
+
+        java.time.LocalDateTime antigo = java.time.LocalDateTime.now().minusHours(2);
+        celular.setUltimoUsoEm(antigo);
+        service.identificar(List.of(token));
+        assertTrue(celular.getUltimoUsoEm().isAfter(antigo));
+    }
+
     @Test
     void tokenDesconhecidoOuDeCadastroDesativadoNaoIdentificaNinguem() {
         List<String> tokens = service.vincular(List.of(), maria);

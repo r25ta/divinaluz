@@ -67,7 +67,13 @@ public class CelularVinculadoService {
             celularVinculadoRepository.findByTokenHash(hash(token))
                     .filter(celular -> celular.getAssistido().isAtivo())
                     .ifPresent(celular -> {
-                        celular.setUltimoUsoEm(LocalDateTime.now());
+                        // Uma gravação por hora basta para saber se o celular está em uso: antes, cada
+                        // abertura da tela de presença (GET e POST, de cada pessoa da família) gravava o
+                        // horário — e cada gravação virava uma linha na auditoria (2026-10-13).
+                        LocalDateTime agora = LocalDateTime.now();
+                        if (celular.getUltimoUsoEm() == null || celular.getUltimoUsoEm().isBefore(agora.minusHours(1))) {
+                            celular.setUltimoUsoEm(agora);
+                        }
                         porPessoa.putIfAbsent(celular.getAssistido().getId(),
                                 new PessoaDoCelular(token, celular.getAssistido()));
                     });

@@ -45,11 +45,18 @@ public class EncerramentoAutomaticoSessoes implements ApplicationRunner {
         encerrar();
     }
 
+    // Uma falha aqui (banco ainda acordando, conexão que caiu) não pode derrubar a subida da aplicação —
+    // um ApplicationRunner que lança exceção aborta o sistema inteiro. Fica no log e a próxima subida, ou a
+    // meia-noite seguinte, tenta de novo (2026-10-13).
     private void encerrar() {
-        int encerradas = checkinService.encerrarSessoesVencidas(LocalDate.now());
-        if (encerradas > 0) {
-            log.info("Encerramento automático: {} sessão(ões) de dias anteriores encerrada(s) às 23:59:59 do dia.",
-                    encerradas);
+        try {
+            int encerradas = checkinService.encerrarSessoesVencidas(LocalDate.now());
+            if (encerradas > 0) {
+                log.info("Encerramento automático: {} sessão(ões) de dias anteriores encerrada(s) às 23:59:59 do dia.",
+                        encerradas);
+            }
+        } catch (RuntimeException e) {
+            log.error("Encerramento automático das sessões falhou; será tentado de novo na próxima subida ou à meia-noite.", e);
         }
     }
 }

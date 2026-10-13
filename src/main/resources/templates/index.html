@@ -91,9 +91,17 @@
                                 th:attr="data-status=${a.statusCartao != null ? a.statusCartao.name() : 'EM_TRATAMENTO'}">
                                 <td class="dl-col-nome">
                                     <div class="dl-linha-nome">
+                                        <!--/* Cadastro ativo/inativo (2026-10-13): o ícone muda de forma além da cor
+                                               (check x X), para quem não distingue verde de vermelho; o texto
+                                               escondido é o que o leitor de tela anuncia. */-->
+                                        <span th:if="${a.ativo}" class="dl-situacao-cadastro dl-situacao-ativo" title="Cadastro ativo">
+                                            <i class="bi bi-check-circle-fill" aria-hidden="true"></i><span class="visually-hidden">Ativo</span>
+                                        </span>
+                                        <span th:unless="${a.ativo}" class="dl-situacao-cadastro dl-situacao-inativo" title="Cadastro inativo">
+                                            <i class="bi bi-x-circle-fill" aria-hidden="true"></i><span class="visually-hidden">Inativo</span>
+                                        </span>
                                         <span class="fw-semibold dl-texto-linha nome-assistido" data-sort-value="nome"
                                               th:text="${a.nome}" th:title="${a.nome}"></span>
-                                        <span th:unless="${a.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
                                     </div>
                                 </td>
                                 <td class="dl-col-endereco" data-label="Endereço">

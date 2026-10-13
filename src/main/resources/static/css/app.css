@@ -1525,6 +1525,20 @@ a {
   min-width: 0;
 }
 
+/* Cadastro ativo (verde, check) ou inativo (vermelho, X) na frente do nome — listagem de Prontuário. */
+.dl-situacao-cadastro {
+  flex: none;
+  display: inline-flex;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.dl-situacao-ativo { color: var(--dl-success); }
+.dl-situacao-inativo { color: var(--dl-danger); }
+
+/* Inativo: o nome também esmaece, para a linha se destacar das ativas quando "Mostrar inativos" está ligado. */
+.dl-situacao-inativo + .nome-assistido { color: var(--dl-muted); }
+
 .dl-texto-linha {
   display: block;
   max-width: 100%;

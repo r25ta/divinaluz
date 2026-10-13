@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +56,10 @@ public class TrabalhadorService {
     @Transactional
     public boolean definirPerfis(Assistido assistido, Collection<TipoTrabalhador> perfis) {
         boolean ehTrabalhador = perfis != null && !perfis.isEmpty();
+        // O Dirigente acumula todos os perfis (2026-10-12): marcado junto com outros, fica só ele.
+        if (ehTrabalhador && perfis.contains(TipoTrabalhador.DIRIGENTE)) {
+            perfis = List.of(TipoTrabalhador.DIRIGENTE);
+        }
 
         Trabalhador trabalhador = trabalhadorRepository.findByAssistidoId(assistido.getId())
                 .orElseGet(() -> {

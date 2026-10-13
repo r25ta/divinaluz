@@ -481,6 +481,12 @@ a {
   color: #fff;
 }
 
+/* Travado: com o Dirigente marcado, os outros perfis não se acumulam (2026-10-12). */
+.dl-role-check:disabled + .dl-role-option {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .dl-role-title {
   font-weight: 620;
   color: var(--dl-ink);

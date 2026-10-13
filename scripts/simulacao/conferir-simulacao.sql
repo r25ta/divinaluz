@@ -128,7 +128,8 @@ SELECT verificacao, problemas FROM (
   UNION ALL
   SELECT 17, 'Preleção: um preletor só, expositor da casa ou convidado',
          count(*) FROM prelecao pr JOIN simulacao_registro r ON r.tabela = 'prelecao' AND r.registro_id = pr.id
-         LEFT JOIN trabalhador_funcao f ON f.trabalhador_id = pr.trabalhador_id AND f.funcao = 'EXPOSITOR_PRELETOR'
+         -- O Dirigente acumula todos os perfis, inclusive o de preletor (V45, 2026-10-12).
+         LEFT JOIN trabalhador_funcao f ON f.trabalhador_id = pr.trabalhador_id AND f.funcao IN ('EXPOSITOR_PRELETOR', 'DIRIGENTE')
          LEFT JOIN assistido c ON c.id = pr.convidado_id
          WHERE (pr.trabalhador_id IS NOT NULL AND f.funcao IS NULL) OR (pr.convidado_id IS NOT NULL AND c.vinculo <> 'CONVIDADO')
   UNION ALL

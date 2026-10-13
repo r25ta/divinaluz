@@ -261,8 +261,8 @@ public class PrelecaoController {
 
     private List<Trabalhador> preletoresDisponiveis() {
         return trabalhadorRepository.findAll().stream()
-                .filter(trabalhador -> trabalhador.getFuncoes() != null
-                        && trabalhador.getFuncoes().contains(TipoTrabalhador.EXPOSITOR_PRELETOR))
+                // O Dirigente acumula todos os perfis, inclusive o de preletor (2026-10-12).
+                .filter(trabalhador -> trabalhador.exerce(TipoTrabalhador.EXPOSITOR_PRELETOR))
                 .sorted(Comparator.comparing(t -> t.getAssistido().getNome()))
                 .toList();
     }
@@ -284,7 +284,7 @@ public class PrelecaoController {
             throw new IllegalArgumentException("Selecione um preletor válido.");
         }
 
-        if (preletor.getFuncoes() == null || !preletor.getFuncoes().contains(TipoTrabalhador.EXPOSITOR_PRELETOR)) {
+        if (!preletor.exerce(TipoTrabalhador.EXPOSITOR_PRELETOR)) {
             throw new IllegalArgumentException("O preletor selecionado precisa ter a função de Expositor / Preletor.");
         }
     }

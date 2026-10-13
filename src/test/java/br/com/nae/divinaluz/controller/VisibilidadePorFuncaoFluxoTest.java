@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -325,6 +326,26 @@ class VisibilidadePorFuncaoFluxoTest {
                 "/sessao", "/prelecao/novo", "/novo", "/auditoria")) {
             mvc.perform(get(url).with(user(eu))).andExpect(status().isOk());
         }
+    }
+
+    // O Dirigente acumula todos os perfis (2026-10-12): marcado com outros, fica gravado só ele — e
+    // continua podendo ser o preletor da escala.
+    @Test
+    void dirigenteFicaSoComoDirigenteEPodeSerPreletor() throws Exception {
+        Assistido dirigente = trabalhador("visib.dirig.acumula", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.DIRIGENTE);
+        UserDetails eu = autoridades.usuario(dirigente);
+
+        mvc.perform(post("/trabalhadores/" + emTratamento.getId()).with(user(eu)).with(csrf())
+                        .param("funcoes", "DIRIGENTE", "PASSISTA", "EXPOSITOR_PRELETOR"))
+                .andExpect(status().is3xxRedirection());
+        assertEquals(Set.of(TipoTrabalhador.DIRIGENTE),
+                trabalhadorRepository.findByAssistidoId(emTratamento.getId()).orElseThrow().getFuncoes());
+
+        mvc.perform(get("/prelecao/novo").with(user(eu)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Visib Em Tratamento")));
+        mvc.perform(get("/trabalhadores/" + emTratamento.getId()).with(user(eu)))
+                .andExpect(content().string(containsString("acumula todos os perfis")));
     }
 
     // ...a não ser que acumule outra função: a visão é sempre a da soma das funções.

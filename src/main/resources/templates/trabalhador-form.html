@@ -30,6 +30,7 @@
                                 Selecione um ou mais perfis. Com pelo menos um perfil marcado, este assistido
                                 passa a ser também trabalhador; desmarcando todos, ele volta a ser somente assistido
                                 (o histórico de preleções e escalas é preservado).
+                                O <strong>Dirigente</strong> acumula todos os perfis: marcado, ele fica sozinho.
                             </p>
                             <div class="dl-role-list">
                                 <th:block th:each="f : ${funcoes}">
@@ -87,5 +88,23 @@
         </div>
     </main>
 </div>
+<!--/* O Dirigente acumula todos os perfis (2026-10-12): marcá-lo desmarca e trava os outros. É só
+       conforto — o TrabalhadorService grava só o Dirigente de qualquer jeito. */-->
+<script>
+    (function () {
+        var dirigente = document.getElementById('func-DIRIGENTE');
+        if (!dirigente) return;
+        var outros = Array.prototype.filter.call(document.querySelectorAll('input[name="funcoes"]'),
+            function (c) { return c !== dirigente; });
+        function ajustar() {
+            outros.forEach(function (c) {
+                if (dirigente.checked) c.checked = false;
+                c.disabled = dirigente.checked;
+            });
+        }
+        dirigente.addEventListener('change', ajustar);
+        ajustar();
+    })();
+</script>
 </body>
 </html>

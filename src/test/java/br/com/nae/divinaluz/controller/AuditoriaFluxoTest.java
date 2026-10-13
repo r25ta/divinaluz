@@ -123,7 +123,9 @@ class AuditoriaFluxoTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Auditoria Nome Antigo")))
                 .andExpect(content().string(containsString("Auditoria Nome Novo")))
-                .andExpect(content().string(not(containsString("hash-que-nao-pode-aparecer"))));
+                .andExpect(content().string(not(containsString("hash-que-nao-pode-aparecer"))))
+                // O tamanho do banco e da auditoria, para acompanhar o crescimento.
+                .andExpect(content().string(containsString("de 512 MB")));
     }
 
     @Test

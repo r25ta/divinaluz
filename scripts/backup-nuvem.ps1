@@ -83,3 +83,52 @@ if ($antigos) {
 
 $total = (Get-ChildItem $Destino -Filter "divinaluz_*.dump" | Measure-Object).Count
 Write-Host "Pronto. $total backup(s) em $Destino."
+
+# Tamanho do banco e da auditoria (2026-10-12): o plano gratuito do Neon tem 0,5 GB, e a auditoria
+# (V44) nao apaga nada. Cada execucao acrescenta uma linha em tamanho-banco.csv (o historico do
+# crescimento) e, passando do limite, avisa: aviso no log, arquivo ALERTA-ESPACO-BANCO.txt na pasta
+# dos backups e uma notificacao do Windows. Falhar aqui nao invalida o backup, que ja foi feito.
+$limiteBancoMb = 300       # ~60% dos 512 MB do Neon gratuito
+$limiteAuditoriaMb = 100
+try {
+    $psql = Join-Path (Split-Path $pgDump) "psql.exe"
+    $sql = "SELECT round(pg_database_size(current_database()) / 1048576.0, 1), " +
+           "round((pg_total_relation_size('auditoria') + pg_total_relation_size('auditoria_campo')) / 1048576.0, 1), " +
+           "(SELECT count(*) FROM auditoria)"
+    # Sem "| Select-Object -First 1": ele interrompe o psql no meio e o codigo de saida vira erro.
+    $saida = @(& $psql $DatabaseUrl -tA -F ";" -c $sql)
+    if ($LASTEXITCODE -ne 0 -or $saida.Count -eq 0) { throw "psql nao respondeu" }
+    $linha = $saida[0]
+    $bancoMb, $auditoriaMb, $auditoriaLinhas = $linha.Trim().Split(";")
+
+    $historico = Join-Path $Destino "tamanho-banco.csv"
+    if (-not (Test-Path $historico)) {
+        "data;banco_mb;auditoria_mb;auditoria_registros" | Out-File $historico -Encoding utf8
+    }
+    "$(Get-Date -Format 'yyyy-MM-dd HH:mm');$bancoMb;$auditoriaMb;$auditoriaLinhas" | Out-File $historico -Append -Encoding utf8
+    Write-Host "Tamanho: banco $bancoMb MB (limite do plano: 512 MB), auditoria $auditoriaMb MB ($auditoriaLinhas registros)."
+
+    $alerta = Join-Path $Destino "ALERTA-ESPACO-BANCO.txt"
+    $cultura = [Globalization.CultureInfo]::InvariantCulture
+    if ([double]::Parse($bancoMb, $cultura) -ge $limiteBancoMb -or [double]::Parse($auditoriaMb, $cultura) -ge $limiteAuditoriaMb) {
+        $mensagem = "Divina Luz: o banco da nuvem esta com $bancoMb MB (limite do plano 512 MB) e a auditoria com $auditoriaMb MB. Hora de decidir quanto tempo guardar a auditoria."
+        Write-Warning $mensagem
+        "$(Get-Date -Format 'dd/MM/yyyy HH:mm') - $mensagem" | Out-File $alerta -Encoding utf8
+        try {
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            $modelo = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+            $textos = $modelo.GetElementsByTagName("text")
+            $textos.Item(0).AppendChild($modelo.CreateTextNode("Divina Luz - espaco do banco")) | Out-Null
+            $textos.Item(1).AppendChild($modelo.CreateTextNode($mensagem)) | Out-Null
+            $id = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show(
+                [Windows.UI.Notifications.ToastNotification]::new($modelo))
+        } catch {
+            # Sem sessao interativa (tarefa rodando sem ninguem logado): ficam o log e o arquivo.
+        }
+    } elseif (Test-Path $alerta) {
+        Remove-Item $alerta -Force
+    }
+} catch {
+    Write-Warning "Nao foi possivel medir o tamanho do banco: $($_.Exception.Message)"
+}

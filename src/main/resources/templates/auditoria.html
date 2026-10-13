@@ -16,6 +16,16 @@
                 </div>
             </div>
 
+            <!--/* Espaço (2026-10-12): a auditoria não apaga nada e o banco gratuito tem 512 MB. Os limites
+                   do aviso são os mesmos do backup diário (scripts/backup-nuvem.ps1). */-->
+            <div class="alert py-2" th:classappend="${espaco.alerta} ? 'alert-warning' : 'alert-light border'">
+                <i class="bi" th:classappend="${espaco.alerta} ? 'bi-exclamation-triangle-fill' : 'bi-database'"></i>
+                Banco: <strong th:text="${#numbers.formatDecimal(espaco.bancoMb, 1, 1, 'COMMA')} + ' MB'">10,8 MB</strong>
+                de 512 MB (<span th:text="${espaco.percentualDoPlano} + '%'">2%</span>) ·
+                Auditoria: <strong th:text="${#numbers.formatDecimal(espaco.auditoriaMb, 1, 1, 'COMMA')} + ' MB'">0,1 MB</strong>
+                <span th:if="${espaco.alerta}"> — está na hora de decidir quanto tempo guardar a auditoria.</span>
+            </div>
+
             <div class="dl-card mb-3">
                 <div class="dl-card-body">
                     <form th:action="@{/auditoria}" method="get" class="row g-2 align-items-end">

@@ -36,6 +36,7 @@ public class AuditoriaController {
         model.addAttribute("filtro", filtro);
         model.addAttribute("resultado", auditoriaService.listar(filtro, pagina));
         model.addAttribute("entidades", auditoriaService.entidades());
+        model.addAttribute("espaco", auditoriaService.espaco());
         return "auditoria";
     }
 }

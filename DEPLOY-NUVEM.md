@@ -335,8 +335,28 @@ Se alguém disser que o código não chegou, abra o prontuário da pessoa e use 
 ### Manter o sistema acordado (sem o minuto de espera)
 
 Depois de 15 minutos sem uso o Render põe o sistema para dormir, e quem chega primeiro espera cerca de
-um minuto. Com um único serviço na conta (o `divinaluz-demo` já foi apagado), ficar ligado o mês todo
-dá ~744 horas, dentro das 750 do plano gratuito. Um "despertador" externo e grátis resolve:
+um minuto.
+
+**O que está em uso (desde 2026-10-12): acordado das 19:00 às 23:00 de Brasília, todos os dias.** Quem
+faz é o GitHub Actions do próprio repositório (`.github/workflows/manter-acordado.yml`), que chama o
+`/actuator/health` a cada 5 minutos nessa janela — de graça, porque o repositório é público, e sem
+depender de nenhum computador ligado. Para funcionar, uma única configuração:
+
+1. No GitHub: repositório → **Settings** → **Secrets and variables** → **Actions** → aba **Variables**
+   → **New repository variable**.
+2. Nome **`APP_URL`**, valor o endereço do sistema **sem barra no fim** (o que aparece no topo da página
+   do serviço no Render).
+3. Para testar na hora: aba **Actions** → **Manter acordado** → **Run workflow**. Fica verde quando o
+   sistema respondeu.
+
+Três observações: o GitHub pode atrasar uma execução agendada em horário de pico (por isso a cada 5
+minutos, com folga sobre os 15 da hibernação); se o repositório ficar **60 dias sem nenhum commit**, o
+GitHub desliga o agendamento e é preciso reativá-lo na aba Actions; e para acordar também outro horário
+(a sessão de domingo às 8h, por exemplo) basta acrescentar uma linha `cron` no arquivo.
+
+**Alternativa — acordado o dia inteiro:** com um único serviço na conta (o `divinaluz-demo` já foi
+apagado), ficar ligado o mês todo dá ~744 horas, dentro das 750 do plano gratuito. Um "despertador"
+externo e grátis resolve (o UptimeRobot gratuito não deixa escolher horário — é tudo ou nada):
 
 1. Crie uma conta em **https://uptimerobot.com** (ou em https://cron-job.org).
 2. **Add New Monitor** → tipo **HTTP(s)**.

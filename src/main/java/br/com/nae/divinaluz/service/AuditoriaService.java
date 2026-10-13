@@ -160,6 +160,29 @@ public class AuditoriaService {
         return condicoes.isEmpty() ? "" : " WHERE " + String.join(" AND ", condicoes);
     }
 
+    /** Limites do aviso de espaço — os mesmos do scripts/backup-nuvem.ps1. O Neon gratuito tem 512 MB. */
+    public static final double LIMITE_PLANO_MB = 512;
+    public static final double ALERTA_BANCO_MB = 300;
+    public static final double ALERTA_AUDITORIA_MB = 100;
+
+    public record Espaco(double bancoMb, double auditoriaMb) {
+        public boolean isAlerta() {
+            return bancoMb >= ALERTA_BANCO_MB || auditoriaMb >= ALERTA_AUDITORIA_MB;
+        }
+
+        public long getPercentualDoPlano() {
+            return Math.round(bancoMb * 100 / LIMITE_PLANO_MB);
+        }
+    }
+
+    /** Quanto o banco e a auditoria ocupam (2026-10-12): a auditoria não apaga nada. */
+    public Espaco espaco() {
+        return jdbc.queryForObject("""
+                SELECT pg_database_size(current_database()) / 1048576.0 AS banco,
+                       (pg_total_relation_size('auditoria') + pg_total_relation_size('auditoria_campo')) / 1048576.0 AS auditoria
+                """, (rs, i) -> new Espaco(rs.getDouble("banco"), rs.getDouble("auditoria")));
+    }
+
     /** As entidades que já aparecem na auditoria, para o filtro (código → nome na tela). */
     public Map<String, String> entidades() {
         Map<String, String> todas = new LinkedHashMap<>();

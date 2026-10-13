@@ -72,6 +72,10 @@ def entrar(browser, login, tela=DESKTOP, escala=1):
         page.fill("#password", SENHA)
         page.click("button[type=submit]")
         page.wait_for_load_state("networkidle")
+        # Login recusado volta ao /login, e sem esta conferência as fotos seguintes saem todas da tela de login.
+        if "/login" in page.url:
+            falhas.append("login-" + login)
+            print("FALHOU login", login)
     return contexto, page
 
 

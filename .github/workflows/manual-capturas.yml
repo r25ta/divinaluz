@@ -1,0 +1,65 @@
+# Fotografa as telas para o manual do usuário (2026-10-13). Só roda no branch manual-capturas: sobe o
+# sistema de verdade num banco descartável com a carga de simulação (nomes fictícios), entra com um login
+# de cada função e grava os PNG de volta no próprio branch, em scripts/manual/telas.
+name: Capturas do manual
+
+on:
+  push:
+    branches: [manual-capturas]
+    paths-ignore: ["scripts/manual/telas/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  capturar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: divinaluz_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compilar
+        run: bash ./mvnw -B -ntp -q -DskipTests package
+      - name: Subir o sistema
+        run: |
+          nohup java -jar target/divinaluz-*.jar --spring.jpa.show-sql=false > app.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:8081/divinaluz/login && break; sleep 2; done
+          curl -sf -o /dev/null http://localhost:8081/divinaluz/login || (tail -100 app.log; exit 1)
+      - name: Carga de simulação e logins de demonstração
+        run: |
+          psql -h localhost -U postgres -d divinaluz_db -q -f scripts/simulacao/carga-simulacao.sql > /dev/null
+          psql -h localhost -U postgres -d divinaluz_db -f scripts/manual/preparar.sql
+      - name: Fotografar
+        run: |
+          pip install -q playwright==1.56.0
+          python -m playwright install --with-deps chromium > /dev/null
+          python scripts/manual/capturar.py
+      - name: Log do sistema
+        if: always()
+        run: grep -E "ERROR|Exception" app.log | tail -40 || true
+      - name: Gravar as telas no branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add scripts/manual/telas
+          git commit -m "Telas do manual (capturas automáticas)" || exit 0
+          git push

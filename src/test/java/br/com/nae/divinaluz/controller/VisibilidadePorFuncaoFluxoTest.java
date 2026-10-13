@@ -244,9 +244,8 @@ class VisibilidadePorFuncaoFluxoTest {
                 .andExpect(content().string(not(containsString("/trabalhadores\""))));
         mvc.perform(get("/prontuario/" + emTratamento.getId()).with(user(dirig)))
                 .andExpect(content().string(containsString("Tornar Trabalhador")));
-        // Quem não tem TRABALHADORES (o Entrevistador) não vê o botão.
-        Assistido entrevistador = trabalhador("visib.botao.entrev", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.ENTREVISTADOR);
-        mvc.perform(get("/prontuario/" + passista.getId()).with(user(autoridades.usuario(entrevistador))))
+        // Quem não tem TRABALHADORES (a Recepcionista, por exemplo) não vê o botão.
+        mvc.perform(get("/prontuario/" + passista.getId()).with(user(autoridades.usuario(recepcionista))))
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("/trabalhadores/" + passista.getId()))));
 
@@ -310,6 +309,24 @@ class VisibilidadePorFuncaoFluxoTest {
         }
     }
 
+    // O Administrador vê e faz tudo, sem precisar de função (2026-10-12).
+    @Test
+    void administradorAlcancaTodosOsModulos() throws Exception {
+        Assistido admin = assistido("Visib Administrador", CartaoStatus.EM_TRATAMENTO);
+        admin.setLogin("visib.admin");
+        admin.setSenha("{noop}x");
+        admin.setPerfilAcesso(PerfilAcesso.ADMINISTRADOR);
+        assistidoRepository.save(admin);
+        UserDetails eu = autoridades.usuario(admin);
+
+        for (String url : List.of("/", "/prontuario/" + emAvaliacao.getId(), "/prontuario/" + aguardandoEntrevista.getId(),
+                "/prontuario/" + emTratamento.getId(), "/prontuario/" + emTratamento.getId() + "/editar",
+                "/trabalhadores/" + emTratamento.getId(), "/prontuario/" + emAvaliacao.getId() + "/nova-avaliacao",
+                "/sessao", "/prelecao/novo", "/novo", "/auditoria")) {
+            mvc.perform(get(url).with(user(eu))).andExpect(status().isOk());
+        }
+    }
+
     // ...a não ser que acumule outra função: a visão é sempre a da soma das funções.
     @Test
     void passistaQueTambemEntrevistaGanhaAVisaoDoEntrevistador() throws Exception {
@@ -321,21 +338,23 @@ class VisibilidadePorFuncaoFluxoTest {
         mvc.perform(get("/prontuario/" + emTratamento.getId()).with(user(eu))).andExpect(status().isOk());
     }
 
-    // 2026-10-12: a Recepcionista edita dados, acesso e perfis de trabalho, vincula celular e desativa,
-    // mas não registra avaliação nem entrevista.
+    // 2026-10-12: a Recepcionista edita dados e acesso, vincula celular e desativa, mas não registra
+    // avaliação nem entrevista e não promove nem mexe nos perfis de trabalho (só o Dirigente).
     @Test
-    void recepcionistaDefinePerfisMasNaoAvaliaNemEntrevista() throws Exception {
+    void recepcionistaEditaOCadastroMasNaoAvaliaEntrevistaNemDefinePerfis() throws Exception {
         Assistido recepcionista = trabalhador("visib.recep.perfis", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.RECEPCIONISTA);
         Assistido passista = trabalhador("visib.recep.alvo", CartaoStatus.EM_TRATAMENTO, TipoTrabalhador.PASSISTA);
         UserDetails eu = autoridades.usuario(recepcionista);
 
-        mvc.perform(get("/prontuario/" + passista.getId()).with(user(eu)))
+        mvc.perform(get("/prontuario/" + emTratamento.getId()).with(user(eu)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/trabalhadores/" + passista.getId())));
-        mvc.perform(get("/trabalhadores/" + passista.getId()).with(user(eu))).andExpect(status().isOk());
-        mvc.perform(get("/prontuario/" + passista.getId() + "/editar").with(user(eu)))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("name=\"alterarAcesso\"")));
+                .andExpect(content().string(containsString("Editar Dados")))
+                .andExpect(content().string(not(containsString("/trabalhadores/" + emTratamento.getId()))));
+        mvc.perform(get("/prontuario/" + emTratamento.getId() + "/editar").with(user(eu))).andExpect(status().isOk());
+        mvc.perform(get("/trabalhadores/" + passista.getId()).with(user(eu))).andExpect(status().isForbidden());
+        mvc.perform(post("/trabalhadores/" + emTratamento.getId()).with(user(eu)).with(csrf())
+                        .param("funcoes", "DIRIGENTE"))
+                .andExpect(status().isForbidden());
 
         mvc.perform(get("/prontuario/" + emAvaliacao.getId() + "/nova-avaliacao").with(user(eu)))
                 .andExpect(status().isForbidden());

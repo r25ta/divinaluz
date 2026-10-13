@@ -29,11 +29,10 @@ public enum TipoTrabalhador {
             EnumSet.allOf(Permissao.class)),
     RECEPCIONISTA(
             "Recepcionista",
-            "Recebe o assistido na chegada, consulta e mantém os dados cadastrais, o acesso e os perfis de trabalho, vincula o celular, marca a presença na sessão, cuida da escala de preleções e encaminha para a entrevista. Não altera o tratamento nem registra avaliações e entrevistas.",
-            // TRABALHADORES desde 2026-10-12 (pedido do responsável do projeto): perfis de trabalho e o
-            // acesso de trabalhadores, que até ali eram só do Dirigente.
-            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO,
-                    Permissao.TRABALHADORES)),
+            "Recebe o assistido na chegada, consulta e mantém os dados cadastrais e o acesso, vincula o celular, marca a presença na sessão, cuida da escala de preleções e encaminha para a entrevista. Não altera o tratamento, não registra avaliações e entrevistas e não define perfis de trabalho.",
+            // Sem TRABALHADORES (confirmado pelo responsável do projeto em 2026-10-12): promover a
+            // trabalhador e mexer nos perfis é só do Dirigente.
+            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO)),
     AVALIADOR(
             "Avaliador",
             "Faz a avaliação espiritual do cartão retido na 4ª sessão e propõe o novo tratamento, que o entrevistador comunica.",

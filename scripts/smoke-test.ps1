@@ -777,9 +777,9 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
             Check "Passista consulta a escala de preleções (200)" ($r.StatusCode -eq 200)
 
-            # Recepcionista (matriz de 2026-10-04, revista em 2026-10-12): sessão, consulta, dados
-            # cadastrais, acesso, perfis de trabalho e escala de preleções — mas não altera o prontuário
-            # (tratamento), não avalia e não entrevista.
+            # Recepcionista (matriz de 2026-10-04): sessão, consulta, dados cadastrais, acesso e escala
+            # de preleções — mas não altera o prontuário (tratamento), não avalia, não entrevista e não
+            # promove trabalhadores (só o Dirigente, reconfirmado em 2026-10-12).
             Definir-Funcao $adminJarMatriz $trabalhadorId "RECEPCIONISTA"
             Login-Como $loginTrab $senhaTrab | Out-Null
 
@@ -792,7 +792,7 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Recepcionista não alcança a fila de avaliação/entrevista (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
-            Check "Recepcionista define perfis de trabalho (200, desde 2026-10-12)" ($r.StatusCode -eq 200)
+            Check "Recepcionista não promove trabalhadores (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
             Check "Recepcionista não registra avaliação (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/auditoria"

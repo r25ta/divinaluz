@@ -29,13 +29,12 @@ class PermissaoTest {
         assertEquals(EnumSet.allOf(Permissao.class), TipoTrabalhador.DIRIGENTE.getPermissoes());
     }
 
-    // Sessão, consulta, cadastro (dados cadastrais, acesso, celular, desativar), escala de preleções e,
-    // desde 2026-10-12, os perfis de trabalho — mas não altera o prontuário (tratamento/dia) nem
-    // registra avaliação ou entrevista.
+    // Sessão, consulta, cadastro (dados cadastrais, acesso, celular, desativar) e escala de preleções —
+    // mas não altera o prontuário (tratamento/dia), não registra avaliação ou entrevista e não define
+    // perfis de trabalho (só o Dirigente, confirmado em 2026-10-12).
     @Test
     void recepcionistaCadastraAtendeNaSessaoEMontaPrelecoesMasNaoAlteraOProntuario() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO,
-                        Permissao.TRABALHADORES),
+        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO),
                 TipoTrabalhador.RECEPCIONISTA.getPermissoes());
         assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.PRONTUARIO));
         assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.AVALIACAO));
@@ -91,21 +90,15 @@ class PermissaoTest {
         assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.AVALIADOR, TipoTrabalhador.ENTREVISTADOR), veem);
     }
 
+    // Promover a trabalhador e mexer nos perfis é só do Dirigente (reconfirmado em 2026-10-12).
     @Test
-    void somenteODirigenteAlteraOProntuario() {
-        List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
-                .filter(funcao -> funcao.getPermissoes().contains(Permissao.PRONTUARIO))
-                .toList();
-        assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso);
-    }
-
-    // 2026-10-12: a Recepcionista também define perfis de trabalho (antes, só o Dirigente).
-    @Test
-    void dirigenteERecepcionistaDefinemPerfisDeTrabalho() {
-        List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
-                .filter(funcao -> funcao.getPermissoes().contains(Permissao.TRABALHADORES))
-                .toList();
-        assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.RECEPCIONISTA), comAcesso);
+    void somenteODirigenteAlteraOProntuarioEPromoveTrabalhadores() {
+        for (Permissao exclusiva : List.of(Permissao.PRONTUARIO, Permissao.TRABALHADORES)) {
+            List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
+                    .filter(funcao -> funcao.getPermissoes().contains(exclusiva))
+                    .toList();
+            assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso, exclusiva.name());
+        }
     }
 
     // Preletor e Passista não veem prontuário nenhum (2026-10-12) — a não ser que acumulem outra função.

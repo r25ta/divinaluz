@@ -462,7 +462,8 @@ public class ProntuarioController {
     /**
      * Quem pode alterar um acesso que já existe (login, senha, ativo). Desde 2026-10-04 a Recepcionista
      * edita o login de <strong>assistidos</strong> ({@code CADASTRO}); o de trabalhadores exige quem
-     * promove trabalhadores ({@code TRABALHADORES}, o Dirigente), e o de um Administrador só outro
+     * promove trabalhadores ({@code TRABALHADORES} — o Dirigente e, desde 2026-10-12, a Recepcionista),
+     * e o de um Administrador só outro
      * Administrador. Sem essa escada, quem troca a senha de alguém com mais acesso entra como ele.
      */
     private boolean podeEditarAcessoDe(Authentication authentication, Assistido alvo) {

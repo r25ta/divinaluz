@@ -62,6 +62,8 @@ public class SecurityConfig {
                         // Ver a escala é de todos (inclusive do perfil ASSISTIDO); montá-la, não.
                         .requestMatchers(HttpMethod.GET, "/prelecao").authenticated()
                         .requestMatchers("/prelecao/**").hasAuthority(Permissao.PRELECAO.getAuthority())
+                        // Auditoria (2026-10-12): só o Administrador, por enquanto.
+                        .requestMatchers("/auditoria", "/auditoria/**").hasRole("ADMINISTRADOR")
                         .requestMatchers("/trabalhadores/**", "/prontuario/*/trabalhador")
                                 .hasAuthority(Permissao.TRABALHADORES.getAuthority())
                         .requestMatchers("/sessao", "/sessao/**", "/checkin/**",

@@ -1,16 +1,20 @@
 package br.com.nae.divinaluz.service;
 
+import br.com.nae.divinaluz.config.AuditoriaListener;
 import br.com.nae.divinaluz.model.Assistido;
 import br.com.nae.divinaluz.model.PerfilAcesso;
 import br.com.nae.divinaluz.model.TipoTrabalhador;
 import br.com.nae.divinaluz.model.Trabalhador;
 import br.com.nae.divinaluz.repository.AssistidoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
+import jakarta.persistence.EntityManager;
+import org.hibernate.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 
 /**
  * Perfis de trabalho: todo trabalhador é, antes, um assistido — não existe cadastro de trabalhador
@@ -25,11 +29,13 @@ public class TrabalhadorService {
 
     private final AssistidoRepository assistidoRepository;
     private final TrabalhadorRepository trabalhadorRepository;
+    private final EntityManager entityManager;
 
     public TrabalhadorService(AssistidoRepository assistidoRepository,
-            TrabalhadorRepository trabalhadorRepository) {
+            TrabalhadorRepository trabalhadorRepository, EntityManager entityManager) {
         this.assistidoRepository = assistidoRepository;
         this.trabalhadorRepository = trabalhadorRepository;
+        this.entityManager = entityManager;
     }
 
     /**
@@ -56,8 +62,12 @@ public class TrabalhadorService {
                     novo.setAssistido(assistido);
                     return novo;
                 });
+        String funcoesAntes = descreverFuncoes(trabalhador.getFuncoes());
         trabalhador.setFuncoes(ehTrabalhador ? new LinkedHashSet<>(perfis) : new LinkedHashSet<>());
-        trabalhadorRepository.save(trabalhador);
+        trabalhador = trabalhadorRepository.save(trabalhador);
+        // A auditoria escuta as entidades, não as coleções: as funções são registradas aqui.
+        AuditoriaListener.registrarAlteracao(entityManager.unwrap(Session.class), trabalhador,
+                trabalhador.getId(), "funcoes", funcoesAntes, descreverFuncoes(trabalhador.getFuncoes()));
 
         assistido.setVinculo(ehTrabalhador ? VINCULO_TRABALHADOR : VINCULO_ASSISTIDO);
 
@@ -69,5 +79,12 @@ public class TrabalhadorService {
         }
         assistidoRepository.save(assistido);
         return perfilMudou;
+    }
+
+    private static String descreverFuncoes(Collection<TipoTrabalhador> funcoes) {
+        if (funcoes == null || funcoes.isEmpty()) {
+            return null;
+        }
+        return funcoes.stream().map(TipoTrabalhador::getLabel).sorted().collect(Collectors.joining(", "));
     }
 }

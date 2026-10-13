@@ -29,8 +29,11 @@ public enum TipoTrabalhador {
             EnumSet.allOf(Permissao.class)),
     RECEPCIONISTA(
             "Recepcionista",
-            "Recebe o assistido na chegada, consulta e mantém os dados cadastrais e o login, marca a presença na sessão, cuida da escala de preleções e encaminha para a entrevista. Não altera o prontuário.",
-            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO)),
+            "Recebe o assistido na chegada, consulta e mantém os dados cadastrais, o acesso e os perfis de trabalho, vincula o celular, marca a presença na sessão, cuida da escala de preleções e encaminha para a entrevista. Não altera o tratamento nem registra avaliações e entrevistas.",
+            // TRABALHADORES desde 2026-10-12 (pedido do responsável do projeto): perfis de trabalho e o
+            // acesso de trabalhadores, que até ali eram só do Dirigente.
+            EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO,
+                    Permissao.TRABALHADORES)),
     AVALIADOR(
             "Avaliador",
             "Faz a avaliação espiritual do cartão retido na 4ª sessão e propõe o novo tratamento, que o entrevistador comunica.",
@@ -46,7 +49,10 @@ public enum TipoTrabalhador {
     PASSISTA(
             "Passista",
             "Voluntário preparado para o atendimento fraterno, aplicação de passes magnéticos e amparo aos frequentadores.",
-            EnumSet.of(Permissao.PRONTUARIO_PROPRIO));
+            // Sem prontuário nenhum desde 2026-10-12, nem o próprio (pedido do responsável do projeto):
+            // só o próprio cartão e a escala de preleções, como todo autenticado. Quem acumula outra
+            // função ganha a visão dela.
+            EnumSet.noneOf(Permissao.class));
 
     private final String label;
     private final String descricao;

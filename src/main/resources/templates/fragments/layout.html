@@ -69,7 +69,7 @@
                     <i class="bi bi-folder2-open"></i> Prontuário
                     <span class="dl-nav-badge" th:if="${filaEntrevistas > 0}" th:text="${filaEntrevistas}"></span>
                 </a>
-                <!--/* Passista, Avaliador e Entrevistador (2026-10-11): o próprio prontuário. */-->
+                <!--/* Avaliador e Entrevistador: o próprio prontuário (o Passista perdeu em 2026-10-12). */-->
                 <a th:if="${podeProntuarioProprio and !podeConsulta and meuAssistidoId != null}"
                    th:href="@{/prontuario/{id}(id=${meuAssistidoId})}" class="btn btn-nav btn-sm">
                     <i class="bi bi-folder2"></i> Meu Prontuário
@@ -79,6 +79,9 @@
                 </a>
                 <a th:href="@{/prelecao}" class="btn btn-nav btn-sm">
                     <i class="bi bi-calendar2-event"></i> Preleções
+                </a>
+                <a th:if="${ehAdministrador}" th:href="@{/auditoria}" class="btn btn-nav btn-sm">
+                    <i class="bi bi-journal-text"></i> Auditoria
                 </a>
                 <!--/* "Trabalhadores" saiu do menu em 2026-10-11: os perfis de trabalho de cada pessoa ficam
                        no prontuário dela, junto de Editar Dados e Criar Acesso (e no selo da listagem). */-->

@@ -29,13 +29,17 @@ class PermissaoTest {
         assertEquals(EnumSet.allOf(Permissao.class), TipoTrabalhador.DIRIGENTE.getPermissoes());
     }
 
-    // Sessão, consulta, cadastro (dados cadastrais e login) e escala de preleções — mas não altera o
-    // prontuário (tratamento/dia) nem faz avaliação ou entrevista.
+    // Sessão, consulta, cadastro (dados cadastrais, acesso, celular, desativar), escala de preleções e,
+    // desde 2026-10-12, os perfis de trabalho — mas não altera o prontuário (tratamento/dia) nem
+    // registra avaliação ou entrevista.
     @Test
     void recepcionistaCadastraAtendeNaSessaoEMontaPrelecoesMasNaoAlteraOProntuario() {
-        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO),
+        assertEquals(EnumSet.of(Permissao.CONSULTA, Permissao.CADASTRO, Permissao.SESSAO, Permissao.PRELECAO,
+                        Permissao.TRABALHADORES),
                 TipoTrabalhador.RECEPCIONISTA.getPermissoes());
         assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.PRONTUARIO));
+        assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.AVALIACAO));
+        assertFalse(TipoTrabalhador.RECEPCIONISTA.getPermissoes().contains(Permissao.ENTREVISTA));
     }
 
     @Test
@@ -64,12 +68,13 @@ class PermissaoTest {
         assertEquals(EnumSet.of(Permissao.PRELECAO), TipoTrabalhador.EXPOSITOR_PRELETOR.getPermissoes());
     }
 
+    // 2026-10-12: o Passista não vê prontuário nenhum, nem o próprio — só o próprio cartão, que é de todos.
     @Test
-    void passistaSoOProprioCartaoEOProprioProntuario() {
-        assertEquals(EnumSet.of(Permissao.PRONTUARIO_PROPRIO), TipoTrabalhador.PASSISTA.getPermissoes());
+    void passistaNaoTemPermissaoNenhuma() {
+        assertTrue(TipoTrabalhador.PASSISTA.getPermissoes().isEmpty());
     }
 
-    // Isabela (2026-10-11): Avaliador + Passista soma as duas visões, sem ganhar a consulta completa.
+    // Avaliador + Passista: a visão é a do Avaliador, sem ganhar a consulta completa.
     @Test
     void avaliadorEPassistaNaoConsultamTodos() {
         assertEquals(EnumSet.of(Permissao.CONSULTA_EM_AVALIACAO, Permissao.AVALIACAO, Permissao.PRONTUARIO_PROPRIO),
@@ -87,13 +92,29 @@ class PermissaoTest {
     }
 
     @Test
-    void somenteODirigenteAlteraOProntuarioEPromoveTrabalhadores() {
-        for (Permissao exclusiva : List.of(Permissao.PRONTUARIO, Permissao.TRABALHADORES)) {
-            List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
-                    .filter(funcao -> funcao.getPermissoes().contains(exclusiva))
-                    .toList();
-            assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso, exclusiva.name());
-        }
+    void somenteODirigenteAlteraOProntuario() {
+        List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
+                .filter(funcao -> funcao.getPermissoes().contains(Permissao.PRONTUARIO))
+                .toList();
+        assertEquals(List.of(TipoTrabalhador.DIRIGENTE), comAcesso);
+    }
+
+    // 2026-10-12: a Recepcionista também define perfis de trabalho (antes, só o Dirigente).
+    @Test
+    void dirigenteERecepcionistaDefinemPerfisDeTrabalho() {
+        List<TipoTrabalhador> comAcesso = EnumSet.allOf(TipoTrabalhador.class).stream()
+                .filter(funcao -> funcao.getPermissoes().contains(Permissao.TRABALHADORES))
+                .toList();
+        assertEquals(List.of(TipoTrabalhador.DIRIGENTE, TipoTrabalhador.RECEPCIONISTA), comAcesso);
+    }
+
+    // Preletor e Passista não veem prontuário nenhum (2026-10-12) — a não ser que acumulem outra função.
+    @Test
+    void preletorEPassistaNaoVeemProntuario() {
+        Set<Permissao> deProntuario = EnumSet.of(Permissao.CONSULTA, Permissao.CONSULTA_EM_AVALIACAO,
+                Permissao.CONSULTA_EXCETO_EM_AVALIACAO, Permissao.PRONTUARIO_PROPRIO);
+        Set<Permissao> juntos = Permissao.de(List.of(TipoTrabalhador.EXPOSITOR_PRELETOR, TipoTrabalhador.PASSISTA));
+        assertTrue(juntos.stream().noneMatch(deProntuario::contains));
     }
 
     @Test

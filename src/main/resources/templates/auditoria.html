@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: pageHead('Auditoria')}"></head>
+<body>
+<div class="dl-app">
+    <nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+    <!--/* Módulo de Auditoria (2026-10-12): toda inclusão, alteração e exclusão, com quem fez, quando,
+           de onde e o valor anterior e o novo de cada campo. Só o Administrador (AuditoriaController). */-->
+    <main class="dl-main">
+        <div class="dl-container">
+            <div class="dl-page-header">
+                <div>
+                    <span class="dl-eyebrow">Administração</span>
+                    <h1>Auditoria</h1>
+                </div>
+            </div>
+
+            <div class="dl-card mb-3">
+                <div class="dl-card-body">
+                    <form th:action="@{/auditoria}" method="get" class="row g-2 align-items-end">
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="de">De</label>
+                            <input type="text" class="form-control form-control-sm dl-data" id="de" name="de"
+                                   placeholder="dd/mm/aaaa"
+                                   th:value="${filtro.de() != null} ? ${#temporals.format(filtro.de(), 'dd/MM/yyyy')} : ''">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="ate">Até</label>
+                            <input type="text" class="form-control form-control-sm dl-data" id="ate" name="ate"
+                                   placeholder="dd/mm/aaaa"
+                                   th:value="${filtro.ate() != null} ? ${#temporals.format(filtro.ate(), 'dd/MM/yyyy')} : ''">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="usuario">Usuário (login)</label>
+                            <input type="text" class="form-control form-control-sm" id="usuario" name="usuario"
+                                   th:value="${filtro.usuario()}">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="acao">Ação</label>
+                            <select class="form-select form-select-sm" id="acao" name="acao">
+                                <option value="">Todas</option>
+                                <option value="INCLUSAO" th:selected="${filtro.acao() == 'INCLUSAO'}">Inclusão</option>
+                                <option value="ALTERACAO" th:selected="${filtro.acao() == 'ALTERACAO'}">Alteração</option>
+                                <option value="EXCLUSAO" th:selected="${filtro.acao() == 'EXCLUSAO'}">Exclusão</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="entidade">O quê</label>
+                            <select class="form-select form-select-sm" id="entidade" name="entidade">
+                                <option value="">Tudo</option>
+                                <option th:each="e : ${entidades}" th:value="${e.key}" th:text="${e.value}"
+                                        th:selected="${filtro.entidade() == e.key}">Cadastro</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label small" for="busca">Registro</label>
+                            <input type="text" class="form-control form-control-sm" id="busca" name="busca"
+                                   placeholder="nome ou nº" th:value="${filtro.busca()}">
+                        </div>
+                        <input type="hidden" name="assistidoId" th:if="${filtro.assistidoId() != null}" th:value="${filtro.assistidoId()}">
+                        <div class="col-12 d-flex gap-2 justify-content-end">
+                            <a th:href="@{/auditoria}" class="btn btn-outline-teal btn-sm">Limpar</a>
+                            <button type="submit" class="btn btn-teal btn-sm text-white">
+                                <i class="bi bi-funnel"></i> Filtrar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-info py-2" th:if="${filtro.assistidoId() != null}">
+                <i class="bi bi-person"></i> Mostrando só os registros do cadastro nº
+                <strong th:text="${#numbers.formatInteger(filtro.assistidoId(), 6)}">000001</strong>.
+                <a th:href="@{/auditoria}" class="alert-link ms-1">Ver tudo</a>
+            </div>
+
+            <p class="dl-muted small mb-2">
+                <span th:text="${resultado.total()}">0</span> registro(s)
+                <th:block th:if="${resultado.totalPaginas() > 1}">
+                    — página <span th:text="${resultado.pagina()}">1</span> de <span th:text="${resultado.totalPaginas()}">1</span>
+                </th:block>
+            </p>
+
+            <div class="dl-card">
+                <div class="dl-card-body p-0">
+                    <table class="dl-table dl-table-auditoria" th:if="${not #lists.isEmpty(resultado.eventos())}">
+                        <thead>
+                        <tr>
+                            <th>Data e hora</th>
+                            <th>Usuário</th>
+                            <th>Ação</th>
+                            <th>Registro</th>
+                            <th>Alterações</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="e : ${resultado.eventos()}">
+                            <td class="text-nowrap" th:text="${#temporals.format(e.dataHora, 'dd/MM/yyyy HH:mm:ss')}">12/10/2026 20:00:00</td>
+                            <td>
+                                <div class="fw-semibold" th:text="${e.usuarioNome != null ? e.usuarioNome : e.usuarioLogin}">Nome</div>
+                                <div class="dl-muted small" th:if="${e.usuarioNome != null}" th:text="${e.usuarioLogin}">login</div>
+                            </td>
+                            <td>
+                                <span class="dl-badge"
+                                      th:classappend="${e.acao == 'INCLUSAO'} ? 'dl-badge-success' : (${e.acao == 'EXCLUSAO'} ? 'dl-badge-danger' : 'dl-badge-info')"
+                                      th:text="${e.acaoRotulo}">Alteração</span>
+                                <div class="dl-muted small mt-1" th:text="${e.origem}">POST /prontuario/1/editar</div>
+                            </td>
+                            <td>
+                                <div class="fw-semibold" th:text="${e.entidadeRotulo}">Cadastro</div>
+                                <div class="small">
+                                    <span th:text="${e.registroDescricao ?: '—'}">Maria</span>
+                                    <span class="dl-muted" th:if="${e.registroId}" th:text="'(#' + ${e.registroId} + ')'">(#1)</span>
+                                </div>
+                                <a th:if="${e.assistidoId != null and filtro.assistidoId() == null}"
+                                   th:href="@{/auditoria(assistidoId=${e.assistidoId})}" class="small">
+                                    Tudo desta pessoa
+                                </a>
+                            </td>
+                            <td>
+                                <span class="dl-muted small" th:if="${#lists.isEmpty(e.campos)}">—</span>
+                                <details th:unless="${#lists.isEmpty(e.campos)}" class="dl-auditoria-detalhe"
+                                         th:open="${e.acao == 'ALTERACAO' and #lists.size(e.campos) <= 3}">
+                                    <summary th:text="${#lists.size(e.campos)} + (${#lists.size(e.campos) == 1} ? ' campo' : ' campos')">2 campos</summary>
+                                    <!--/* Blocos e não uma tabela: uma tabela dentro da .dl-table seria
+                                           desmontada junto pelo tabela-responsiva.js no celular. */-->
+                                    <div class="dl-auditoria-campos">
+                                        <div class="dl-auditoria-campo" th:each="c : ${e.campos}">
+                                            <div class="nome" th:text="${c.rotulo}">Nome</div>
+                                            <div class="valores">
+                                                <span class="antes" th:if="${e.acao != 'INCLUSAO'}" th:text="${c.valorAnterior ?: '—'}">Antigo</span>
+                                                <i class="bi bi-arrow-right dl-muted" th:if="${e.acao == 'ALTERACAO'}"></i>
+                                                <span class="depois" th:if="${e.acao != 'EXCLUSAO'}" th:text="${c.valorNovo ?: '—'}">Novo</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div class="dl-table-empty" th:if="${#lists.isEmpty(resultado.eventos())}">
+                        <i class="bi bi-journal-text"></i>
+                        <p class="mb-0">Nenhum registro de auditoria com estes filtros.</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="d-flex justify-content-center gap-2 mt-3" th:if="${resultado.totalPaginas() > 1}">
+                <a th:if="${resultado.pagina() > 1}" class="btn btn-outline-teal btn-sm"
+                   th:href="@{/auditoria(de=${filtro.de() != null ? #temporals.format(filtro.de(), 'dd/MM/yyyy') : ''},
+                              ate=${filtro.ate() != null ? #temporals.format(filtro.ate(), 'dd/MM/yyyy') : ''},
+                              usuario=${filtro.usuario()}, acao=${filtro.acao()}, entidade=${filtro.entidade()},
+                              busca=${filtro.busca()}, assistidoId=${filtro.assistidoId()}, pagina=${resultado.pagina() - 1})}">
+                    <i class="bi bi-chevron-left"></i> Anterior
+                </a>
+                <a th:if="${resultado.pagina() < resultado.totalPaginas()}" class="btn btn-outline-teal btn-sm"
+                   th:href="@{/auditoria(de=${filtro.de() != null ? #temporals.format(filtro.de(), 'dd/MM/yyyy') : ''},
+                              ate=${filtro.ate() != null ? #temporals.format(filtro.ate(), 'dd/MM/yyyy') : ''},
+                              usuario=${filtro.usuario()}, acao=${filtro.acao()}, entidade=${filtro.entidade()},
+                              busca=${filtro.busca()}, assistidoId=${filtro.assistidoId()}, pagina=${resultado.pagina() + 1})}">
+                    Próxima <i class="bi bi-chevron-right"></i>
+                </a>
+            </nav>
+        </div>
+    </main>
+</div>
+</body>
+</html>

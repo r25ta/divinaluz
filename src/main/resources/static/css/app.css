@@ -1726,6 +1726,47 @@ a {
   gap: 0.25rem;
 }
 
+/* Auditoria (2026-10-12): os campos alterados de cada registro, dentro da própria linha. */
+.dl-auditoria-detalhe summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--dl-teal-700);
+  font-weight: 600;
+}
+
+.dl-auditoria-campos {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.dl-auditoria-campo {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--dl-border);
+  overflow-wrap: anywhere;
+}
+
+.dl-auditoria-campo:last-child {
+  border-bottom: 0;
+}
+
+.dl-auditoria-campo .nome {
+  font-weight: 600;
+  color: var(--dl-muted);
+}
+
+.dl-auditoria-campo .antes {
+  color: var(--dl-danger);
+  text-decoration: line-through;
+}
+
+.dl-auditoria-campo .depois {
+  color: var(--dl-success);
+}
+
+.dl-table-auditoria td:last-child {
+  min-width: 18rem;
+}
+
 /* Tela média (tablet deitado, notebook pequeno): sai a coluna do endereço e Cartão/Prontuário ficam
    só com o ícone (o nome está no title e no aria-label), para tudo caber numa linha. */
 @media (min-width: 768px) and (max-width: 1199.98px) {

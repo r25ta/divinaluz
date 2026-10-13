@@ -76,7 +76,7 @@ public class PerfilAdvice {
         return pode(authentication, Permissao.CONSULTA_EXCETO_EM_AVALIACAO);
     }
 
-    /** Passista, Avaliador e Entrevistador (2026-10-11): o próprio prontuário, pelo item "Meu Prontuário". */
+    /** Avaliador e Entrevistador: o próprio prontuário, pelo item "Meu Prontuário" (o Passista perdeu em 2026-10-12). */
     @ModelAttribute("podeProntuarioProprio")
     public boolean podeProntuarioProprio(Authentication authentication) {
         return pode(authentication, Permissao.PRONTUARIO_PROPRIO);
@@ -128,6 +128,13 @@ public class PerfilAdvice {
     @ModelAttribute("podeTrabalhadores")
     public boolean podeTrabalhadores(Authentication authentication) {
         return pode(authentication, Permissao.TRABALHADORES);
+    }
+
+    /** Módulo de Auditoria (2026-10-12): só o Administrador, pelo perfil e não por função. */
+    @ModelAttribute("ehAdministrador")
+    public boolean ehAdministrador(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(concedida -> concedida.getAuthority().equals("ROLE_ADMINISTRADOR"));
     }
 
     // Badge da navbar (link "Entrevistas") com o que a pessoa tem para atender: o Avaliador conta os

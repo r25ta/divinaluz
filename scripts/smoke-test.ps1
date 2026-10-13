@@ -160,6 +160,9 @@ function Definir-Perfil([string]$AdminJar, [string]$AssistidoId, [string]$Login,
     $script:CsrfToken = $csrfAnterior
 }
 
+# Tudo o que o teste fizer vira registro de auditoria (2026-10-12); a limpeza apaga a partir daqui.
+$script:InicioAuditoria = Invoke-SqlScalar "SELECT to_char(now()::timestamp, 'YYYY-MM-DD HH24:MI:SS.US');"
+
 try {
     # 0. Login como admin (V21/V23 — ver CLAUDE.md 3.11 sobre o hash real da credencial provisória)
     $loginPage = Invoke-CurlForm -Url "$BaseUrl/login"
@@ -704,6 +707,14 @@ try {
         Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId" | Out-Null
         $funcaoAtualizada = Invoke-SqlScalar "SELECT tf.funcao FROM trabalhador_funcao tf JOIN trabalhador t ON t.id = tf.trabalhador_id WHERE t.assistido_id = $trabalhadorId;"
         Check "Perfil atualizado para Passista (Entrevistador removido)" ($funcaoAtualizada -eq "PASSISTA")
+
+        # Auditoria (2026-10-12): cada passo acima ficou registrado, com quem fez e os dois valores.
+        $r = Invoke-CurlForm -Url "$BaseUrl/auditoria?assistidoId=$trabalhadorId"
+        Check "Auditoria mostra a troca de funções feita pelo admin" (
+            $r.StatusCode -eq 200 -and $r.Body -match "Perfis de trabalho" -and $r.Body -match "Entrevistador" -and
+            $r.Body -match "Passista" -and $r.Body -match "POST /trabalhadores/$trabalhadorId")
+        $auditadosBairro = Invoke-SqlScalar "SELECT count(*) FROM auditoria a JOIN auditoria_campo c ON c.auditoria_id = a.id WHERE a.assistido_id = $trabalhadorId AND c.campo = 'bairro' AND c.valor_novo = 'Bairro X' AND a.usuario_login = '$AdminLogin';"
+        Check "Auditoria guarda a edição do bairro com o login do admin" ($auditadosBairro -eq "1")
     }
 
     # 15d. Visibilidade por perfil de trabalho (CLAUDE.md 3.7): é a FUNÇÃO do trabalhador, e não o
@@ -725,8 +736,8 @@ try {
         $adminCsrfMatriz = $script:CsrfToken
         $script:CookieJar = Join-Path $env:TEMP "divinaluz-smoke-cookies-trab-$PID.txt"
         try {
-            # Passista (2026-10-11): só o próprio cartão e o próprio prontuário — não consulta os outros,
-            # não cadastra, não atende na sessão, não entrevista, não monta a escala e não promove.
+            # Passista (2026-10-12): só o próprio cartão — nenhum prontuário, nem o próprio; não cadastra,
+            # não atende na sessão, não entrevista, não monta a escala e não promove.
             $r = Login-Como $loginTrab $senhaTrab
             Check "Login do trabalhador Passista funciona" ($r.StatusCode -eq 302)
 
@@ -737,7 +748,7 @@ try {
             Check "Navbar do Passista esconde Sessão, Entrevistas, Trabalhadores e Novo Cadastro" (
                 $r.Body -notmatch 'href="[^"]*/sessao"' -and $r.Body -notmatch 'href="[^"]*/entrevistas"' -and
                 $r.Body -notmatch 'href="[^"]*/trabalhadores"' -and $r.Body -notmatch "Novo Cadastro")
-            Check "Navbar do Passista oferece Meu Prontuário" ($r.Body -match "Meu Prontuário")
+            Check "Navbar do Passista não oferece Meu Prontuário" ($r.Body -notmatch "Meu Prontuário")
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
             Check "Passista não abre o prontuário de outro assistido (403)" ($r.StatusCode -eq 403)
@@ -745,9 +756,7 @@ try {
             Check "Passista não abre o cartão de outro assistido (403)" ($r.StatusCode -eq 403)
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
-            Check "Passista abre o próprio prontuário (200)" ($r.StatusCode -eq 200)
-            Check "Prontuário não oferece ao Passista editar dados nem alterar tratamento" (
-                $r.Body -notmatch "Editar Dados" -and $r.Body -notmatch "Alterar Tratamento")
+            Check "Passista não abre nem o próprio prontuário (403)" ($r.StatusCode -eq 403)
 
             $r = Invoke-CurlForm -Url "$BaseUrl/novo"
             Check "Passista não cadastra assistido (403)" ($r.StatusCode -eq 403)
@@ -768,9 +777,9 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/prelecao"
             Check "Passista consulta a escala de preleções (200)" ($r.StatusCode -eq 200)
 
-            # Recepcionista (matriz de 2026-10-04): sessão, consulta, dados cadastrais e login, e escala
-            # de preleções — mas não altera o prontuário (tratamento), não avalia, não entrevista e não
-            # promove trabalhadores.
+            # Recepcionista (matriz de 2026-10-04, revista em 2026-10-12): sessão, consulta, dados
+            # cadastrais, acesso, perfis de trabalho e escala de preleções — mas não altera o prontuário
+            # (tratamento), não avalia e não entrevista.
             Definir-Funcao $adminJarMatriz $trabalhadorId "RECEPCIONISTA"
             Login-Como $loginTrab $senhaTrab | Out-Null
 
@@ -783,7 +792,11 @@ try {
             $r = Invoke-CurlForm -Url "$BaseUrl/entrevistas"
             Check "Recepcionista não alcança a fila de avaliação/entrevista (403)" ($r.StatusCode -eq 403)
             $r = Invoke-CurlForm -Url "$BaseUrl/trabalhadores/$assistidoId"
-            Check "Recepcionista não promove trabalhadores (403)" ($r.StatusCode -eq 403)
+            Check "Recepcionista define perfis de trabalho (200, desde 2026-10-12)" ($r.StatusCode -eq 200)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId/nova-avaliacao"
+            Check "Recepcionista não registra avaliação (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/auditoria"
+            Check "Recepcionista não alcança a auditoria (403)" ($r.StatusCode -eq 403)
 
             $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$assistidoId"
             Check "Prontuário não oferece à Recepcionista alterar o tratamento" ($r.Body -notmatch "Alterar Tratamento")
@@ -894,6 +907,8 @@ try {
                 $r.Body -match 'name="preletorEscolhido"' -and $r.Body -match "peça à recepção")
             $r = Invoke-CurlForm -Url "$BaseUrl/convidados/novo"
             Check "Expositor não cadastra convidado: é do Novo Cadastro (403)" ($r.StatusCode -eq 403)
+            $r = Invoke-CurlForm -Url "$BaseUrl/prontuario/$trabalhadorId"
+            Check "Expositor/Preletor não abre nem o próprio prontuário (403)" ($r.StatusCode -eq 403)
 
             # Preletor convidado (V41): cadastrado pelo Novo Cadastro (admin, aqui) só com contato —
             # vínculo CONVIDADO, sem tratamento nem login, fora da listagem de prontuários.
@@ -1397,6 +1412,10 @@ try {
         Invoke-Sql "DELETE FROM sessao_assistencia WHERE id = $($script:sessaoHojeCriada);" | Out-Null
     } else {
         Invoke-Sql "UPDATE sessao_assistencia SET checkin_aberto_em = NULL, checkin_fechado_em = NULL, encerrada_em = NULL WHERE data = CURRENT_DATE;" | Out-Null
+    }
+    # A auditoria do que o próprio teste fez (o banco de dev não tem outro uso enquanto ele roda).
+    if ($script:InicioAuditoria) {
+        Invoke-Sql "DELETE FROM auditoria WHERE data_hora >= '$($script:InicioAuditoria)';" | Out-Null
     }
     if (Test-Path $script:CookieJar) { Remove-Item $script:CookieJar -Force }
 }

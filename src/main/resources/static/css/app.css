@@ -1538,6 +1538,7 @@ a {
 
 /* Inativo: o nome também esmaece, para a linha se destacar das ativas quando "Mostrar inativos" está ligado. */
 .dl-situacao-inativo + .nome-assistido { color: var(--dl-muted); }
+.dl-situacao-inativo ~ .dl-badge { flex: none; }
 
 .dl-texto-linha {
   display: block;

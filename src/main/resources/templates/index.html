@@ -14,9 +14,14 @@
                     <h1>Assistidos</h1>
                 </div>
                 <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <a th:if="${not mostrarInativos}" th:href="@{/(mostrarInativos=true)}" class="dl-muted small">
-                        <i class="bi bi-eye"></i> Mostrar inativos
+                    <!--/* Com a quantidade (2026-10-13): sem ela, clicar quando não há inativo nenhum parecia não
+                           fazer nada. */-->
+                    <a th:if="${not mostrarInativos and totalInativos > 0}" th:href="@{/(mostrarInativos=true)}" class="dl-muted small">
+                        <i class="bi bi-eye"></i> Mostrar inativos (<span th:text="${totalInativos}">0</span>)
                     </a>
+                    <span th:if="${not mostrarInativos and totalInativos == 0}" class="dl-muted small">
+                        <i class="bi bi-check-circle"></i> Nenhum cadastro inativo
+                    </span>
                     <a th:if="${mostrarInativos}" th:href="@{/}" class="dl-muted small">
                         <i class="bi bi-eye-slash"></i> Mostrar somente ativos
                     </a>
@@ -36,6 +41,14 @@
             </div>
             <div class="alert alert-danger" th:if="${erro}">
                 <i class="bi bi-exclamation-octagon-fill"></i> <span th:text="${erro}"></span>
+            </div>
+            <div class="alert alert-info" th:if="${mostrarInativos}">
+                <i class="bi bi-eye"></i>
+                <th:block th:if="${totalInativos > 0}">
+                    Mostrando também <strong th:text="${totalInativos}">0</strong> cadastro(s) inativo(s), no topo da lista
+                    e marcados com <i class="bi bi-x-circle-fill text-danger" aria-hidden="true"></i> <strong>Inativo</strong>.
+                </th:block>
+                <th:block th:unless="${totalInativos > 0}">Não há cadastros inativos: a lista é a mesma de sempre.</th:block>
             </div>
             <!--/* Avaliador e Entrevistador (2026-10-11): a consulta deles alcança só parte dos cartões. */-->
             <div class="alert alert-info" th:if="${avisoListagem != null}">
@@ -98,10 +111,11 @@
                                             <i class="bi bi-check-circle-fill" aria-hidden="true"></i><span class="visually-hidden">Ativo</span>
                                         </span>
                                         <span th:unless="${a.ativo}" class="dl-situacao-cadastro dl-situacao-inativo" title="Cadastro inativo">
-                                            <i class="bi bi-x-circle-fill" aria-hidden="true"></i><span class="visually-hidden">Inativo</span>
+                                            <i class="bi bi-x-circle-fill" aria-hidden="true"></i>
                                         </span>
                                         <span class="fw-semibold dl-texto-linha nome-assistido" data-sort-value="nome"
                                               th:text="${a.nome}" th:title="${a.nome}"></span>
+                                        <span th:unless="${a.ativo}" class="dl-badge dl-badge-neutral">Inativo</span>
                                     </div>
                                 </td>
                                 <td class="dl-col-endereco" data-label="Endereço">

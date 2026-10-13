@@ -139,8 +139,20 @@ public class ProntuarioController {
                             + " e, até a entrevista, os que você avaliou" : null)
                     : "todos os prontuários, exceto os com o cartão Em Avaliação, que ainda estão com o Avaliador");
         }
+        // Em ordem alfabética (antes vinha na ordem do banco, que é a de gravação) e, com "Mostrar inativos",
+        // os inativos primeiro: misturados entre os ativos, parecia que o link não tinha feito nada (2026-10-13).
+        java.text.Collator alfabetica = java.text.Collator.getInstance(java.util.Locale.of("pt", "BR"));
+        alfabetica.setStrength(java.text.Collator.PRIMARY);
+        Comparator<Assistido> ordem = Comparator.comparing(a -> a.getNome() == null ? "" : a.getNome(), alfabetica);
+        if (mostrarInativos) {
+            ordem = Comparator.comparing(Assistido::isAtivo).thenComparing(ordem);
+        }
+        assistidos = assistidos.stream().sorted(ordem).toList();
         model.addAttribute("assistidos", assistidos);
         model.addAttribute("mostrarInativos", mostrarInativos);
+        model.addAttribute("totalInativos", mostrarInativos
+                ? assistidos.stream().filter(a -> !a.isAtivo()).count()
+                : assistidoRepository.contarInativos());
 
         // A listagem é também a fila de avaliação/entrevista (2026-10-11, no lugar de /entrevistas):
         // filtros por status com contagem, e a ação de cada linha conforme o status e a função.

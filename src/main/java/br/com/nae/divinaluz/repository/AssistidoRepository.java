@@ -23,6 +23,9 @@ public interface AssistidoRepository extends JpaRepository<Assistido, Long> {
 
     @Query("select a from Assistido a where a.vinculo is null or a.vinculo <> 'CONVIDADO'")
     List<Assistido> atendidos();
+    /** Quantos cadastros desativados existem — o link "Mostrar inativos" da listagem diz quantos são. */
+    @Query("select count(a) from Assistido a where a.ativo = false and (a.vinculo is null or a.vinculo <> 'CONVIDADO')")
+    long contarInativos();
 
     List<Assistido> findByVinculoOrderByNomeAsc(String vinculo);
 

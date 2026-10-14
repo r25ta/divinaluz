@@ -52,7 +52,33 @@ a {
 .dl-app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* Desconta o rodapé, que vem logo depois: senão ele ficaria sempre abaixo da primeira tela. */
+  min-height: calc(100vh - var(--dl-rodape-altura));
+}
+
+/* ---------- Rodapé (empresa desenvolvedora) ---------- */
+
+:root {
+  --dl-rodape-altura: 2.5rem;
+}
+
+/* Login e entrada por código não têm o .dl-app: o <main> vai direto no <body>. */
+body > .dl-main {
+  min-height: calc(100vh - var(--dl-rodape-altura));
+}
+
+.dl-rodape {
+  height: var(--dl-rodape-altura);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--dl-muted);
+  border-top: 1px solid var(--dl-border);
+}
+
+.dl-rodape strong {
+  font-weight: 600;
 }
 
 /* ---------- Navbar ---------- */

@@ -39,9 +39,12 @@ def um(consulta):
     return valor[0] if valor else None
 
 
-def foto(page, nome, seletor=None, inteira=True):
+def foto(page, nome, seletor=None, inteira=True, linhas=5):
     try:
         page.wait_for_timeout(400)
+        # O manual explica as colunas; com todas as linhas a tela fica comprida demais para ler.
+        page.evaluate("n => document.querySelectorAll('table tbody').forEach("
+                      "tb => [...tb.rows].slice(n).forEach(r => r.style.display = 'none'))", linhas)
         caminho = os.path.join(SAIDA, nome + ".png")
         if seletor:
             page.locator(seletor).first.screenshot(path=caminho)

@@ -98,9 +98,11 @@
     </nav>
 
     <!--/* Rodapé com a empresa que desenvolveu o sistema (2026-10-13), em todas as telas, inclusive as
-           sem login: uso com th:replace="~{fragments/layout :: rodape}" logo antes do </body>. */-->
+           sem login: uso com th:replace="~{fragments/layout :: rodape}" logo antes do </body>. O logo
+           (letras já convertidas em desenho, não depende de fonte) e as outras versões ficam em docs/marca. */-->
     <footer class="dl-rodape" th:fragment="rodape">
-        <span>Desenvolvido por <strong>R25TA Tecnologia</strong></span>
+        <span>Desenvolvido por</span>
+        <img th:src="@{/images/r25ta-logo.svg}" alt="R25TA Tecnologia" class="dl-rodape-logo" width="80" height="26">
     </footer>
 </body>
 </html>

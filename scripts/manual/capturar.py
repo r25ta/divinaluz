@@ -133,7 +133,7 @@ def main():
 
         # ---------------------------------------------------------------- assistido (celular)
         ctx, page = entrar(browser, "assistido", CELULAR, 2)
-        page.goto(BASE + f"/prontuario/{ids['assistido']}/cartao"); foto(page, "10-meu-cartao-celular")
+        page.goto(BASE + f"/prontuario/{ids['assistido']}/cartao"); foto(page, "10-meu-cartao-celular", inteira=False)
         page.locator(".dl-nav-toggle").click(); foto(page, "11-menu-celular", inteira=False)
         if sessao_id:
             def pelo_celular():

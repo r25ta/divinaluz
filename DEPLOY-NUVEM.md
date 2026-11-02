@@ -159,8 +159,16 @@ Para cada pessoa do piloto, nesta ordem:
      alterado; ele é único, e o sistema avisa na hora se já estiver em uso;
    - a **senha** é obrigatória enquanto o envio de e-mail estiver desligado (o padrão — ver Parte 5);
    - cada **e-mail** só pode estar em um cadastro: se ele já existir, o sistema diz de quem é, com o link
-     para o cadastro dessa pessoa — quase sempre é a mesma pessoa cadastrada antes.
-2. **Cadastrar Trabalhador** — busque o nome e marque as funções dela na casa. Marcar uma função já
+     para o cadastro dessa pessoa — quase sempre é a mesma pessoa cadastrada antes;
+   - **dia do cadastro:** a recepção só cadastra **no dia de uma sessão** (domingo ou terça, sessão não
+     cancelada nem encerrada), e a 1ª presença é a desse dia. Fora disso o botão aparece apagado ("Só em
+     dia de sessão"). **Só o Administrador cadastra em qualquer dia**, e para ele a data da 1ª
+     assistência é opcional: informe um domingo/terça (ex.: ficha de papel antiga) ou deixe em branco —
+     aí a pessoa fica sem tratamento e o cartão começa na primeira presença marcada numa sessão. Para
+     montar o piloto num dia comum, faça estes cadastros como `admin`.
+2. **Perfis de Trabalho** — abra o prontuário da pessoa (menu **Prontuário**) e toque em **Tornar
+   Trabalhador** (ou **Perfis de Trabalho**, se ela já for) para marcar as funções dela na casa; só o
+   Dirigente e o Administrador alcançam esse botão. Marcar uma função já
    torna o acesso dela de **Trabalhador**, sem escolher nada à mão. É a **função** que decide quais
    telas ela alcança:
 
@@ -204,6 +212,11 @@ ficam no menu **Prontuário** (no celular, atrás do botão ☰).
      diante, aquele celular marca a presença dela sem login (e só isso: não abre o sistema). Vale para a
      família toda no mesmo celular — vincule cada um. Celular perdido: **Desvincular Celulares** no prontuário.
      Quem tem login também pode vincular sozinho, marcando "Este celular é meu" ao confirmar a presença.
+   - **Pessoa nova:** o **Cadastro rápido** do painel da sessão, ou o **Novo Cadastro** completo (na
+     listagem de Prontuário) — os dois só no dia da sessão, já com a 1ª presença de hoje em P2.
+   - **Conferir quando a pessoa veio:** na listagem de **Prontuário**, a coluna **Última Presença** traz a
+     data (passando o mouse, há quantos dias); tocando nela abre a lista das presenças do tratamento
+     atual (1ª a 4ª sessão, ouvintes e o tema da preleção), sem precisar abrir o cartão.
 3. Marcou alguém por engano: na lista **Assistidos Presentes**, o ícone de lixeira remove a presença e o
    cartão da pessoa é recalculado.
 4. Ao terminar o trabalho: **Encerrar sessão**. Isso consolida o dia — presenças, escala e preletor não

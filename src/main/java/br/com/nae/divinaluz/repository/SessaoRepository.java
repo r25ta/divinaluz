@@ -25,6 +25,17 @@ public interface SessaoRepository extends JpaRepository<SessaoTratamento, Long> 
     // o painel da sessão acha quem esteve presente (inclusive o que foi lançado pelo prontuário).
     List<SessaoTratamento> findByDataConsulta(LocalDate dataConsulta);
 
+    // Listagem de Prontuário (2026-11-02): a última presença de cada pessoa (efetiva ou ouvinte),
+    // numa consulta só — [assistidoId, data].
+    @Query("select s.assistido.id, max(s.dataConsulta) from SessaoTratamento s group by s.assistido.id")
+    List<Object[]> ultimaPresencaPorAssistido();
+
+    // ...e as presenças do ciclo em andamento de todos, para a consulta rápida da recepção.
+    @Query("select s from SessaoTratamento s join s.assistido a left join fetch s.prelecao "
+            + "where a.cicloIniciadoEm is not null and s.dataConsulta >= a.cicloIniciadoEm "
+            + "order by s.dataConsulta desc, s.id desc")
+    List<SessaoTratamento> presencasDosCiclosEmAndamento();
+
     @Query("select distinct s.assistido.id from SessaoTratamento s "
             + "where s.dataConsulta < :data and s.assistido.id in :assistidoIds")
     Set<Long> findAssistidosComPresencaAntesDe(@Param("data") LocalDate data,

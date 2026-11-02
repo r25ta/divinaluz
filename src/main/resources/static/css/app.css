@@ -1539,6 +1539,7 @@ body > .dl-main {
 .dl-table-assistidos .dl-col-nome { width: 23%; }
 .dl-table-assistidos .dl-col-vinculo { width: 160px; }
 .dl-table-assistidos .dl-col-status { width: 180px; }
+.dl-table-assistidos .dl-col-presenca { width: 132px; }
 .dl-table-assistidos .dl-col-acoes { width: 262px; text-align: right; }
 
 .dl-table-assistidos .dl-col-nome,
@@ -1679,6 +1680,56 @@ body > .dl-main {
   gap: 0.25rem;
 }
 
+/* Última presença na listagem (2026-11-02): a data é um link que abre as presenças do ciclo. */
+.dl-presenca-botao {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dl-teal-700);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.dl-presenca-botao:hover,
+.dl-presenca-botao:focus-visible {
+  color: var(--dl-teal-600);
+  text-decoration-style: solid;
+}
+
+.dl-presenca-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dl-presenca-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--dl-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-presenca-lista li:last-child {
+  border-bottom: 0;
+}
+
+.dl-presenca-tema {
+  flex-basis: 100%;
+}
+
+/* Novo Cadastro fora do dia da sessão: apagado, com o motivo ao lado. */
+.dl-lista-novo-bloqueado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 /* Auditoria (2026-10-12): os campos alterados de cada registro, dentro da própria linha. */
 .dl-auditoria-detalhe summary {
   cursor: pointer;
@@ -1733,6 +1784,14 @@ body > .dl-main {
   .dl-table-assistidos .dl-col-acoes { width: 260px; }
 }
 
+/* Tablet em pé: com a coluna da última presença (2026-11-02) não sobra espaço para o nome; o vínculo
+   sai (continua no prontuário), a última presença fica — é ela que a recepção consulta. */
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .dl-table-assistidos .dl-col-vinculo {
+    display: none;
+  }
+}
+
 @media (max-width: 767.98px) {
   /* Celular: o Novo Cadastro vem logo abaixo da busca, na largura toda; os filtros depois. */
   .dl-lista-novo {
@@ -1749,6 +1808,7 @@ body > .dl-main {
   .dl-table-assistidos .dl-col-nome,
   .dl-table-assistidos .dl-col-vinculo,
   .dl-table-assistidos .dl-col-status,
+  .dl-table-assistidos .dl-col-presenca,
   .dl-table-assistidos .dl-col-acoes {
     white-space: normal;
     width: 100%;

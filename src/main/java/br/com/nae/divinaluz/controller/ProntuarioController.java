@@ -21,6 +21,7 @@ import br.com.nae.divinaluz.repository.AvaliacaoRepository;
 import br.com.nae.divinaluz.repository.CartaoEncerradoRepository;
 import br.com.nae.divinaluz.repository.EntrevistaRepository;
 import br.com.nae.divinaluz.repository.HistoricoDiaFrequenciaRepository;
+import br.com.nae.divinaluz.repository.SessaoAssistenciaRepository;
 import br.com.nae.divinaluz.repository.SessaoRepository;
 import br.com.nae.divinaluz.repository.TipoTratamentoRepository;
 import br.com.nae.divinaluz.repository.TrabalhadorRepository;
@@ -85,6 +86,7 @@ public class ProntuarioController {
 
     private final CodigoAcessoService codigoAcessoService;
     private final CelularVinculadoService celularVinculadoService;
+    private final SessaoAssistenciaRepository sessaoAssistenciaRepository;
 
     ProntuarioController(AssistidoRepository assistidoRepository, SessaoRepository sessaoRepository,
             AvaliacaoRepository avaliacaoRepository, TratamentoService tratamentoService,
@@ -95,7 +97,9 @@ public class ProntuarioController {
             AcessoService acessoService,
             CartaoEncerradoRepository cartaoEncerradoRepository,
             CodigoAcessoService codigoAcessoService,
-            CelularVinculadoService celularVinculadoService) {
+            CelularVinculadoService celularVinculadoService,
+            SessaoAssistenciaRepository sessaoAssistenciaRepository) {
+        this.sessaoAssistenciaRepository = sessaoAssistenciaRepository;
         this.codigoAcessoService = codigoAcessoService;
         this.celularVinculadoService = celularVinculadoService;
         this.assistidoRepository = assistidoRepository;
@@ -174,6 +178,24 @@ public class ProntuarioController {
         trabalhadorRepository.comFuncoes().forEach(t -> funcoesTrabalhador.put(t.getAssistido().getId(),
                 t.getFuncoes().stream().sorted().toList()));
         model.addAttribute("funcoesTrabalhador", funcoesTrabalhador);
+        // Última presença e presenças do ciclo atual (2026-11-02): até aqui só o cartão mostrava as datas,
+        // e a recepção precisava abrir o cartão de cada um. Duas consultas para a lista inteira.
+        LocalDate hoje = LocalDate.now();
+        java.util.Map<Long, LocalDate> ultimaPresenca = new java.util.HashMap<>();
+        java.util.Map<Long, Long> diasDesdeUltima = new java.util.HashMap<>();
+        sessaoRepository.ultimaPresencaPorAssistido().forEach(linha -> {
+            LocalDate data = (LocalDate) linha[1];
+            ultimaPresenca.put((Long) linha[0], data);
+            diasDesdeUltima.put((Long) linha[0], java.time.temporal.ChronoUnit.DAYS.between(data, hoje));
+        });
+        java.util.Map<Long, List<SessaoTratamento>> presencasDoCiclo = new java.util.HashMap<>();
+        sessaoRepository.presencasDosCiclosEmAndamento().forEach(s -> presencasDoCiclo
+                .computeIfAbsent(s.getAssistido().getId(), id -> new ArrayList<>()).add(s));
+        model.addAttribute("ultimaPresenca", ultimaPresenca);
+        model.addAttribute("presencasDoCiclo", presencasDoCiclo);
+        model.addAttribute("diasDesdeUltima", diasDesdeUltima);
+        model.addAttribute("motivoCadastroBloqueado",
+                ehAdministrador(authentication) ? null : motivoCadastroBloqueado(hoje));
         model.addAttribute("filtroInicial", filtroInicial(status, authentication));
         return "index";
     }
@@ -193,8 +215,34 @@ public class ProntuarioController {
     }
 
     @GetMapping("/novo")
-    public String novo(Model model) {
-        return exibirCadastro(model, new Assistido(), null, null, null);
+    public String novo(Authentication authentication, Model model, RedirectAttributes redirectAttributes) {
+        LocalDate hoje = LocalDate.now();
+        String bloqueio = motivoCadastroBloqueado(hoje);
+        boolean admin = ehAdministrador(authentication);
+        if (bloqueio != null && !admin) {
+            redirectAttributes.addFlashAttribute("erro", bloqueio);
+            return "redirect:/";
+        }
+        // O Administrador já vem com a sessão de hoje sugerida, quando hoje tem sessão.
+        return exibirCadastro(model, new Assistido(), null, bloqueio == null ? hoje : null, admin, null);
+    }
+
+    /**
+     * O cartão nasce no dia da sessão (2026-11-02, pedido do responsável do projeto): fora do
+     * Administrador, só se cadastra num Domingo ou Terça cuja sessão não foi cancelada nem encerrada,
+     * e a 1ª presença é a desse dia. Devolve o motivo do bloqueio, ou {@code null} se hoje é dia de
+     * cadastro. A sessão de hoje não precisa estar aberta — só não pode ter sido cancelada/encerrada.
+     */
+    String motivoCadastroBloqueado(LocalDate hoje) {
+        if (!ehDiaDeAssistencia(hoje)) {
+            return "Novos cadastros só são feitos em dia de sessão (Domingo ou Terça-feira): o cartão nasce"
+                    + " com a primeira presença.";
+        }
+        return sessaoAssistenciaRepository.findByData(hoje)
+                .map(s -> s.isCancelada() ? "A sessão de hoje foi cancelada: não há como cadastrar novos assistidos."
+                        : s.isEncerrada() ? "A sessão de hoje já foi encerrada: novos cadastros só na próxima sessão."
+                        : null)
+                .orElse(null);
     }
 
     /**
@@ -208,11 +256,22 @@ public class ProntuarioController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "dd/MM/yyyy") LocalDate dataPrimeiraSessao,
             @RequestParam(required = false) String login,
             @RequestParam(required = false) String senhaAcesso, @RequestParam(required = false) String confirmacaoSenhaAcesso,
-            Model model, RedirectAttributes redirectAttributes) {
+            Authentication authentication, Model model, RedirectAttributes redirectAttributes) {
         assistido.setEmail(AcessoService.normalizarEmail(assistido.getEmail()));
         String loginLimpo = AcessoService.normalizarLogin(login);
+        boolean admin = ehAdministrador(authentication);
+        if (!admin) {
+            // Fora do Administrador a 1ª presença é sempre a sessão de hoje, qualquer que seja a data enviada.
+            LocalDate hoje = LocalDate.now();
+            String bloqueio = motivoCadastroBloqueado(hoje);
+            if (bloqueio != null) {
+                redirectAttributes.addFlashAttribute("erro", bloqueio + " Nada foi gravado.");
+                return "redirect:/";
+            }
+            dataPrimeiraSessao = hoje;
+        }
         try {
-            if (dataPrimeiraSessao == null || !ehDiaDeAssistencia(dataPrimeiraSessao)) {
+            if (dataPrimeiraSessao != null && !ehDiaDeAssistencia(dataPrimeiraSessao)) {
                 throw new RegraNegocioException("Informe uma data de assistência que seja Domingo ou Terça-feira.");
             }
             acessoService.validarEmail(assistido.getEmail(), null);
@@ -221,7 +280,7 @@ public class ProntuarioController {
                     acessoService.senhaObrigatoria(assistido.getEmail()),
                     acessoService.motivoSenhaObrigatoria(assistido.getEmail()));
         } catch (RegraNegocioException e) {
-            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao, e.getMessage());
+            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao, admin, e.getMessage());
         }
 
         TipoTratamento tratamentoInicial = tipoTratamentoRepository.findByCodigo("P2")
@@ -231,7 +290,8 @@ public class ProntuarioController {
         assistido.setLogin(null);
         assistido.setSenha(null);
         assistido.setPerfilAcesso(null);
-        assistido.setDiaFrequencia(diaFrequenciaDaData(dataPrimeiraSessao));
+        // Sem data (só o Administrador): sem dia de assistência, que é definido na 1ª presença.
+        assistido.setDiaFrequencia(dataPrimeiraSessao == null ? null : diaFrequenciaDaData(dataPrimeiraSessao));
         // Todo cadastro entra como assistido: virar trabalhador é um passo à parte, no módulo
         // "Cadastrar Trabalhador" (/trabalhadores), que é quem atribui os perfis de trabalho.
         assistido.setVinculo(TrabalhadorService.VINCULO_ASSISTIDO);
@@ -241,7 +301,7 @@ public class ProntuarioController {
         } catch (DataIntegrityViolationException e) {
             // Outra recepção gravou o mesmo e-mail entre a validação e aqui (índice da V35).
             assistido.setId(null);
-            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao,
+            return exibirCadastro(model, assistido, loginLimpo, dataPrimeiraSessao, admin,
                     "Este e-mail acabou de ser usado em outro cadastro. Confira e tente de novo.");
         }
 
@@ -253,11 +313,13 @@ public class ProntuarioController {
                     + " não foi criado. Crie pela edição do cadastro, com outro login.";
         }
 
-        try {
-            tratamentoService.iniciarTratamentoInicial(assistido, tratamentoInicial, dataPrimeiraSessao);
-        } catch (RegraNegocioException e) {
-            redirectAttributes.addFlashAttribute("erro", e.getMessage());
-            return "redirect:/prontuario/" + assistido.getId() + "/editar";
+        if (dataPrimeiraSessao != null) {
+            try {
+                tratamentoService.iniciarTratamentoInicial(assistido, tratamentoInicial, dataPrimeiraSessao);
+            } catch (RegraNegocioException e) {
+                redirectAttributes.addFlashAttribute("erro", e.getMessage());
+                return "redirect:/prontuario/" + assistido.getId() + "/editar";
+            }
         }
 
         if (avisoAcesso != null) {
@@ -267,13 +329,19 @@ public class ProntuarioController {
             redirectAttributes.addFlashAttribute("sucesso", assistido.getNome() + " cadastrado(a). Login de acesso: \""
                     + assistido.getLogin() + "\"" + (entraPorCodigo
                             ? " — entra pelo código enviado a " + assistido.getEmail() + "."
-                            : "."));
+                            : ".")
+                    + (dataPrimeiraSessao == null
+                            ? " Sem tratamento: o cartão começa na primeira presença marcada numa sessão." : ""));
         }
         return "redirect:/";
     }
 
     private String exibirCadastro(Model model, Assistido assistido, String loginInformado,
-            LocalDate dataPrimeiraSessao, String erro) {
+            LocalDate dataPrimeiraSessao, boolean admin, String erro) {
+        LocalDate hoje = LocalDate.now();
+        model.addAttribute("cadastroAdmin", admin);
+        model.addAttribute("dataSessaoHoje", hoje);
+        model.addAttribute("diaSessaoHoje", ehDiaDeAssistencia(hoje) ? diaFrequenciaDaData(hoje).getLabel() : null);
         model.addAttribute("assistido", assistido);
         model.addAttribute("tratamentos", tipoTratamentoRepository.findAll());
         model.addAttribute("modoEdicao", false);

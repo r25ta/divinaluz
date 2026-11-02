@@ -77,9 +77,18 @@
                         <span class="dl-filtro-contagem" th:text="${totalAguardandoEntrevista}">0</span>
                     </button>
                 </div>
-                <a th:if="${podeCadastro}" th:href="@{/novo}" class="btn btn-teal btn-sm text-white dl-lista-novo">
+                <a th:if="${podeCadastro and motivoCadastroBloqueado == null}" th:href="@{/novo}" class="btn btn-teal btn-sm text-white dl-lista-novo">
                     <i class="bi bi-person-plus"></i> Novo Cadastro
                 </a>
+                <!--/* Fora do dia da sessão (2026-11-02): o botão fica, apagado, com o motivo — sumir
+                       faria parecer que a pessoa perdeu a permissão. Só o Administrador cadastra fora dele. */-->
+                <span th:if="${podeCadastro and motivoCadastroBloqueado != null}" class="dl-lista-novo dl-lista-novo-bloqueado"
+                      th:title="${motivoCadastroBloqueado}">
+                    <button type="button" class="btn btn-teal btn-sm text-white" disabled>
+                        <i class="bi bi-person-plus"></i> Novo Cadastro
+                    </button>
+                    <span class="small dl-muted">Só em dia de sessão</span>
+                </span>
             </div>
 
             <div class="dl-card">
@@ -96,6 +105,7 @@
                                 <th class="dl-col-endereco">Endereço</th>
                                 <th class="dl-col-vinculo"><button type="button" class="sort-button" data-sort="vinculo">Vínculo <i class="bi bi-arrow-down-up"></i></button></th>
                                 <th class="dl-col-status"><button type="button" class="sort-button" data-sort="status">Status Atual <i class="bi bi-arrow-down-up"></i></button></th>
+                                <th class="dl-col-presenca"><button type="button" class="sort-button" data-sort="presenca">Última Presença <i class="bi bi-arrow-down-up"></i></button></th>
                                 <th class="dl-col-acoes"><span class="visually-hidden">Ações</span></th>
                             </tr>
                         </thead>
@@ -172,6 +182,52 @@
                                           th:text="${a.statusCartao != null ? a.statusCartao.label : 'Em Tratamento'}">
                                         Em Tratamento
                                     </span>
+                                </td>
+                                <!--/* Última presença (2026-11-02): a recepção via as datas só abrindo o cartão. A
+                                       data abre as presenças do tratamento em andamento, no mesmo quadro dos perfis.
+                                       O data-sort-chave (aaaa-mm-dd) é o que a ordenação compara. */-->
+                                <td class="dl-col-presenca" th:with="ultima=${ultimaPresenca[a.id]},
+                                             doCiclo=${presencasDoCiclo[a.id]},
+                                             presencaId=${'presencas-' + a.id}">
+                                    <span th:if="${ultima == null}" class="dl-muted" data-sort-value="presenca" data-sort-chave="">—</span>
+                                    <button th:if="${ultima != null}" type="button" class="dl-presenca-botao"
+                                            th:attr="popovertarget=${presencaId},aria-controls=${presencaId},
+                                                     data-sort-chave=${ultima},
+                                                     title=${'Há ' + diasDesdeUltima[a.id] + ' dia(s) — ver as presenças do tratamento atual'}"
+                                            data-sort-value="presenca" aria-haspopup="dialog"
+                                            th:text="${#temporals.format(ultima, 'dd/MM/yyyy')}">01/11/2026</button>
+
+                                    <div th:if="${ultima != null}" th:id="${presencaId}" popover
+                                         class="dl-popover" role="dialog"
+                                         th:attr="aria-label=${'Presenças de ' + a.nome}">
+                                        <div class="dl-popover-cabeca">
+                                            <div>
+                                                <span class="dl-eyebrow">Presenças do tratamento atual</span>
+                                                <strong class="d-block" th:text="${a.nome}">Nome</strong>
+                                                <span class="small dl-muted" th:if="${a.tratamentoAtual != null and a.cicloIniciadoEm != null}">
+                                                    <span th:text="${a.tratamentoAtual.codigo}">P2</span> desde
+                                                    <span th:text="${#temporals.format(a.cicloIniciadoEm, 'dd/MM/yyyy')}">01/11/2026</span>
+                                                </span>
+                                            </div>
+                                            <button type="button" class="dl-btn-icone" th:attr="popovertarget=${presencaId}"
+                                                    popovertargetaction="hide" aria-label="Fechar">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                        <ul class="dl-presenca-lista" th:if="${doCiclo != null}">
+                                            <li th:each="s : ${doCiclo}">
+                                                <span class="fw-semibold" th:text="${#temporals.format(s.dataConsulta, 'dd/MM/yyyy')}">01/11/2026</span>
+                                                <span th:if="${!s.ouvinte}" class="dl-badge dl-badge-teal" th:text="${s.numeroSerie + 'ª sessão'}">1ª sessão</span>
+                                                <span th:if="${s.ouvinte}" class="dl-badge dl-badge-neutral">Ouvinte</span>
+                                                <span th:if="${s.prelecao != null}" class="small dl-muted dl-presenca-tema"
+                                                      th:text="${s.prelecao.tema}">Tema</span>
+                                            </li>
+                                        </ul>
+                                        <p th:if="${doCiclo == null}" class="small dl-muted mb-0">
+                                            Nenhum tratamento em andamento. Última presença em
+                                            <span th:text="${#temporals.format(ultima, 'dd/MM/yyyy')}">01/11/2026</span>.
+                                        </p>
+                                    </div>
                                 </td>
                                 <td class="dl-col-acoes" data-label=""
                                     th:with="eu=${meuAssistidoId != null and meuAssistidoId == a.id},
@@ -289,9 +345,15 @@
         function ordenar(campo, botao) {
             ordenacao.ascendente = ordenacao.campo === campo ? !ordenacao.ascendente : true;
             ordenacao.campo = campo;
+            // data-sort-chave, quando existe, é o valor comparado (a data em aaaa-mm-dd, não dd/mm/aaaa).
+            function chave(linha) {
+                var elemento = linha.querySelector('[data-sort-value="' + campo + '"]');
+                return elemento.hasAttribute('data-sort-chave')
+                        ? elemento.getAttribute('data-sort-chave') : elemento.textContent.trim();
+            }
             linhas.sort(function (a, b) {
-                var valorA = a.querySelector('[data-sort-value="' + campo + '"]').textContent.trim();
-                var valorB = b.querySelector('[data-sort-value="' + campo + '"]').textContent.trim();
+                var valorA = chave(a);
+                var valorB = chave(b);
                 return valorA.localeCompare(valorB, 'pt-BR', { sensitivity: 'base' })
                     * (ordenacao.ascendente ? 1 : -1);
             });

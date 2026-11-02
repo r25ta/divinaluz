@@ -264,14 +264,27 @@
 
                         <div class="dl-form-section" th:unless="${modoEdicao}">
                             <div class="dl-form-section-title">Primeira Assistência</div>
-                            <label class="form-label" for="dataPrimeiraSessao">Data da Assistência</label>
-                            <!--/* Cadastro novo: a pessoa ainda não tem dia de assistência, então valem os
-                                   dois dias da casa. É a mesma regra que o ProntuarioController exige. */-->
-                            <input type="text" class="form-control dl-data" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
-                                   th:value="${dataPrimeiraSessaoInformada != null ? #temporals.format(dataPrimeiraSessaoInformada, 'dd/MM/yyyy') : ''}"
-                                   required style="max-width: 260px;" placeholder="dd/mm/aaaa" maxlength="10" data-dias="0,2"
-                                   inputmode="numeric" pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
-                            <div class="form-text">A primeira presença será criada automaticamente no tratamento P2 e buscará a preleção cadastrada para a data. Escolha uma terça-feira ou domingo.</div>
+                            <!--/* Desde 2026-11-02 o cartão nasce no dia da sessão: fora do Administrador, a 1ª
+                                   assistência é sempre a sessão de hoje (o servidor ignora qualquer outra data). */-->
+                            <th:block th:unless="${cadastroAdmin}">
+                                <span class="form-label d-block">Data da Assistência</span>
+                                <p class="mb-1 fw-semibold">
+                                    <i class="bi bi-calendar-check"></i>
+                                    Hoje, <span th:text="${#temporals.format(dataSessaoHoje, 'dd/MM/yyyy')}">01/11/2026</span>
+                                    (<span th:text="${diaSessaoHoje}">Domingo, 08h</span>)
+                                </p>
+                                <div class="form-text">O cartão é criado no dia da sessão: a primeira presença entra hoje, no tratamento P2, com a preleção do dia.</div>
+                            </th:block>
+                            <!--/* Administrador: pode informar qualquer Domingo/Terça (fichas de papel antigas) ou
+                                   deixar em branco — o cadastro fica sem tratamento e o cartão começa na 1ª presença. */-->
+                            <th:block th:if="${cadastroAdmin}">
+                                <label class="form-label" for="dataPrimeiraSessao">Data da Assistência <span class="dl-muted small">(opcional)</span></label>
+                                <input type="text" class="form-control dl-data" id="dataPrimeiraSessao" name="dataPrimeiraSessao"
+                                       th:value="${dataPrimeiraSessaoInformada != null ? #temporals.format(dataPrimeiraSessaoInformada, 'dd/MM/yyyy') : ''}"
+                                       style="max-width: 260px;" placeholder="dd/mm/aaaa" maxlength="10" data-dias="0,2"
+                                       inputmode="numeric" pattern="\d{2}/\d{2}/\d{4}" title="Formato: dd/mm/aaaa">
+                                <div class="form-text">Com a data (terça-feira ou domingo), a primeira presença é criada nela, no tratamento P2. Em branco, o cadastro fica sem tratamento e o cartão começa na primeira presença marcada numa sessão. Só o Administrador cadastra fora do dia da sessão.</div>
+                            </th:block>
                         </div>
 
                         <div class="d-flex justify-content-end gap-2 pt-2">
